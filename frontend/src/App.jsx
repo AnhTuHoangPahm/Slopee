@@ -5,6 +5,7 @@ import Signup from './pages/Signup';
 import Home from './pages/Home';
 import AdminDashboard from './pages/AdminDashboard';
 import SellerDashboard from './pages/SellerDashboard';
+import Cart from './pages/Cart';
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/seller" element={<SellerDashboard />} />
+        <Route path="/cart" element={<Cart />} />
       </Routes>
     </BrowserRouter>
   );
