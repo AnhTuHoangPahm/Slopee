@@ -6,6 +6,10 @@ import config
 app = Flask(__name__)
 app.config.from_object(config.Config)
 
+# Register Blueprints
+from routes.auth import auth_bp
+app.register_blueprint(auth_bp, url_prefix='/api/auth')
+
 # Enable CORS for the React frontend port (Vite running on localhost:5173)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}})
 
