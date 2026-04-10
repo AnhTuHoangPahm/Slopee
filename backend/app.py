@@ -10,9 +10,11 @@ app.config.from_object(config.Config)
 from routes.auth import auth_bp
 from routes.shops import shops_bp
 from routes.admin import admin_bp
+from routes.products import products_bp
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(shops_bp, url_prefix='/api/shops')
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
+app.register_blueprint(products_bp, url_prefix='/api/products')
 
 # Enable CORS for the React frontend port (Vite running on localhost:5173)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}})

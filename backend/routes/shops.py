@@ -2,8 +2,6 @@ from flask import Blueprint, request, jsonify
 import pymysql
 import uuid
 import os
-from werkzeug.utils import secure_filename
-from PIL import Image
 
 shops_bp = Blueprint('shops', __name__)
 
@@ -29,13 +27,11 @@ def setup_shop():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # Check if this user is a seller validation
             cursor.execute("SELECT role FROM users WHERE id=%s", (seller_id,))
             user = cursor.fetchone()
             if not user or user['role'] != 'seller':
                 return jsonify({"error": "Only sellers can create shops"}), 403
             
-            # Enforce 1 Shop per Seller check
             cursor.execute("SELECT id FROM shops WHERE sellerId=%s", (seller_id,))
             if cursor.fetchone():
                 return jsonify({"error": "You already have a shop setup!"}), 400
@@ -60,10 +56,23 @@ def get_shop(seller_id):
             if not shop:
                 return jsonify({"error": "Shop not found"}), 404
             
-            # Attach the seller's items to output
-            cursor.execute("SELECT * FROM products WHERE shopId=%s", (shop['id'],))
+            cursor.execute("SELECT * FROM products WHERE shopId=%s ORDER BY name ASC", (shop['id'],))
             shop['products'] = cursor.fetchall()
             return jsonify(shop), 200
+    finally:
+        conn.close()
+
+@shops_bp.route('/<seller_id>/name', methods=['PUT'])
+def update_shop_name(seller_id):
+    data = request.json
+    new_name = data.get('name')
+    if not new_name: return jsonify({"error": "Name required"}), 400
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("UPDATE shops SET name=%s WHERE sellerId=%s", (new_name, seller_id))
+            conn.commit()
+            return jsonify({"message": "Shop name updated"}), 200
     finally:
         conn.close()
 
@@ -77,13 +86,11 @@ def add_product():
     in_stock = data.get('inStock', 0)
     unit_price = data.get('unitPrice', 0)
     
-    if not all([shop_id, name]):
-        return jsonify({"error": "Shop ID and Product Name required"}), 400
+    if not all([shop_id, name]): return jsonify({"error": "Shop ID and Product Name required"}), 400
     
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # Seed default general category if it doesn't exist
             cursor.execute("SELECT id FROM categories WHERE id=%s", (category_id,))
             if not cursor.fetchone():
                 cursor.execute("INSERT INTO categories (name) VALUES ('General')")
@@ -91,7 +98,7 @@ def add_product():
                 cursor.execute("SELECT id FROM categories LIMIT 1")
                 category_id = cursor.fetchone()['id']
 
-            prod_id = str(uuid.uuid4())[:15] # Truncate to match VARCHAR(15) limitations
+            prod_id = str(uuid.uuid4())[:15]
             cursor.execute(
                 """INSERT INTO products 
                 (id, categoryId, shopId, name, description, inStock, unitPrice, isActive) 
@@ -99,6 +106,28 @@ def add_product():
                 (prod_id, category_id, shop_id, name, description, in_stock, unit_price, True)
             )
             conn.commit()
-            return jsonify({"message": "Product successfully added to your catalog!", "productId": prod_id}), 201
+            return jsonify({"message": "Product successfully added", "productId": prod_id}), 201
+    finally:
+        conn.close()
+
+@shops_bp.route('/products/<product_id>', methods=['PUT', 'DELETE'])
+def manage_product(product_id):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            if request.method == 'DELETE':
+                cursor.execute("DELETE FROM products WHERE id=%s", (product_id,))
+                conn.commit()
+                return jsonify({"message": "Product deleted"}), 200
+            elif request.method == 'PUT':
+                data = request.json
+                price = float(data.get('unitPrice', 0))
+                stock = int(data.get('inStock', 0))
+                cursor.execute("UPDATE products SET unitPrice=%s, inStock=%s WHERE id=%s", (price, stock, product_id))
+                conn.commit()
+                return jsonify({"message": "Product updated"}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 400
     finally:
         conn.close()
