@@ -14,6 +14,48 @@ def get_db_connection():
         cursorclass=pymysql.cursors.DictCursor
     )
 
+@shops_bp.route('/migrate', methods=['GET'])
+def run_migration():
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            # 1. Update Enum
+            try: cursor.execute("ALTER TABLE orders MODIFY COLUMN status enum('pending', 'paid', 'shipped', 'received', 'cancelled') NOT NULL default 'pending'")
+            except: pass
+            
+            cursor.execute("SELECT CONSTRAINT_NAME, TABLE_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA='slopee_db' AND COLUMN_NAME='productId' AND REFERENCED_TABLE_NAME='products'")
+            res = cursor.fetchall()
+            cart_c = next((r['CONSTRAINT_NAME'] for r in res if r['TABLE_NAME'].lower() == 'cartitems'), 'cartitems_ibfk_2')
+            ord_c = next((r['CONSTRAINT_NAME'] for r in res if r['TABLE_NAME'].lower() == 'orderlines'), 'orderlines_ibfk_2')
+            
+            # 2. Add columns
+            try: cursor.execute("ALTER TABLE orderLines ADD COLUMN snapshotProductName varchar(255)")
+            except: pass
+            try: cursor.execute("ALTER TABLE orderLines ADD COLUMN snapshotShopName varchar(100)")
+            except: pass
+            
+            # 3. Backfill
+            cursor.execute("UPDATE orderLines ol JOIN products p ON ol.productId = p.id JOIN shops s ON p.shopId = s.id SET ol.snapshotProductName = p.name, ol.snapshotShopName = s.name WHERE ol.snapshotProductName IS NULL")
+            
+            # 4. Alter restrictions
+            try:
+                cursor.execute(f"ALTER TABLE cartItems DROP FOREIGN KEY {cart_c}")
+                cursor.execute("ALTER TABLE cartItems ADD CONSTRAINT fk_cart_products FOREIGN KEY (productId) REFERENCES products(id) ON DELETE CASCADE")
+            except: pass
+            
+            try:
+                cursor.execute(f"ALTER TABLE orderLines DROP FOREIGN KEY {ord_c}")
+                cursor.execute("ALTER TABLE orderLines MODIFY productId varchar(15) NULL")
+                cursor.execute("ALTER TABLE orderLines ADD CONSTRAINT fk_orders_products FOREIGN KEY (productId) REFERENCES products(id) ON DELETE SET NULL")
+            except: pass
+            
+            conn.commit()
+            return "Migration Executed Successfully"
+    except Exception as e:
+        return f"Error: {e}"
+    finally:
+        conn.close()
+
 @shops_bp.route('/', methods=['POST'])
 def setup_shop():
     data = request.json
@@ -115,22 +157,31 @@ def add_product():
     finally:
         conn.close()
 
-@shops_bp.route('/products/<product_id>', methods=['PUT', 'DELETE'])
-def manage_product(product_id):
+@shops_bp.route('/products/<product_id>', methods=['DELETE'])
+def delete_product(product_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            if request.method == 'DELETE':
-                cursor.execute("DELETE FROM products WHERE id=%s", (product_id,))
-                conn.commit()
-                return jsonify({"message": "Product deleted"}), 200
-            elif request.method == 'PUT':
-                data = request.json
-                price = float(data.get('unitPrice', 0))
-                stock = int(data.get('inStock', 0))
-                cursor.execute("UPDATE products SET unitPrice=%s, inStock=%s WHERE id=%s", (price, stock, product_id))
-                conn.commit()
-                return jsonify({"message": "Product updated"}), 200
+            cursor.execute("DELETE FROM products WHERE id=%s", (product_id,))
+            conn.commit()
+            return jsonify({"message": "Product totally physically removed!"}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+@shops_bp.route('/products/<product_id>', methods=['PUT'])
+def update_product(product_id):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            data = request.json
+            price = float(data.get('unitPrice', 0))
+            stock = int(data.get('inStock', 0))
+            cursor.execute("UPDATE products SET unitPrice=%s, inStock=%s WHERE id=%s", (price, stock, product_id))
+            conn.commit()
+            return jsonify({"message": "Product updated"}), 200
     except Exception as e:
         conn.rollback()
         return jsonify({"error": str(e)}), 400

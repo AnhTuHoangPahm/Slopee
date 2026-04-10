@@ -33,3 +33,14 @@ export const fetchOrdersAPI = async (userId) => {
     if (!res.ok) throw new Error("Failed to fetch orders");
     return await res.json();
 };
+
+export const updateOrderStatusAPI = async (orderId, status) => {
+    const res = await fetch(`${API_BASE}/orders/${orderId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+    });
+    const resData = await res.json();
+    if (!res.ok) throw new Error(resData.error);
+    return resData;
+};

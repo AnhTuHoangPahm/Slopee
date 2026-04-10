@@ -76,9 +76,10 @@ def execute_checkout():
             format_strings = ','.join(['%s'] * len(cart_item_ids))
             cursor.execute(f"""
                 SELECT ci.id as cartItemId, ci.quantity, ci.cartId, 
-                       p.id as productId, p.unitPrice, p.inStock, p.shopId
+                       p.id as productId, p.unitPrice, p.inStock, p.shopId, p.name as name, s.name as shopName
                 FROM cartItems ci
                 JOIN products p ON p.id = ci.productId
+                JOIN shops s ON p.shopId = s.id
                 WHERE ci.id IN ({format_strings}) AND ci.cartId IN (SELECT id FROM carts WHERE userId=%s)
             """, tuple(cart_item_ids) + (user_id,))
             
@@ -148,8 +149,8 @@ def execute_checkout():
                            
             for item in items_payload:
                 line_id = str(uuid.uuid4())
-                cursor.execute("INSERT INTO orderLines (id, orderId, productId, unitPrice, quantity) VALUES (%s, %s, %s, %s, %s)",
-                               (line_id, order_id, item['productId'], item['unitPrice'], item['quantity']))
+                cursor.execute("INSERT INTO orderLines (id, orderId, productId, unitPrice, quantity, snapshotProductName, snapshotShopName) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                               (line_id, order_id, item['productId'], item['unitPrice'], item['quantity'], item['name'], item['shopName']))
                                
             # D. Delete CartItems natively
             cursor.execute(f"DELETE FROM cartItems WHERE id IN ({format_strings})", tuple(cart_item_ids))
@@ -163,19 +164,36 @@ def execute_checkout():
     finally:
         conn.close()
 
+@payments_bp.route('/orders/<order_id>', methods=['PUT'])
+def update_order_status(order_id):
+    data = request.json
+    new_status = data.get('status')
+    if new_status not in ['cancelled', 'received']:
+        return jsonify({"error": "Invalid order status transformation."}), 400
+        
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("UPDATE orders SET status=%s WHERE id=%s", (new_status, order_id))
+            conn.commit()
+            return jsonify({"message": f"Order status successfully changed to {new_status}!"}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
 @payments_bp.route('/orders/<user_id>', methods=['GET'])
 def get_orders(user_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # Fetch structured receipt tree natively
+            # Fetch structured receipt tree natively via hardcoded snapshots
             cursor.execute("""
                 SELECT o.id as orderId, o.totalAmount, o.created_at, o.status,
-                       ol.quantity, ol.unitPrice, p.name as productName, s.name as shopName
+                       ol.quantity, ol.unitPrice, ol.snapshotProductName as productName, ol.snapshotShopName as shopName
                 FROM orders o
                 JOIN orderLines ol ON o.id = ol.orderId
-                JOIN products p ON ol.productId = p.id
-                JOIN shops s ON p.shopId = s.id
                 WHERE o.userId=%s
                 ORDER BY o.created_at DESC
             """, (user_id,))
