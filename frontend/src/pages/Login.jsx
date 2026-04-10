@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { loginAPI } from '../api/auth';
+import Navbar from '../components/Navbar';
 import '../assets/auth.css';
 
 export default function Login() {
@@ -26,8 +27,10 @@ export default function Login() {
     };
 
     return (
-        <div className="auth-container">
-            <div className="auth-card">
+        <div style={{ backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
+            <Navbar />
+            <div className="auth-container" style={{ minHeight: 'calc(100vh - 70px)' }}>
+                <div className="auth-card">
                 <h2>Log in to Slopee</h2>
                 {error && <div className="auth-error">{error}</div>}
                 <form onSubmit={handleLogin}>
@@ -51,6 +54,7 @@ export default function Login() {
                     New to Slopee? <Link to="/signup">Sign Up</Link>
                 </div>
             </div>
+        </div>
         </div>
     );
 }
