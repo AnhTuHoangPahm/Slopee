@@ -15,7 +15,11 @@ export default function Login() {
         try {
             const data = await loginAPI(username, password);
             localStorage.setItem('user', JSON.stringify(data.user));
-            navigate('/');
+            if (data.user.role === 'admin') {
+                navigate('/admin');
+            } else {
+                navigate('/');
+            }
         } catch (err) {
             setError(err.message);
         }

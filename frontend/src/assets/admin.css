@@ -1,0 +1,112 @@
+.admin-layout {
+    font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background-color: #121212;
+    color: #e0e0e0;
+    min-height: 100vh;
+    padding: 40px;
+}
+.admin-header {
+    border-bottom: 2px solid #333;
+    padding-bottom: 20px;
+    margin-bottom: 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.admin-header h1 {
+    color: #ee4d2d;
+    margin: 0;
+}
+.admin-logout {
+    background-color: transparent;
+    color: #ee4d2d;
+    border: 1px solid #ee4d2d;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+.admin-logout:hover {
+    background-color: #ee4d2d;
+    color: #121212;
+}
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 40px;
+}
+.stat-card {
+    background-color: #1e1e1e;
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    border-top: 4px solid #ee4d2d;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+}
+.stat-card h3 {
+    margin: 0 0 10px 0;
+    color: #888;
+    font-size: 14px;
+    text-transform: uppercase;
+}
+.stat-card p {
+    margin: 0;
+    font-size: 32px;
+    font-weight: bold;
+    color: #fff;
+}
+.admin-table-container {
+    background-color: #1e1e1e;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    overflow-x: auto;
+}
+.admin-table-container h2 {
+    margin-top: 0;
+    color: #fff;
+    margin-bottom: 20px;
+}
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.admin-table th, .admin-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #333;
+}
+.admin-table th {
+    color: #ee4d2d;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.admin-table tr:hover {
+    background-color: #2a2a2a;
+}
+.role-badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+.role-admin { background-color: #5c2018; color: #ff8a65; }
+.role-seller { background-color: #1a3e59; color: #64b5f6; }
+.role-user { background-color: #242424; color: #aaa; }
+.btn-delete {
+    background-color: #b71c1c;
+    color: #fff;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.2s;
+}
+.btn-delete:hover {
+    background-color: #d32f2f;
+}
