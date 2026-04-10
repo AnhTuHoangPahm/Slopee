@@ -195,7 +195,16 @@ export default function Cart() {
                             <div>
                                 Selected Gross ({selectedItems.size} items): <span style={{color:'#ee4d2d', fontSize:'24px', fontWeight:'500', marginLeft: '10px'}}>${calculateTotal().toFixed(2)}</span>
                             </div>
-                            <button className="cart-checkout-btn">Secure Checkout</button>
+                            <button 
+                                className="cart-checkout-btn" 
+                                onClick={() => {
+                                    if(selectedItems.size === 0) return alert('Select at least one item to checkout');
+                                    const selectedPayload = items.filter(it => selectedItems.has(it.cartItemId));
+                                    navigate('/checkout', { state: { items: selectedPayload } });
+                                }}
+                            >
+                                Secure Checkout
+                            </button>
                         </div>
                     </div>
                 )}

@@ -55,6 +55,7 @@ export default function Navbar() {
                     {user ? (
                         <>
                             <span>Hi, {user.name}</span>
+                            <Link to="/orders" className="nav-icon">📦 My Orders</Link>
                             
                             <div 
                                 style={{ position: 'relative' }}

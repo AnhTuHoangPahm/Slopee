@@ -36,6 +36,11 @@ def setup_shop():
             if cursor.fetchone():
                 return jsonify({"error": "You already have a shop setup!"}), 400
                 
+            # FEATURE E RESTRICTION: Block shop creation if no active Bank Account exists to accept revenue payouts
+            cursor.execute("SELECT id FROM paymentMethods WHERE userId=%s LIMIT 1", (seller_id,))
+            if not cursor.fetchone():
+                return jsonify({"error": "You must link at least one Bank Account to receive item payouts before activating your shop!"}), 403
+                
             shop_id = str(uuid.uuid4())
             cursor.execute(
                 "INSERT INTO shops (id, sellerId, name, description) VALUES (%s, %s, %s, %s)",
