@@ -33,7 +33,7 @@ export default function AdminDashboard() {
 
   const handleLogout = () => {
       localStorage.removeItem('user');
-      navigate('/login');
+      navigate('/');
   };
 
   const handleDeleteUser = async (targetId) => {

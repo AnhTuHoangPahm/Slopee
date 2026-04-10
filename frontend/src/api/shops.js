@@ -28,3 +28,32 @@ export const addProductAPI = async (productData) => {
     if (!res.ok) throw new Error(data.error);
     return data;
 };
+
+export const updateShopNameAPI = async (sellerId, name) => {
+    const res = await fetch(`${API_BASE}/${sellerId}/name`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    return data;
+};
+
+export const updateProductAPI = async (productId, updateData) => {
+    const res = await fetch(`${API_BASE}/products/${productId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    return data;
+};
+
+export const deleteProductAPI = async (productId) => {
+    const res = await fetch(`${API_BASE}/products/${productId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    return data;
+};
