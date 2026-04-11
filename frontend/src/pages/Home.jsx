@@ -39,21 +39,6 @@ export default function Home() {
         }, 3000);
     };
 
-    const handleAddToCart = async (e, p) => {
-        e.stopPropagation(); 
-        if (!user) {
-            // Forward cart intent dynamically through URL state
-            navigate('/login', { state: { pendingCartItem: p.id } });
-            return;
-        }
-        try {
-            await addToCartAPI(user.id, p.id, 1);
-            showToast(`✅ Successfully embedded into Cart: ${p.name}`);
-        } catch (err) {
-            showToast(`❌ Cannot Add: ${err.message}`, true);
-        }
-    };
-
     useEffect(() => {
         // Any time the URL's "?search=" parameter shifts, trigger a fast backend lookup
         loadProducts(dynamicSearchTerm);
@@ -87,6 +72,16 @@ export default function Home() {
                     </div>
                 )}
                 
+                {dynamicSearchTerm && [...new Set(products.map(p => p.shopName))].length === 1 && [...new Set(products.map(p => p.shopName))][0].toLowerCase().includes(dynamicSearchTerm.toLowerCase()) && (
+                    <div style={{ background: 'linear-gradient(90deg, #f53d2d, #ff6633)', color: '#fff', padding: '40px 30px', borderRadius: '4px', marginBottom: '30px', display: 'flex', alignItems: 'center', gap: '25px', boxShadow: '0 4px 15px rgba(238, 77, 45, 0.2)' }}>
+                        <div style={{width:'80px', height:'80px', borderRadius:'50%', background:'#fff', color:'#ee4d2d', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'36px', fontWeight:'bold', boxShadow: '0 2px 10px rgba(0,0,0,0.1)'}}>🏪</div>
+                        <div>
+                            <h2 style={{margin:'0 0 8px 0', fontSize:'32px', letterSpacing: '0.5px'}}>{products[0].shopName}</h2>
+                            <div style={{opacity: 0.95, fontSize:'16px'}}>Welcome to the official verified catalog for {products[0].shopName}. Explore our premium items below!</div>
+                        </div>
+                    </div>
+                )}
+
                 {loading ? (
                     <h2 style={{ textAlign:'center', marginTop: '50px', color: '#ee4d2d' }}>Loading Slopee Catalog...</h2>
                 ) : (
@@ -105,16 +100,6 @@ export default function Home() {
                                     <div className="product-price">${p.unitPrice}</div>
                                     <div className="product-meta">
                                         Sold by {p.shopName}
-                                    </div>
-                                    <div style={{marginTop: '10px'}}>
-                                        <button 
-                                            onClick={(e) => handleAddToCart(e, p)} 
-                                            style={{background: '#fff', border:'1px solid #ee4d2d', color:'#ee4d2d', padding:'6px', width:'100%', cursor:'pointer', display:'flex', justifyContent:'center', alignItems:'center', gap:'5px', borderRadius: '2px', fontWeight: '500'}}
-                                            onMouseOver={(e) => { e.target.style.background = '#ee4d2d'; e.target.style.color = '#fff'; }}
-                                            onMouseOut={(e) => { e.target.style.background = '#fff'; e.target.style.color = '#ee4d2d'; }}
-                                        >
-                                            🛒 Add to Cart
-                                        </button>
                                     </div>
                                 </div>
                             </div>

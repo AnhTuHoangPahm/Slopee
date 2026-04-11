@@ -286,7 +286,7 @@ export default function ProductView() {
                                             <div style={{fontSize: '13px', fontWeight: 'bold'}}>{r.userName}</div>
                                             <div style={{color: '#ee4d2d', fontSize: '12px', margin: '5px 0'}}>{'★'.repeat(r.rating)}{'☆'.repeat(5-r.rating)}</div>
                                             <div style={{fontSize: '11px', color: '#999'}}>{new Date(r.createdAt).toLocaleString()}</div>
-                                            <p style={{marginTop: '10px', color: '#333'}}>{r.comment}</p>
+                                            <p style={{marginTop: '10px', color: '#333', whiteSpace: 'pre-wrap'}}>{r.comment}</p>
                                             
                                             {Array.isArray(r.reviewImages) && r.reviewImages.map((img, i) => (
                                                 <img key={i} src={img.url} alt="review auth" style={{width: '80px', height: '80px', objectFit: 'cover', border: '1px solid #eee', marginRight: '10px', marginTop: '10px'}} />
