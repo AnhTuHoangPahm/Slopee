@@ -53,7 +53,45 @@ export const updateProductAPI = async (productId, updateData) => {
 
 export const deleteProductAPI = async (productId) => {
     const res = await fetch(`${API_BASE}/products/${productId}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    return data;
+    const resData = await res.json();
+    if (!res.ok) throw new Error(resData.error);
+    return resData;
+};
+
+// --- PHASE 1 FEATURE F: PRODUCT RICHNESS DATA BINDINGS ---
+
+export const addProductImageAPI = async (productId, imageUrl, isPrimary) => {
+    const res = await fetch(`${API_BASE}/products/${productId}/images`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl, isPrimary })
+    });
+    const resData = await res.json();
+    if (!res.ok) throw new Error(resData.error);
+    return resData;
+};
+
+export const deleteProductImageAPI = async (imageId) => {
+    const res = await fetch(`${API_BASE}/products/images/${imageId}`, { method: 'DELETE' });
+    const resData = await res.json();
+    if (!res.ok) throw new Error(resData.error);
+    return resData;
+};
+
+export const addProductVariantAPI = async (productId, variantName, variantValue) => {
+    const res = await fetch(`${API_BASE}/products/${productId}/variants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variantName, variantValue })
+    });
+    const resData = await res.json();
+    if (!res.ok) throw new Error(resData.error);
+    return resData;
+};
+
+export const deleteProductVariantAPI = async (variantId) => {
+    const res = await fetch(`${API_BASE}/products/variants/${variantId}`, { method: 'DELETE' });
+    const resData = await res.json();
+    if (!res.ok) throw new Error(resData.error);
+    return resData;
 };

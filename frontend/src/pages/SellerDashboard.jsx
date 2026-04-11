@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getShopAPI, setupShopAPI, addProductAPI, updateShopNameAPI, updateProductAPI, deleteProductAPI } from '../api/shops';
+import { getShopAPI, setupShopAPI, addProductAPI, updateShopNameAPI, updateProductAPI, deleteProductAPI, addProductImageAPI, addProductVariantAPI } from '../api/shops';
+import { fetchCategoriesAPI } from '../api/products';
 import { fetchPaymentMethodsAPI, addPaymentMethodAPI } from '../api/payments';
 import Navbar from '../components/Navbar';
 
@@ -8,6 +9,7 @@ export default function SellerDashboard() {
     
     const [shop, setShop] = useState(null);
     const [methods, setMethods] = useState([]);
+    const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
     
     // Auth vars
@@ -17,9 +19,18 @@ export default function SellerDashboard() {
     const [shopName, setShopName] = useState('');
     const [shopDesc, setShopDesc] = useState('');
     
+    // Phase 2: Product Overhaul Vars
     const [prodName, setProdName] = useState('');
-    const [prodPrice, setProdPrice] = useState(0);
-    const [prodStock, setProdStock] = useState(0);
+    const [prodPrice, setProdPrice] = useState('');
+    const [prodStock, setProdStock] = useState('');
+    const [prodCategoryText, setProdCategoryText] = useState('');
+    
+    const [variants, setVariants] = useState([]);
+    const [vName, setVName] = useState('');
+    const [vValue, setVValue] = useState('');
+    
+    const [images, setImages] = useState([]);
+    const [imgUrl, setImgUrl] = useState('');
 
     const loadData = async () => {
         try {
@@ -32,7 +43,12 @@ export default function SellerDashboard() {
         try {
             const pmData = await fetchPaymentMethodsAPI(user.id);
             setMethods(pmData.methods);
-        } catch (err) { console.error(err) }
+        } catch (err) { console.error(err); }
+        
+        try {
+            const catData = await fetchCategoriesAPI();
+            setCategories(catData.categories);
+        } catch(err) { console.error(err); }
         
         setLoading(false);
     }
@@ -55,13 +71,11 @@ export default function SellerDashboard() {
         } catch (err) { alert(err.message); }
     }
 
-
     if (!user || user.role !== 'seller') {
         return <h2 style={{padding: '20px'}}>Access Denied. Only registered Sellers can access this dashboard.</h2>;
     }
     if (loading) return <div style={{padding: '20px'}}><Navbar />Loading secure dashboard...</div>;
 
-    // FEATURE E RESTRICTION: Sellers must link a bank first
     if (methods.length === 0) {
         return (
             <div style={{ backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
@@ -80,7 +94,6 @@ export default function SellerDashboard() {
             </div>
         );
     }
-
 
     const handleSetupShop = async (e) => {
         e.preventDefault();
@@ -102,9 +115,26 @@ export default function SellerDashboard() {
 
     const handleAddProduct = async (e) => {
         e.preventDefault();
+        // Resolve Category String to ID seamlessly
+        const matchingCat = categories.find(c => c.name.toLowerCase() === prodCategoryText.toLowerCase());
+        const catId = matchingCat ? matchingCat.id : 1; 
+
         try {
-            await addProductAPI({ shopId: shop.id, name: prodName, unitPrice: prodPrice, inStock: prodStock });
-            setProdName(''); setProdPrice(0); setProdStock(0);
+            const res = await addProductAPI({ shopId: shop.id, name: prodName, unitPrice: Number(prodPrice), inStock: Number(prodStock), categoryId: catId });
+            
+            if(res.productId) {
+                // Upload Rich Metadata Sequentially
+                for(let v of variants) {
+                    await addProductVariantAPI(res.productId, v.name, v.value);
+                }
+                for(let i=0; i<images.length; i++) {
+                    await addProductImageAPI(res.productId, images[i], i === 0);
+                }
+            }
+            
+            // Clean up
+            setProdName(''); setProdPrice(''); setProdStock(''); setProdCategoryText('');
+            setVariants([]); setImages([]);
             loadData();
         } catch(err) { alert(err.message); }
     }
@@ -149,10 +179,15 @@ export default function SellerDashboard() {
         );
     }
 
+    const getCatName = (id) => {
+        const c = categories.find(cat => cat.id === id);
+        return c ? c.name : 'General';
+    };
+
     return (
-        <div style={{ backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
+        <div style={{ backgroundColor: '#f5f5f5', minHeight: '100vh', paddingBottom: '100px' }}>
             <Navbar />
-            <div style={{ padding: '40px', fontFamily: 'Inter, sans-serif', maxWidth: '900px', margin: '0 auto' }}>
+            <div style={{ padding: '40px', fontFamily: 'Inter, sans-serif', maxWidth: '1000px', margin: '0 auto' }}>
                 <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
                     <div>
                         <h1 style={{color: '#ee4d2d', margin: 0, display: 'inline-block'}}>🏪 {shop.name}</h1>
@@ -163,30 +198,110 @@ export default function SellerDashboard() {
                 <p style={{color: '#666', fontStyle: 'italic', marginTop: '10px'}}>{shop.description}</p>
                 <hr style={{margin: '20px 0'}}/>
                 
-                <div style={{ background: '#f9f9f9', padding: '20px', borderRadius: '5px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                    <h3 style={{marginTop: 0}}>List a New Product</h3>
-                    <form onSubmit={handleAddProduct} style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <input type="text" placeholder="Product Name" value={prodName} required onChange={e=>setProdName(e.target.value)} style={{padding:'8px', width:'250px'}}/>
-                        <input type="number" placeholder="Price ($)" value={prodPrice} required onChange={e=>setProdPrice(e.target.value)} style={{padding:'8px', width:'100px'}}/>
-                        <input type="number" placeholder="Stock Qty" value={prodStock} required onChange={e=>setProdStock(e.target.value)} style={{padding:'8px', width:'100px'}}/>
-                        <button type="submit" style={{ background: '#ee4d2d', color: '#fff', border:'none', padding:'10px 20px', cursor:'pointer' }}>Publish to Shop</button>
+                <div style={{ background: '#fff', padding: '30px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', borderTop: '4px solid #ee4d2d' }}>
+                    <h2 style={{marginTop: 0, color: '#333'}}>List a New Component</h2>
+                    
+                    <form onSubmit={handleAddProduct} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        
+                        <div style={{display: 'flex', gap: '15px', flexWrap: 'wrap'}}>
+                            <div style={{flex: 2, minWidth: '250px'}}>
+                                <label style={{fontSize:'12px', color:'#666', fontWeight:'bold'}}>PRODUCT NAME</label>
+                                <input type="text" placeholder="E.g., Wireless Mouse" value={prodName} required onChange={e=>setProdName(e.target.value)} style={{padding:'10px', width:'100%', boxSizing:'border-box', border:'1px solid #ccc', borderRadius:'4px'}}/>
+                            </div>
+                            <div style={{flex: 1, minWidth: '150px'}}>
+                                <label style={{fontSize:'12px', color:'#666', fontWeight:'bold'}}>CATEGORY TAG</label>
+                                <input list="category-options" placeholder="Search categories..." value={prodCategoryText} onChange={e=>setProdCategoryText(e.target.value)} required style={{padding:'10px', width:'100%', boxSizing:'border-box', border:'1px solid #ccc', borderRadius:'4px'}}/>
+                                <datalist id="category-options">
+                                    {categories.map(c => <option key={c.id} value={c.name} />)}
+                                </datalist>
+                            </div>
+                            <div style={{flex: 1, minWidth: '100px'}}>
+                                <label style={{fontSize:'12px', color:'#666', fontWeight:'bold'}}>PRICE ($)</label>
+                                <input type="number" step="0.01" value={prodPrice} required onChange={e=>setProdPrice(e.target.value)} style={{padding:'10px', width:'100%', boxSizing:'border-box', border:'1px solid #ccc', borderRadius:'4px'}}/>
+                            </div>
+                            <div style={{flex: 1, minWidth: '100px'}}>
+                                <label style={{fontSize:'12px', color:'#666', fontWeight:'bold'}}>STOCK (QTY)</label>
+                                <input type="number" value={prodStock} required onChange={e=>setProdStock(e.target.value)} style={{padding:'10px', width:'100%', boxSizing:'border-box', border:'1px solid #ccc', borderRadius:'4px'}}/>
+                            </div>
+                        </div>
+
+                        <hr style={{borderTop: '1px dashed #eee'}} />
+
+                        <div style={{display: 'flex', gap: '40px', flexWrap: 'wrap'}}>
+                            {/* Images Section */}
+                            <div style={{flex: 1}}>
+                                <h4 style={{margin:'0 0 10px 0', color:'#444'}}>🖼️ Photo Gallery ({images.length})</h4>
+                                <div style={{display:'flex', gap:'5px', marginBottom:'10px'}}>
+                                    <input type="text" placeholder="Image HTTPS URL..." value={imgUrl} onChange={e=>setImgUrl(e.target.value)} style={{padding:'8px', flex:1, border:'1px solid #ccc', borderRadius:'4px'}}/>
+                                    <button type="button" onClick={()=>{ if(imgUrl){setImages([...images, imgUrl]); setImgUrl('');} }} style={{background:'#f0f0f0', border:'1px solid #ccc', cursor:'pointer', padding:'0 15px'}}>+</button>
+                                </div>
+                                <div style={{display: 'flex', gap: '10px', overflowX: 'auto'}}>
+                                    {images.map((img, idx) => (
+                                        <div key={idx} style={{position:'relative', width:'60px', height:'60px', borderRadius:'4px', overflow:'hidden', border: idx===0?'2px solid #ee4d2d':'1px solid #ddd'}}>
+                                            <img src={img} alt="preview" style={{width:'100%', height:'100%', objectFit:'cover'}} />
+                                            {idx===0 && <span style={{position:'absolute', bottom:0, background:'rgba(238, 77, 45, 0.9)', color:'#fff', fontSize:'9px', width:'100%', textAlign:'center'}}>PRIMARY</span>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Variants Section */}
+                            <div style={{flex: 1}}>
+                                <h4 style={{margin:'0 0 10px 0', color:'#444'}}>⚙️ Product Variants ({variants.length})</h4>
+                                <div style={{display:'flex', gap:'5px', marginBottom:'10px'}}>
+                                    <input type="text" placeholder="E.g. Color" value={vName} onChange={e=>setVName(e.target.value)} style={{padding:'8px', width:'80px', border:'1px solid #ccc', borderRadius:'4px'}}/>
+                                    <input type="text" placeholder="E.g. Red" value={vValue} onChange={e=>setVValue(e.target.value)} style={{padding:'8px', flex:1, border:'1px solid #ccc', borderRadius:'4px'}}/>
+                                    <button type="button" onClick={()=>{ if(vName && vValue){setVariants([...variants, {name:vName, value:vValue}]); setVName(''); setVValue('');} }} style={{background:'#f0f0f0', border:'1px solid #ccc', cursor:'pointer', padding:'0 15px'}}>+</button>
+                                </div>
+                                <div style={{display:'flex', gap:'5px', flexWrap:'wrap'}}>
+                                    {variants.map((v, idx) => (
+                                        <span key={idx} style={{background:'#e3f2fd', color:'#1565c0', padding:'4px 8px', borderRadius:'12px', fontSize:'12px', border:'1px solid #bbdefb'}}>
+                                            {v.name}: {v.value}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" style={{ background: '#ee4d2d', color: '#fff', border:'none', padding:'15px', cursor:'pointer', fontSize:'16px', fontWeight:'bold', borderRadius:'4px', marginTop:'10px' }}>Publish Product to Web Store</button>
                     </form>
                 </div>
 
-                <h3 style={{marginTop: '30px'}}>Your Live Online Inventory ({shop.products ? shop.products.length : 0} items)</h3>
+                <h3 style={{marginTop: '40px'}}>Your Live Online Inventory ({shop.products ? shop.products.length : 0} items)</h3>
                 <ul style={{listStyle: 'none', padding: 0}}>
                     {shop.products && shop.products.map(p => (
-                        <li key={p.id} style={{padding: '15px', border: '1px solid #ddd', marginBottom: '10px', borderRadius: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff'}}>
-                            <div>
-                                <strong>{p.name}</strong> <br/>
-                                <span style={{color: '#ee4d2d'}}>${p.unitPrice}</span> •  
-                                <span style={{color: p.inStock > 0 ? 'green' : 'red', marginLeft: '5px'}}>
-                                    {p.inStock > 0 ? `${p.inStock} in stock` : 'Out of Stock'}
-                                </span>
+                        <li key={p.id} style={{padding: '20px', border: '1px solid #eee', marginBottom: '15px', borderRadius: '8px', display: 'flex', gap: '20px', alignItems: 'center', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,0.02)'}}>
+                            <div style={{width:'80px', height:'80px', background:'#f9f9f9', borderRadius:'4px', overflow:'hidden', flexShrink:0}}>
+                                {p.images && p.images.length > 0 ? (
+                                    <img src={p.images.find(img=>img.isPrimary)?.imageUrl || p.images[0].imageUrl} alt={p.name} style={{width:'100%', height:'100%', objectFit:'cover'}} />
+                                ) : (
+                                    <div style={{width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', color:'#ccc', fontSize:'12px'}}>No IMG</div>
+                                )}
                             </div>
-                            <div>
-                                <button onClick={() => handleEditProduct(p)} style={{padding: '6px 12px', marginRight: '10px', background: '#fafafa', border: '1px solid #ccc', cursor: 'pointer'}}>Edit Pricing/Stock</button>
-                                <button onClick={() => handleDeleteProduct(p.id)} style={{padding: '6px 12px', background: '#b71c1c', color: '#fff', border: 'none', cursor: 'pointer'}}>Take Down</button>
+                            
+                            <div style={{flex: 1}}>
+                                <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                                    <strong style={{fontSize:'18px'}}>{p.name}</strong>
+                                    <span style={{background:'#f5f5f5', color:'#666', padding:'2px 6px', borderRadius:'3px', fontSize:'11px'}}>{getCatName(p.categoryId)}</span>
+                                </div>
+                                
+                                <div style={{marginTop:'8px', display:'flex', gap:'5px', flexWrap:'wrap'}}>
+                                    {p.variants && p.variants.map(v => (
+                                        <span key={v.id} style={{fontSize:'11px', background:'#e8f0fe', color:'#1967d2', padding:'2px 6px', borderRadius:'10px'}}>{v.variantName}: {v.variantValue}</span>
+                                    ))}
+                                </div>
+
+                                <div style={{marginTop:'12px', display:'flex', alignItems:'center', gap:'15px', fontSize:'14px'}}>
+                                    <span style={{color: '#ee4d2d', fontWeight:'bold'}}>${p.unitPrice}</span> 
+                                    <span style={{color: p.inStock > 0 ? '#2e7d32' : '#d32f2f', fontWeight:'500'}}>
+                                        {p.inStock > 0 ? `${p.inStock} in stock` : 'Out of Stock!'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
+                                <button onClick={() => handleEditProduct(p)} style={{padding: '8px 15px', background: '#fafafa', border: '1px solid #ccc', cursor: 'pointer', borderRadius:'4px'}}>Edit Allocation</button>
+                                <button onClick={() => handleDeleteProduct(p.id)} style={{padding: '8px 15px', background: '#b71c1c', color: '#fff', border: 'none', cursor: 'pointer', borderRadius:'4px'}}>Take Down</button>
                             </div>
                         </li>
                     ))}
