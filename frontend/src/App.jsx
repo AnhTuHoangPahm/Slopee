@@ -8,6 +8,7 @@ import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import MyOrders from './pages/MyOrders';
 import ProductView from './pages/ProductView';
+import UserSettings from './pages/UserSettings';
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/cart" element={<Cart />} />
         <Route path="/checkout" element={<Checkout />} />
         <Route path="/orders" element={<MyOrders />} />
+        <Route path="/settings" element={<UserSettings />} />
       </Routes>
     </BrowserRouter>
   );

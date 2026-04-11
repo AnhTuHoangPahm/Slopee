@@ -99,7 +99,8 @@ export default function Home() {
                                     <h4 className="product-title">{p.name}</h4>
                                     <div className="product-price">${p.unitPrice}</div>
                                     <div className="product-meta">
-                                        Sold by {p.shopName}
+                                        <span style={{color: '#ee4d2d', fontWeight: 'bold'}}>{p.averageRating > 0 ? `★ ${p.averageRating}` : 'No Ratings'}</span>
+                                        <span>Sold by {p.shopName}</span>
                                     </div>
                                 </div>
                             </div>

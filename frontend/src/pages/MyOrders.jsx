@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import Navbar from '../components/Navbar';
 import { fetchOrdersAPI, updateOrderStatusAPI } from '../api/payments';
 
 export default function MyOrders() {
@@ -33,10 +32,9 @@ export default function MyOrders() {
     if (!user) return <div style={{padding:'20px'}}>Please log in.</div>;
 
     return (
-        <div style={{ background: '#f5f5f5', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
-            <Navbar />
-            <div style={{ maxWidth: '900px', margin: '40px auto', padding: '0 20px' }}>
-                <h2 style={{color: '#ee4d2d'}}>My Complete Purchases Ledger</h2>
+        <div style={{ width: '100%', fontFamily: 'Inter, sans-serif' }}>
+            <div style={{ padding: '20px' }}>
+                <h2 style={{color: '#ee4d2d', marginTop: '0'}}>My Complete Purchases Ledger</h2>
                 
                 {loading ? (
                     <div style={{textAlign:'center', marginTop:'50px'}}>Fetching secure transactions...</div>

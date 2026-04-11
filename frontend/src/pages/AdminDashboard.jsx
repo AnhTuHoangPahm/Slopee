@@ -36,11 +36,11 @@ export default function AdminDashboard() {
       navigate('/');
   };
 
-  const handleDeleteUser = async (targetId) => {
-      if (!window.confirm("WARNING: Are you absolutely sure you want to permanently delete this user and irrevocably cascade delete all their shops, products, and records?")) return;
+  const handleApproveDeletion = async (targetId) => {
+      if (!window.confirm("WARNING: Irrevocably erasing this account and cascading their inventory?")) return;
       try {
           await deleteUserAPI(targetId);
-          alert("Target eradicated.");
+          alert("Account successfully erased from the database.");
           loadDashboard();
       } catch (err) {
           alert(err.message);
@@ -79,6 +79,35 @@ export default function AdminDashboard() {
         </div>
 
         <div className="admin-table-container">
+            <h2>Requested Account Eradications</h2>
+            <table className="admin-table">
+                <thead>
+                    <tr>
+                        <th>Clearance</th>
+                        <th>Identification</th>
+                        <th>Request Date</th>
+                        <th>Executive Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {usersList.filter(u => u.deletionRequestedAt !== null).map(u => (
+                        <tr key={u.id}>
+                            <td><span className={`role-badge role-${u.role}`}>{u.role}</span></td>
+                            <td><strong>{u.name}</strong><br/><span style={{fontSize:'12px', color:'#777'}}>{u.email}</span></td>
+                            <td style={{color: '#d32f2f', fontWeight: 'bold'}}>{new Date(u.deletionRequestedAt).toLocaleString()}</td>
+                            <td>
+                                <button onClick={() => handleApproveDeletion(u.id)} className="btn-delete" style={{background:'#c62828'}}>APPROVE DELETION</button>
+                            </td>
+                        </tr>
+                    ))}
+                    {usersList.filter(u => u.deletionRequestedAt !== null).length === 0 && (
+                        <tr><td colSpan="4" style={{textAlign:'center', padding:'20px', color:'#777'}}>No active deletion requests.</td></tr>
+                    )}
+                </tbody>
+            </table>
+        </div>
+
+        <div className="admin-table-container">
             <h2>User Registration Terminal</h2>
             <table className="admin-table">
                 <thead>
@@ -87,7 +116,6 @@ export default function AdminDashboard() {
                         <th>Identification</th>
                         <th>Email Protocol</th>
                         <th>Comms Line</th>
-                        <th>Executive Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -97,13 +125,6 @@ export default function AdminDashboard() {
                             <td><strong>{u.name}</strong></td>
                             <td>{u.email}</td>
                             <td>{u.phone}</td>
-                            <td>
-                                {u.email !== '0' ? (
-                                    <button onClick={() => handleDeleteUser(u.id)} className="btn-delete">ERADICATE USER</button>
-                                ) : (
-                                    <span style={{color: '#555', fontSize:'12px', fontWeight: 'bold'}}>SYSTEM PROTECTED</span>
-                                )}
-                            </td>
                         </tr>
                     ))}
                 </tbody>

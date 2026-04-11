@@ -1,0 +1,230 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Navbar from '../components/Navbar';
+import MyOrders from './MyOrders';
+import { updateProfileAPI, updateUsernameAPI, updatePasswordAPI, requestDeletionAPI, fetchUserReviewsAPI } from '../api/auth';
+
+export default function UserSettings() {
+    const navigate = useNavigate();
+    const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')));
+    
+    const [activeTab, setActiveTab] = useState('profile');
+    const [loading, setLoading] = useState(false);
+    const [message, setMessage] = useState({ text: '', type: '' });
+
+    // Profile State
+    const [bio, setBio] = useState('');
+    const [newUsername, setNewUsername] = useState(user?.username || '');
+
+    // Security State
+    const [oldPassword, setOldPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+
+    // Deletion State
+    const [deletePass, setDeletePass] = useState('');
+
+    // Reviews State
+    const [reviews, setReviews] = useState([]);
+
+    useEffect(() => {
+        if (!user) navigate('/login');
+    }, [user]);
+
+    const showMsg = (text, type='success') => {
+        setMessage({ text, type });
+        setTimeout(() => setMessage({ text: '', type: '' }), 4000);
+    };
+
+    const handleUpdateProfile = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            await updateProfileAPI(user.id, bio);
+            showMsg("Bio profile mathematically updated.");
+        } catch (err) {
+            showMsg(err.message, 'error');
+        }
+        setLoading(false);
+    };
+
+    const handleUpdateUsername = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            await updateUsernameAPI(user.id, newUsername);
+            // Must rewrite local session to prevent corruption
+            const updatedUser = { ...user, username: newUsername };
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            setUser(updatedUser);
+            showMsg("Username dynamically rebound in core session.");
+        } catch (err) {
+            showMsg(err.message, 'error');
+        }
+        setLoading(false);
+    };
+
+    const handleUpdatePassword = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            await updatePasswordAPI(user.id, oldPassword, newPassword);
+            showMsg("Core security hash replaced. Next login requires new protocols.");
+            setOldPassword('');
+            setNewPassword('');
+        } catch (err) {
+            showMsg(err.message, 'error');
+        }
+        setLoading(false);
+    };
+
+    const handleRequestDeletion = async (e) => {
+        e.preventDefault();
+        if (!window.confirm("WARNING: Filing an account deletion requests notifies Admins. You will be irrecoverably wiped if approved.")) return;
+        setLoading(true);
+        try {
+            await requestDeletionAPI(user.id, deletePass);
+            showMsg("Decommissioning signal officially registered with Admin layer.");
+            setDeletePass('');
+        } catch (err) {
+            showMsg(err.message, 'error');
+        }
+        setLoading(false);
+    };
+
+    const fetchMyReviews = async () => {
+        try {
+            const data = await fetchUserReviewsAPI(user.id);
+            setReviews(data.reviews);
+        } catch(err) {
+            showMsg("Failed to pull analytical reviews.", "error");
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'reviews') {
+            fetchMyReviews();
+        }
+    }, [activeTab]);
+
+
+    if (!user) return null;
+
+    const navStyle = (tab) => ({
+        padding: '15px 20px', cursor: 'pointer', borderBottom: '1px solid #eee', 
+        background: activeTab === tab ? '#ffeee8' : '#fff', color: activeTab === tab ? '#ee4d2d' : '#333',
+        fontWeight: activeTab === tab ? 'bold' : 'normal'
+    });
+
+    return (
+        <div style={{ background: '#f5f5f5', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+            <Navbar />
+            
+            <div style={{ maxWidth: '1200px', margin: '40px auto', display: 'flex', gap: '20px' }}>
+                
+                {/* SETTINGS SIDEBAR NAV */}
+                <div style={{ width: '250px', background: '#fff', borderRadius: '4px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', overflow: 'hidden', height: 'fit-content' }}>
+                    <div style={{ padding: '20px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', gap: '15px' }}>
+                        <div style={{width:'50px', height:'50px', borderRadius:'50%', background:'#ccc'}} />
+                        <div>
+                            <div style={{fontWeight: 'bold', fontSize:'14px'}}>{user.name}</div>
+                            <div style={{fontSize:'12px', color:'#888'}}>@{user.username}</div>
+                        </div>
+                    </div>
+                    
+                    <div onClick={()=>setActiveTab('profile')} style={navStyle('profile')}>👤 Profile Details</div>
+                    <div onClick={()=>setActiveTab('security')} style={navStyle('security')}>🔒 Security Key</div>
+                    <div onClick={()=>setActiveTab('orders')} style={navStyle('orders')}>📦 Order Ledger</div>
+                    <div onClick={()=>setActiveTab('reviews')} style={navStyle('reviews')}>⭐ Analytical Reviews</div>
+                    <div onClick={()=>setActiveTab('account')} style={navStyle('account')}>⚠️ Account Control</div>
+                </div>
+
+                {/* DYNAMIC CONTENT CANVAS */}
+                <div style={{ flex: 1, background: '#fff', padding: '30px', borderRadius: '4px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                    {message.text && (
+                        <div style={{ padding: '15px', background: message.type==='error' ? '#ffebee' : '#e8f5e9', color: message.type==='error' ? '#c62828' : '#2e7d32', marginBottom: '20px', borderRadius: '4px', fontWeight: 'bold' }}>
+                            {message.text}
+                        </div>
+                    )}
+
+                    {activeTab === 'profile' && (
+                        <div>
+                            <h2>Public Facade Configuration</h2>
+                            <form onSubmit={handleUpdateUsername} style={{display:'flex', gap:'10px', marginBottom:'40px', alignItems:'flex-end'}}>
+                                <div style={{flex:1}}>
+                                    <label style={{display:'block', marginBottom:'8px', fontSize:'13px', color:'#555'}}>Handle Alias (Username)</label>
+                                    <input value={newUsername} onChange={e=>setNewUsername(e.target.value)} required minLength={4} style={{width:'100%', padding:'10px', border:'1px solid #ccc', borderRadius:'3px'}} />
+                                </div>
+                                <button disabled={loading} style={{padding:'11px 25px', background:'#ee4d2d', color:'#fff', border:'none', borderRadius:'3px', cursor:'pointer', fontWeight:'bold'}}>Rebind ID</button>
+                            </form>
+
+                            <form onSubmit={handleUpdateProfile} style={{display:'flex', flexDirection:'column', gap:'15px'}}>
+                                <div>
+                                    <label style={{display:'block', marginBottom:'8px', fontSize:'13px', color:'#555'}}>Biographical Hook</label>
+                                    <textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Elaborate on your commercial footprint..." style={{width:'100%', padding:'10px', border:'1px solid #ccc', borderRadius:'3px', height:'100px', fontFamily:'inherit'}} />
+                                </div>
+                                <button disabled={loading} style={{padding:'12px', background:'#444', color:'#fff', border:'none', borderRadius:'3px', cursor:'pointer', fontWeight:'bold', width:'200px'}}>Publish Bio</button>
+                            </form>
+                        </div>
+                    )}
+
+                    {activeTab === 'security' && (
+                        <div>
+                            <h2>Cryptographic Adjustments</h2>
+                            <form onSubmit={handleUpdatePassword} style={{display:'flex', flexDirection:'column', gap:'20px', maxWidth:'400px'}}>
+                                <div>
+                                    <label style={{display:'block', marginBottom:'8px', fontSize:'13px', color:'#555'}}>Current Clearance Password</label>
+                                    <input type="password" value={oldPassword} onChange={e=>setOldPassword(e.target.value)} required style={{width:'100%', padding:'10px', border:'1px solid #ccc'}} />
+                                </div>
+                                <div>
+                                    <label style={{display:'block', marginBottom:'8px', fontSize:'13px', color:'#555'}}>New Secure Password</label>
+                                    <input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} required minLength={4} style={{width:'100%', padding:'10px', border:'1px solid #ccc'}} />
+                                </div>
+                                <button disabled={loading} style={{padding:'12px', background:'#ee4d2d', color:'#fff', border:'none', borderRadius:'3px', cursor:'pointer', fontWeight:'bold'}}>Over-write Protocol</button>
+                            </form>
+                        </div>
+                    )}
+
+                    {activeTab === 'orders' && (
+                        <div style={{ marginTop: '-40px' }}>
+                            <MyOrders />
+                        </div>
+                    )}
+
+                    {activeTab === 'reviews' && (
+                        <div>
+                            <h2>Historical Analytics Log</h2>
+                            {reviews.length === 0 ? <p style={{color:'#888'}}>Zero structural feedback arrays published by this account.</p> : (
+                                reviews.map(r => (
+                                    <div key={r.id} style={{borderBottom:'1px solid #eee', padding:'20px 0'}}>
+                                        <div style={{fontSize:'12px', color:'#888', marginBottom:'10px'}}>Item Reference: <span onClick={()=>navigate(`/product/${r.productId}`)} style={{color:'#1565c0', cursor:'pointer', fontWeight:'bold'}}>{r.productName}</span></div>
+                                        <div style={{color: '#ee4d2d', fontSize: '14px', marginBottom: '8px'}}>{'★'.repeat(r.rating)}{'☆'.repeat(5-r.rating)}</div>
+                                        <p style={{margin:0, color:'#333', whiteSpace:'pre-wrap'}}>{r.comment}</p>
+                                        <div style={{fontSize:'11px', color:'#aaa', marginTop:'10px'}}>{new Date(r.createdAt).toLocaleString()}</div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    )}
+
+                    {activeTab === 'account' && (
+                        <div>
+                            <h2 style={{color: '#d32f2f'}}>Terminal Account Controls</h2>
+                            <div style={{background: '#ffebee', padding: '20px', borderRadius: '4px', borderLeft: '4px solid #c62828'}}>
+                                <h4 style={{margin: '0 0 10px 0', color: '#c62828'}}>File Decommission Request</h4>
+                                <p style={{fontSize: '13px', color: '#666', marginBottom: '20px'}}>This transmits a permanent eradication request directly to the global administrators. Provide current structural password to manifest intent.</p>
+                                
+                                <form onSubmit={handleRequestDeletion} style={{display:'flex', gap:'15px', alignItems:'flex-end'}}>
+                                    <div>
+                                        <input type="password" value={deletePass} onChange={e=>setDeletePass(e.target.value)} placeholder="Authentication Verify" required style={{padding:'10px', border:'1px solid #ccc', width:'250px'}} />
+                                    </div>
+                                    <button disabled={loading} style={{padding:'11px 20px', background:'#c62828', color:'#fff', border:'none', borderRadius:'3px', cursor:'pointer', fontWeight: 'bold'}}>Transact Deletion Signal</button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+            </div>
+        </div>
+    );
+}

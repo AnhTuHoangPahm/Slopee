@@ -42,6 +42,10 @@ def search_products():
                 cursor.execute("SELECT id, variantName, variantValue FROM productVariants WHERE productId=%s", (item['id'],))
                 item['variants'] = cursor.fetchall()
                 
+                cursor.execute("SELECT AVG(rating) as avg_rating FROM reviews WHERE productId=%s", (item['id'],))
+                avg_res = cursor.fetchone()
+                item['averageRating'] = round(float(avg_res['avg_rating']), 1) if avg_res and avg_res['avg_rating'] else 0.0
+                
             elapsed_time = time.time() - start_time
             
             return jsonify({
