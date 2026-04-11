@@ -6,3 +6,9 @@ export const fetchProductsAPI = async (searchQuery = '') => {
     if (!res.ok) throw new Error("Failed to load products");
     return await res.json(); // returns { time_taken_sec, items }
 };
+
+export const fetchCategoriesAPI = async () => {
+    const res = await fetch(`${API_BASE}/categories`);
+    if (!res.ok) throw new Error("Failed to fetch product categories.");
+    return await res.json();
+};
