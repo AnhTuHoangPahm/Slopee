@@ -6,11 +6,11 @@ export const fetchCartAPI = async (userId) => {
     return await res.json();
 };
 
-export const addToCartAPI = async (userId, productId, quantity = 1) => {
+export const addToCartAPI = async (userId, productId, quantity = 1, selectedVariants = {}) => {
     const res = await fetch(`${API_BASE}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, productId, quantity })
+        body: JSON.stringify({ userId, productId, quantity, selectedVariants })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);

@@ -34,7 +34,7 @@ export default function Cart() {
     const handleUpdateQty = async (item, newQty) => {
         // Enforce user's 0-quantity prompt requirement
         if (newQty <= 0) {
-            if (window.confirm(`Do you want to remove ${item.name} from your shopping cart?`)) {
+            if (window.confirm(`Do you want to remove ${item.name} from your cart?`)) {
                 await removeCartItemAPI(item.cartItemId);
                 setSelectedItems(prev => {
                     const next = new Set(prev);
@@ -110,14 +110,14 @@ export default function Cart() {
         }, 0);
     };
 
-    if (loading) return <div className="cart-layout"><Navbar /><div style={{ textAlign: 'center', marginTop: '50px' }}>Loading Secure Cart Array...</div></div>;
+    if (loading) return <div className="cart-layout"><Navbar /><div style={{ textAlign: 'center', marginTop: '50px' }}>Loading...</div></div>;
 
     return (
         <div className="cart-layout">
             <Navbar />
             <div className="cart-wrapper">
                 <div className="cart-header-title">
-                    <span style={{ fontSize: '30px' }}>🛒</span> Slopee | Secure Cart Hub
+                    <span style={{ fontSize: '30px' }}>🛒</span> My Cart
                 </div>
 
                 <div className="cart-table-header">
@@ -128,16 +128,16 @@ export default function Cart() {
                             onChange={handleSelectAll}
                         />
                     </div>
-                    <div>Product Name / Details</div>
+                    <div>Details</div>
                     <div style={{ textAlign: 'center' }}>Unit Price</div>
-                    <div style={{ textAlign: 'center' }}>Quantity Allocation</div>
-                    <div style={{ textAlign: 'center' }}>Running Total</div>
-                    <div style={{ textAlign: 'center' }}>Actions</div>
+                    <div style={{ textAlign: 'center' }}>Quantity</div>
+                    <div style={{ textAlign: 'center' }}>Total</div>
+                    <div style={{ textAlign: 'center' }}>Action</div>
                 </div>
 
                 {items.length === 0 ? (
                     <div style={{ background: '#fff', padding: '80px', textAlign: 'center', color: '#888', fontSize: '18px' }}>
-                        Your shopping cart is currently empty. Head to the homepage!
+                        Your shopping cart is currently empty. Feel like browsing at Home page?
                     </div>
                 ) : (
                     items.map(it => (
@@ -153,7 +153,12 @@ export default function Cart() {
                                 <div className="cart-img-placeholder">THUMBNAIL</div>
                                 <div>
                                     <div style={{ fontWeight: '500' }}>{it.name}</div>
-                                    <div style={{ fontSize: '12px', color: '#888', marginTop: '5px' }}>Fulfillment Shop: {it.shopName}</div>
+                                    <div style={{ fontSize: '12px', color: '#888', marginTop: '5px' }}>Shop: {it.shopName}</div>
+                                    {it.selectedVariants && Object.keys(it.selectedVariants).length > 0 && (
+                                        <div style={{ fontSize: '12px', color: '#ee4d2d', marginTop: '3px', fontWeight: '500' }}>
+                                            Variant: {Object.entries(it.selectedVariants).map(([k, v]) => `${k}: ${v}`).join(', ')}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             <div style={{ textAlign: 'center' }}>${it.unitPrice}</div>
@@ -203,7 +208,7 @@ export default function Cart() {
                                     navigate('/checkout', { state: { items: selectedPayload } });
                                 }}
                             >
-                                Secure Checkout
+                                Proceed to checkout
                             </button>
                         </div>
                     </div>

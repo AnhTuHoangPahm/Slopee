@@ -79,7 +79,7 @@ export default function UserSettings() {
 
     const handleRequestDeletion = async (e) => {
         e.preventDefault();
-        if (!window.confirm("WARNING: Filing an account deletion requests notifies Admins. You will be irrecoverably wiped if approved.")) return;
+        if (!window.confirm("WARNING: This action is irreversible. Are you sure?")) return;
         setLoading(true);
         try {
             await requestDeletionAPI(user.id, deletePass);
@@ -148,55 +148,55 @@ export default function UserSettings() {
 
                     {activeTab === 'profile' && (
                         <div>
-                            <h2>Public Facade Configuration</h2>
+                            <h2>Profile Configuration</h2>
                             <form onSubmit={handleUpdateUsername} style={{ display: 'flex', gap: '10px', marginBottom: '40px', alignItems: 'flex-end' }}>
                                 <div style={{ flex: 1 }}>
-                                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#555' }}>Handle Alias (Username)</label>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#555' }}>Username</label>
                                     <input value={newUsername} onChange={e => setNewUsername(e.target.value)} required minLength={4} style={{ width: '100%', padding: '10px', border: '1px solid #ccc', borderRadius: '3px' }} />
                                 </div>
-                                <button disabled={loading} style={{ padding: '11px 25px', background: '#ee4d2d', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer', fontWeight: 'bold' }}>Rebind ID</button>
+                                <button disabled={loading} style={{ padding: '11px 25px', background: '#ee4d2d', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer', fontWeight: 'bold' }}>Update</button>
                             </form>
 
                             <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                                 <div>
-                                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#555' }}>Biographical Hook</label>
-                                    <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Elaborate on your commercial footprint..." style={{ width: '100%', padding: '10px', border: '1px solid #ccc', borderRadius: '3px', height: '100px', fontFamily: 'inherit' }} />
+                                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#555' }}>Bio</label>
+                                    <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Tell us about yourself..." style={{ width: '100%', padding: '10px', border: '1px solid #ccc', borderRadius: '3px', height: '100px', fontFamily: 'inherit' }} />
                                 </div>
-                                <button disabled={loading} style={{ padding: '12px', background: '#444', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer', fontWeight: 'bold', width: '200px' }}>Publish Bio</button>
+                                <button disabled={loading} style={{ padding: '12px', background: '#444', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer', fontWeight: 'bold', width: '200px' }}>Update Bio</button>
                             </form>
                         </div>
                     )}
 
                     {activeTab === 'security' && (
                         <div>
-                            <h2>Cryptographic Adjustments</h2>
+                            <h2>Change my password</h2>
                             <form onSubmit={handleUpdatePassword} style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '400px' }}>
                                 <div>
-                                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#555' }}>Current Clearance Password</label>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#555' }}>Current Password</label>
                                     <input type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} required style={{ width: '100%', padding: '10px', border: '1px solid #ccc' }} />
                                 </div>
                                 <div>
-                                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#555' }}>New Secure Password</label>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#555' }}>New Password</label>
                                     <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required minLength={4} style={{ width: '100%', padding: '10px', border: '1px solid #ccc' }} />
                                 </div>
-                                <button disabled={loading} style={{ padding: '12px', background: '#ee4d2d', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer', fontWeight: 'bold' }}>Over-write Protocol</button>
+                                <button disabled={loading} style={{ padding: '12px', background: '#ee4d2d', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer', fontWeight: 'bold' }}>Update</button>
                             </form>
                         </div>
                     )}
 
                     {activeTab === 'orders' && (
                         <div style={{ marginTop: '-40px' }}>
-                            <MyOrders />
+                            <MyOrders hideNavbar={true} />
                         </div>
                     )}
 
                     {activeTab === 'reviews' && (
                         <div>
-                            <h2>Historical Analytics Log</h2>
-                            {reviews.length === 0 ? <p style={{ color: '#888' }}>Zero structural feedback arrays published by this account.</p> : (
+                            <h2>Past reviews</h2>
+                            {reviews.length === 0 ? <p style={{ color: '#888' }}>You haven't posted any reviews yet.</p> : (
                                 reviews.map(r => (
                                     <div key={r.id} style={{ borderBottom: '1px solid #eee', padding: '20px 0' }}>
-                                        <div style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>Item Reference: <span onClick={() => navigate(`/product/${r.productId}`)} style={{ color: '#1565c0', cursor: 'pointer', fontWeight: 'bold' }}>{r.productName}</span></div>
+                                        <div style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>Item: <span onClick={() => navigate(`/product/${r.productId}`)} style={{ color: '#1565c0', cursor: 'pointer', fontWeight: 'bold' }}>{r.productName}</span></div>
                                         <div style={{ color: '#ee4d2d', fontSize: '14px', marginBottom: '8px' }}>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</div>
                                         <p style={{ margin: 0, color: '#333', whiteSpace: 'pre-wrap' }}>{r.comment}</p>
                                         <div style={{ fontSize: '11px', color: '#aaa', marginTop: '10px' }}>{new Date(r.createdAt).toLocaleString()}</div>
@@ -208,16 +208,16 @@ export default function UserSettings() {
 
                     {activeTab === 'account' && (
                         <div>
-                            <h2 style={{ color: '#d32f2f' }}>Terminal Account Controls</h2>
+                            <h2 style={{ color: '#d32f2f' }}>Account Termination</h2>
                             <div style={{ background: '#ffebee', padding: '20px', borderRadius: '4px', borderLeft: '4px solid #c62828' }}>
-                                <h4 style={{ margin: '0 0 10px 0', color: '#c62828' }}>File Decommission Request</h4>
-                                <p style={{ fontSize: '13px', color: '#666', marginBottom: '20px' }}>This transmits a permanent eradication request directly to the global administrators. Provide current structural password to manifest intent.</p>
+                                <h4 style={{ margin: '0 0 10px 0', color: '#c62828' }}>Issue Account Termination</h4>
+                                <p style={{ fontSize: '13px', color: '#666', marginBottom: '20px' }}>This will transmit a request to permanently delete your account. This action is irreversible.</p>
 
                                 <form onSubmit={handleRequestDeletion} style={{ display: 'flex', gap: '15px', alignItems: 'flex-end' }}>
                                     <div>
                                         <input type="password" value={deletePass} onChange={e => setDeletePass(e.target.value)} placeholder="Authentication Verify" required style={{ padding: '10px', border: '1px solid #ccc', width: '250px' }} />
                                     </div>
-                                    <button disabled={loading} style={{ padding: '11px 20px', background: '#c62828', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer', fontWeight: 'bold' }}>Transact Deletion Signal</button>
+                                    <button disabled={loading} style={{ padding: '11px 20px', background: '#c62828', color: '#fff', border: 'none', borderRadius: '3px', cursor: 'pointer', fontWeight: 'bold' }}>Send</button>
                                 </form>
                             </div>
                         </div>

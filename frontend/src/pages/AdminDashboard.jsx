@@ -45,10 +45,10 @@ export default function AdminDashboard() {
     };
 
     const handleApproveDeletion = async (targetId) => {
-        if (!window.confirm("WARNING: Irrevocably erasing this account and cascading their inventory?")) return;
+        if (!window.confirm("WARNING: Delete this account and their inventory?")) return;
         try {
             await deleteUserAPI(targetId);
-            alert("Account successfully erased from the database.");
+            alert("Account successfully deleted.");
             loadDashboard();
         } catch (err) {
             alert(err.message);
@@ -65,7 +65,7 @@ export default function AdminDashboard() {
     };
 
     const handleEditCategory = async (catId, currentName) => {
-        const renamed = window.prompt("Re-declare Global Category Architecture:", currentName);
+        const renamed = window.prompt("Rename Category:", currentName);
         if (!renamed || renamed.trim() === currentName) return;
         try {
             await updateCategoryAPI(catId, renamed);
@@ -74,7 +74,7 @@ export default function AdminDashboard() {
     };
 
     const handleDeleteCategory = async (catId) => {
-        if (!window.confirm("Attempt database purge on this global category? Will fail dynamically if securely bound to products.")) return;
+        if (!window.confirm("Delete this category? Can't do unless no products are bound to it.")) return;
         try {
             await deleteCategoryAPI(catId);
             loadDashboard();
@@ -95,39 +95,39 @@ export default function AdminDashboard() {
         <div className="admin-layout">
             <div className="admin-header">
                 <div>
-                    <h1>Slopee Admin Domain</h1>
-                    <p style={{ margin: 0, color: '#888', marginTop: '5px' }}>Macroscopic Overview & Control</p>
+                    <h1>Slopee Admin Dashboard</h1>
+                    <p style={{ margin: 0, color: '#888', marginTop: '5px' }}>Overview & Manage</p>
                 </div>
                 <div>
                     <span style={{ marginRight: '20px', fontWeight: 'bold' }}>Session: {user.username.toUpperCase()}</span>
-                    <button onClick={handleLogout} className="admin-logout">Disengage Link</button>
+                    <button onClick={handleLogout} className="admin-logout">Logout</button>
                 </div>
             </div>
 
             <div className="stats-grid">
                 <div className="stat-card">
-                    <h3>Total Registered Population</h3>
-                    <p>{stats.users}</p>
+                    <h3>Total Registered Accounts</h3>
+                    <p>{stats.users - 1}</p>
                 </div>
                 <div className="stat-card">
-                    <h3>Total Active Shopfronts</h3>
+                    <h3>Total Shops</h3>
                     <p>{stats.shops}</p>
                 </div>
                 <div className="stat-card">
-                    <h3>Global Products Listed</h3>
+                    <h3>Total Products Listed</h3>
                     <p>{stats.products}</p>
                 </div>
             </div>
 
             <div className="admin-table-container">
-                <h2>Requested Account Eradications</h2>
+                <h2>Requested Account Wipe</h2>
                 <table className="admin-table">
                     <thead>
                         <tr>
-                            <th>Clearance</th>
+                            <th>Role</th>
                             <th>Identification</th>
                             <th>Request Date</th>
-                            <th>Executive Action</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -137,12 +137,12 @@ export default function AdminDashboard() {
                                 <td><strong>{u.name}</strong><br /><span style={{ fontSize: '12px', color: '#777' }}>{u.email}</span></td>
                                 <td style={{ color: '#d32f2f', fontWeight: 'bold' }}>{new Date(u.deletionRequestedAt).toLocaleString()}</td>
                                 <td>
-                                    <button onClick={() => handleApproveDeletion(u.id)} className="btn-delete" style={{ background: '#c62828' }}>APPROVE DELETION</button>
+                                    <button onClick={() => handleApproveDeletion(u.id)} className="btn-delete" style={{ background: '#c62828' }}>APPROVE TERMINATION</button>
                                 </td>
                             </tr>
                         ))}
                         {usersList.filter(u => u.deletionRequestedAt !== null).length === 0 && (
-                            <tr><td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: '#777' }}>No active deletion requests.</td></tr>
+                            <tr><td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: '#777' }}>No termination requests.</td></tr>
                         )}
                     </tbody>
                 </table>
@@ -150,12 +150,12 @@ export default function AdminDashboard() {
 
             <div className="admin-table-container">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                    <h2 style={{ margin: 0 }}>User Accounts Terminal</h2>
+                    <h2 style={{ margin: 0 }}>User Accounts Management</h2>
                     <div style={{ display: 'flex', gap: '10px' }}>
                         <input type="text" placeholder="Search Names or Emails" value={userSearchTerm} onChange={e => setUserSearchTerm(e.target.value)} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', width: '250px' }} />
                         <select value={userRoleFilter} onChange={e => setUserRoleFilter(e.target.value)} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
-                            <option value="all">Every Clearance</option>
-                            <option value="admin">Admin</option>
+                            <option value="all">All Role</option>
+                            {/* <option value="admin">Admin</option> */}
                             <option value="seller">Seller</option>
                             <option value="user">User</option>
                         </select>
@@ -165,41 +165,43 @@ export default function AdminDashboard() {
                 <table className="admin-table">
                     <thead>
                         <tr>
-                            <th>Clearance</th>
-                            <th>Identification</th>
-                            <th>Email Protocol</th>
-                            <th>Comms Line</th>
+                            <th>Role</th>
+                            <th>Full Name</th>
+                            <th>Email</th>
+                            <th>Contact</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredUsers.map(u => (
-                            <tr key={u.id}>
-                                <td><span className={`role-badge role-${u.role}`}>{u.role}</span></td>
-                                <td><strong>{u.name}</strong></td>
-                                <td>{u.email}</td>
-                                <td>{u.phone}</td>
-                            </tr>
-                        ))}
+                        {filteredUsers
+                            .filter(u => u.role !== 'admin')
+                            .map(u => (
+                                <tr key={u.id}>
+                                    <td><span className={`role-badge role-${u.role}`}>{u.role}</span></td>
+                                    <td><strong>{u.name}</strong></td>
+                                    <td>{u.email}</td>
+                                    <td>{u.phone}</td>
+                                </tr>
+                            ))}
                         {filteredUsers.length === 0 && (
-                            <tr><td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: '#777' }}>No users matching system search algorithms.</td></tr>
+                            <tr><td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: '#777' }}>No users found.</td></tr>
                         )}
                     </tbody>
                 </table>
             </div>
 
             <div className="admin-table-container" style={{ marginBottom: '40px' }}>
-                <h2>Global Categories Configuration</h2>
+                <h2>Categories Management</h2>
                 <form onSubmit={handleAddCategory} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
                     <input required placeholder="New Taxonomy Branch..." value={newCatName} onChange={e => setNewCatName(e.target.value)} style={{ flex: 1, padding: '10px', fontSize: '15px', border: '1px solid #ccc' }} />
-                    <button type="submit" style={{ padding: '10px 20px', background: '#333', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Transact Creation</button>
+                    <button type="submit" style={{ padding: '10px 20px', background: '#333', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Create</button>
                 </form>
                 <table className="admin-table">
                     <thead>
                         <tr>
                             <th>Global ID</th>
-                            <th>Taxonomy Name</th>
-                            <th style={{ textAlign: 'center' }}>Correlated Products</th>
-                            <th style={{ textAlign: 'right' }}>Executive Action</th>
+                            <th>Name</th>
+                            <th style={{ textAlign: 'center' }}>Number of Products</th>
+                            <th style={{ textAlign: 'right' }}>Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -209,13 +211,13 @@ export default function AdminDashboard() {
                                 <td><strong>{c.name}</strong></td>
                                 <td style={{ textAlign: 'center', fontWeight: 'bold', color: c.productCount > 0 ? '#4caf50' : '#888' }}>{c.productCount} Items</td>
                                 <td style={{ textAlign: 'right' }}>
-                                    <button onClick={() => handleEditCategory(c.id, c.name)} style={{ padding: '5px 10px', background: '#f5f5f5', border: '1px solid #ccc', cursor: 'pointer', marginRight: '5px' }}>Renumber</button>
-                                    <button onClick={() => handleDeleteCategory(c.id)} style={{ padding: '5px 10px', background: '#c62828', color: '#fff', border: 'none', cursor: 'pointer' }}>Purge Database</button>
+                                    <button onClick={() => handleEditCategory(c.id, c.name)} style={{ padding: '5px 10px', background: '#f5f5f5', border: '1px solid #ccc', cursor: 'pointer', marginRight: '5px' }}>Rename</button>
+                                    <button onClick={() => handleDeleteCategory(c.id)} style={{ padding: '5px 10px', background: '#c62828', color: '#fff', border: 'none', cursor: 'pointer' }}>Take down</button>
                                 </td>
                             </tr>
                         ))}
                         {categories.length === 0 && (
-                            <tr><td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: '#777' }}>Ecosystem lacks topological structure.</td></tr>
+                            <tr><td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: '#777' }}>No categories.</td></tr>
                         )}
                     </tbody>
                 </table>

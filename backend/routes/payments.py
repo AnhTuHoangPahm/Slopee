@@ -75,7 +75,7 @@ def execute_checkout():
             # Use placeholders for querying multiple items natively
             format_strings = ','.join(['%s'] * len(cart_item_ids))
             cursor.execute(f"""
-                SELECT ci.id as cartItemId, ci.quantity, ci.cartId, 
+                SELECT ci.id as cartItemId, ci.quantity, ci.cartId, ci.selectedVariants,
                        p.id as productId, p.unitPrice, p.inStock, p.shopId, p.name as name, s.name as shopName
                 FROM cartItems ci
                 JOIN products p ON p.id = ci.productId
@@ -149,8 +149,8 @@ def execute_checkout():
                            
             for item in items_payload:
                 line_id = str(uuid.uuid4())
-                cursor.execute("INSERT INTO orderLines (id, orderId, productId, unitPrice, quantity, snapshotProductName, snapshotShopName) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                               (line_id, order_id, item['productId'], item['unitPrice'], item['quantity'], item['name'], item['shopName']))
+                cursor.execute("INSERT INTO orderLines (id, orderId, productId, unitPrice, quantity, snapshotProductName, snapshotShopName, selectedVariants) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                               (line_id, order_id, item['productId'], item['unitPrice'], item['quantity'], item['name'], item['shopName'], item['selectedVariants']))
                                
             # D. Delete CartItems natively
             cursor.execute(f"DELETE FROM cartItems WHERE id IN ({format_strings})", tuple(cart_item_ids))
@@ -191,7 +191,7 @@ def get_orders(user_id):
             # Fetch structured receipt tree natively via hardcoded snapshots
             cursor.execute("""
                 SELECT o.id as orderId, o.totalAmount, o.created_at, o.status,
-                       ol.quantity, ol.unitPrice, ol.snapshotProductName as productName, ol.snapshotShopName as shopName
+                       ol.quantity, ol.unitPrice, ol.snapshotProductName as productName, ol.snapshotShopName as shopName, ol.selectedVariants
                 FROM orders o
                 JOIN orderLines ol ON o.id = ol.orderId
                 WHERE o.userId=%s
@@ -211,11 +211,18 @@ def get_orders(user_id):
                         "status": line['status'],
                         "items": []
                     }
+                import json
+                try:
+                    variants_json = json.loads(line['selectedVariants']) if line['selectedVariants'] else {}
+                except:
+                    variants_json = {}
+                    
                 orders_map[o_id]["items"].append({
                     "productName": line['productName'],
                     "shopName": line['shopName'],
                     "quantity": line['quantity'],
-                    "unitPrice": line['unitPrice']
+                    "unitPrice": line['unitPrice'],
+                    "selectedVariants": variants_json
                 })
                 
             return jsonify({"orders": list(orders_map.values())}), 200
