@@ -100,12 +100,10 @@ CREATE TABLE IF NOT EXISTS cartItems (
 	id varchar(36) primary key,
 	cartId varchar(36) NOT NULL,
     productId varchar(15) NOT NULL,
-    variantId varchar(36),            
+    selectedVariants text,            
 	quantity int NOT NULL check (quantity > 0),
 	foreign key (cartId) references carts (id) on delete cascade,
-	foreign key (productId) references products (id) on delete restrict,
-    foreign key (variantId) references productVariants (id) on delete set null,
-    CONSTRAINT uniqueProductInCart UNIQUE (cartId, productId, variantId) 
+	foreign key (productId) references products (id) on delete restrict 
 );
 
 CREATE TABLE IF NOT EXISTS orders (
@@ -123,13 +121,11 @@ CREATE TABLE IF NOT EXISTS orderLines (
 	id varchar(36) PRIMARY KEY,
 	orderId varchar(36),
 	productId varchar(15) NOT NULL,
-    variantId varchar(36),            
+    selectedVariants text,            
     unitPrice decimal(11, 2) NOT NULL,
 	quantity int NOT NULL CHECK (quantity > 0),
     FOREIGN KEY (orderId) REFERENCES orders (id) on delete cascade,
-    FOREIGN KEY (productId) REFERENCES products (id) on delete restrict,
-    FOREIGN KEY (variantId) REFERENCES productVariants (id) on delete set null,
-    CONSTRAINT uniqueProductInOrder UNIQUE(orderId, productId, variantId) 
+    FOREIGN KEY (productId) REFERENCES products (id) on delete restrict 
 );
 
 CREATE TABLE IF NOT EXISTS reviews (
