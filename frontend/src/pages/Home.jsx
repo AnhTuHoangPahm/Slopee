@@ -92,7 +92,7 @@ export default function Home() {
                 ) : (
                     <div className="product-grid">
                         {products.map(p => (
-                            <div key={p.id} className="product-card">
+                            <div key={p.id} className="product-card" onClick={() => navigate(`/product/${p.id}`)} style={{cursor: 'pointer'}}>
                                 <div className="product-image-container">
                                     {p.primaryImage ? (
                                         <img src={p.primaryImage} alt={p.name} style={{width:'100%', height:'100%', objectFit:'cover'}} />
