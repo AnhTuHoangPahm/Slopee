@@ -131,3 +131,22 @@ CREATE TABLE IF NOT EXISTS orderLines (
     FOREIGN KEY (variantId) REFERENCES productVariants (id) on delete set null,
     CONSTRAINT uniqueProductInOrder UNIQUE(orderId, productId, variantId) 
 );
+
+CREATE TABLE IF NOT EXISTS reviews (
+    id varchar(36) PRIMARY KEY,
+    userId varchar(36) NOT NULL,
+    productId varchar(15) NOT NULL,
+    rating int NOT NULL check (rating >= 1 AND rating <= 5),
+    comment text NOT NULL,
+    createdAt timestamp NOT NULL DEFAULT current_timestamp,
+    FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (productId) REFERENCES products(id) ON DELETE CASCADE,
+    CONSTRAINT uniqueReview UNIQUE(userId, productId)
+);
+
+CREATE TABLE IF NOT EXISTS reviewImages (
+    id int auto_increment PRIMARY KEY,
+    reviewId varchar(36) NOT NULL,
+    imageUrl varchar(500) NOT NULL,
+    FOREIGN KEY (reviewId) REFERENCES reviews(id) ON DELETE CASCADE
+);

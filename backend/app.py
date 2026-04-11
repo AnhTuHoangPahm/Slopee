@@ -13,12 +13,15 @@ from routes.admin import admin_bp
 from routes.products import products_bp
 from routes.carts import carts_bp
 from routes.payments import payments_bp
+from routes.reviews import reviews_bp
+
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(shops_bp, url_prefix='/api/shops')
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
 app.register_blueprint(products_bp, url_prefix='/api/products')
 app.register_blueprint(carts_bp, url_prefix='/api/carts')
 app.register_blueprint(payments_bp, url_prefix='/api/payments')
+app.register_blueprint(reviews_bp, url_prefix='/api/reviews')
 
 # Enable CORS for the React frontend port (Vite running on localhost:5173)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}})
