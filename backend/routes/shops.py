@@ -104,7 +104,16 @@ def get_shop(seller_id):
                 return jsonify({"error": "Shop not found"}), 404
             
             cursor.execute("SELECT * FROM products WHERE shopId=%s ORDER BY name ASC", (shop['id'],))
-            shop['products'] = cursor.fetchall()
+            prods = cursor.fetchall()
+            
+            # Hydrate with Phase 1 Product Richness architectures
+            for p in prods:
+                cursor.execute("SELECT * FROM productImages WHERE productId=%s", (p['id'],))
+                p['images'] = cursor.fetchall()
+                cursor.execute("SELECT * FROM productVariants WHERE productId=%s", (p['id'],))
+                p['variants'] = cursor.fetchall()
+
+            shop['products'] = prods
             return jsonify(shop), 200
     finally:
         conn.close()
@@ -185,5 +194,65 @@ def update_product(product_id):
     except Exception as e:
         conn.rollback()
         return jsonify({"error": str(e)}), 400
+    finally:
+        conn.close()
+
+# --- PHASE 1 FEATURE F: PRODUCT RICHNESS APIS ---
+
+@shops_bp.route('/products/<product_id>/images', methods=['POST'])
+def add_product_image(product_id):
+    data = request.json
+    url = data.get('imageUrl')
+    is_primary = data.get('isPrimary', False)
+    if not url: return jsonify({"error": "Missing imageUrl"}), 400
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            if is_primary:
+                cursor.execute("UPDATE productImages SET isPrimary=FALSE WHERE productId=%s", (product_id,))
+            img_id = str(uuid.uuid4())
+            cursor.execute("INSERT INTO productImages (id, productId, imageUrl, isPrimary) VALUES (%s, %s, %s, %s)",
+                           (img_id, product_id, url, is_primary))
+            conn.commit()
+            return jsonify({"message": "Image successfully attached", "imageId": img_id}), 201
+    finally:
+        conn.close()
+
+@shops_bp.route('/products/images/<image_id>', methods=['DELETE'])
+def delete_product_image(image_id):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM productImages WHERE id=%s", (image_id,))
+            conn.commit()
+            return jsonify({"message": "Image dynamically detached"}), 200
+    finally:
+        conn.close()
+
+@shops_bp.route('/products/<product_id>/variants', methods=['POST'])
+def add_product_variant(product_id):
+    data = request.json
+    name = data.get('variantName')
+    val = data.get('variantValue')
+    if not name or not val: return jsonify({"error": "Variant configurations accurately required"}), 400
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            v_id = str(uuid.uuid4())
+            cursor.execute("INSERT INTO productVariants (id, productId, variantName, variantValue) VALUES (%s, %s, %s, %s)",
+                           (v_id, product_id, name, val))
+            conn.commit()
+            return jsonify({"message": "Variant established seamlessly", "variantId": v_id}), 201
+    finally:
+        conn.close()
+
+@shops_bp.route('/products/variants/<variant_id>', methods=['DELETE'])
+def delete_product_variant(variant_id):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM productVariants WHERE id=%s", (variant_id,))
+            conn.commit()
+            return jsonify({"message": "Variant successfully removed"}), 200
     finally:
         conn.close()

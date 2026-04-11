@@ -94,7 +94,11 @@ export default function Home() {
                         {products.map(p => (
                             <div key={p.id} className="product-card">
                                 <div className="product-image-container">
-                                    <div className="product-placeholder">Product Image</div>
+                                    {p.primaryImage ? (
+                                        <img src={p.primaryImage} alt={p.name} style={{width:'100%', height:'100%', objectFit:'cover'}} />
+                                    ) : (
+                                        <div className="product-placeholder">No IMG</div>
+                                    )}
                                 </div>
                                 <div className="product-info">
                                     <h4 className="product-title">{p.name}</h4>
