@@ -79,16 +79,21 @@ export default function Checkout() {
         <div style={{ background: '#f5f5f5', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
             <Navbar />
             <div style={{ maxWidth: '900px', margin: '40px auto', padding: '0 20px' }}>
-                <h2 style={{ color: '#ee4d2d' }}>Secure Checkout Hub</h2>
+                <h2 style={{ color: '#ee4d2d' }}>Checkout</h2>
 
                 {/* Items Box */}
                 <div style={{ background: '#fff', padding: '20px', borderRadius: '4px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                    <h3>Order Ledger</h3>
+                    <h3>Your Order</h3>
                     {checkoutItems.map(it => (
                         <div key={it.productId} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f2f2f2' }}>
                             <div>
                                 <strong style={{ display: 'block' }}>{it.name}</strong>
-                                <span style={{ fontSize: '12px', color: '#888' }}>Requested Quantity: {it.quantity} | Fulfillment Shop: {it.shopName}</span>
+                                <span style={{ fontSize: '12px', color: '#888' }}>Quantity: {it.quantity} | Shop: {it.shopName}</span>
+                                {it.selectedVariants && Object.keys(it.selectedVariants).length > 0 && (
+                                    <div style={{ fontSize: '12px', color: '#ee4d2d', marginTop: '3px', fontWeight: '500' }}>
+                                        Variant: {Object.entries(it.selectedVariants).map(([k, v]) => `${k}: ${v}`).join(', ')}
+                                    </div>
+                                )}
                             </div>
                             <div style={{ color: '#ee4d2d', fontWeight: '500' }}>
                                 ${(it.unitPrice * it.quantity).toFixed(2)}
@@ -109,7 +114,7 @@ export default function Checkout() {
 
                     {showAddForm && (
                         <form onSubmit={handleAddMethod} style={{ background: '#fcfcfc', padding: '15px', marginTop: '15px', border: '1px solid #e8e8e8', display: 'flex', gap: '10px', alignItems: 'center' }}>
-                            <input required placeholder="E.g., Virtual Chase Bank, Stripe, etc." value={newMethodName} onChange={e => setNewMethodName(e.target.value)} style={{ padding: '10px', flex: 1 }} />
+                            <input required placeholder="E.g., Virtual Bank, Stripe, etc." value={newMethodName} onChange={e => setNewMethodName(e.target.value)} style={{ padding: '10px', flex: 1 }} />
                             <button type="submit" style={{ background: '#ee4d2d', color: '#fff', border: 'none', padding: '10px 20px', cursor: 'pointer', fontWeight: '500' }}>Authenticate Link</button>
                         </form>
                     )}
@@ -124,7 +129,7 @@ export default function Checkout() {
                                 <div>
                                     <div style={{ fontWeight: '500', fontSize: '15px' }}>{m.providerName} (...{m.accountNumber.slice(-4)})</div>
                                     <div style={{ fontSize: '12px', color: m.balance >= totalSum ? '#4caf50' : '#d32f2f', marginTop: '2px' }}>
-                                        Available Vault Balance: ${m.balance} {m.balance < totalSum && "(Insufficient Funds!)"}
+                                        Balance: ${m.balance} {m.balance < totalSum && "(Insufficient Funds!)"}
                                     </div>
                                 </div>
                             </label>
@@ -135,7 +140,7 @@ export default function Checkout() {
                             <div>
                                 <div style={{ fontWeight: '500', fontSize: '15px' }}>💵 Cash on Delivery</div>
                                 <div style={{ fontSize: '12px', color: '#4caf50', marginTop: '2px' }}>
-                                    Pay physically when the items arrive at your doorstep.
+                                    Pay cash when the items arrive.
                                 </div>
                             </div>
                         </label>
@@ -145,7 +150,7 @@ export default function Checkout() {
                 {/* Final Passphrase Validation Box */}
                 <div style={{ background: '#fff', padding: '20px', borderRadius: '4px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                        <span style={{ color: '#555' }}>Authenticate 6-Digit Payment PIN:</span>
+                        <span style={{ color: '#555' }}>Enter 6-Digit PIN:</span>
                         <input type="password" maxLength="6" placeholder="******" value={passPhrase} onChange={e => setPassPhrase(e.target.value)} style={{ padding: '10px', width: '120px', textAlign: 'center', fontSize: '20px', letterSpacing: '8px', border: '1px solid #ccc', borderRadius: '3px' }} />
                     </div>
                     <button
@@ -153,7 +158,7 @@ export default function Checkout() {
                         disabled={loading || !selectedMethodId || passPhrase.length !== 6}
                         style={{ background: loading || !selectedMethodId || passPhrase.length !== 6 ? '#ccc' : '#ee4d2d', color: '#fff', border: 'none', padding: '15px 40px', fontSize: '16px', fontWeight: 'bold', cursor: loading || !selectedMethodId || passPhrase.length !== 6 ? 'not-allowed' : 'pointer', borderRadius: '3px' }}
                     >
-                        {loading ? "Decrypting Hash..." : "PROCESS SECURE PAYMENT"}
+                        {loading ? "Checking..." : "PROCESS PAYMENT"}
                     </button>
                 </div>
             </div>

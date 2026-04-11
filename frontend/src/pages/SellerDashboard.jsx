@@ -152,7 +152,7 @@ export default function SellerDashboard() {
     }
 
     const handleDeleteProduct = async (prodId) => {
-        if (!window.confirm("Are you sure you want to permanently delete this product?")) return;
+        if (!window.confirm("Are you sure you want to delete this product?")) return;
         try {
             await deleteProductAPI(prodId);
             loadData();
@@ -165,14 +165,14 @@ export default function SellerDashboard() {
                 <Navbar />
                 <div style={{ padding: '40px', fontFamily: 'Inter, sans-serif', maxWidth: '900px', margin: '0 auto' }}>
                     <div style={{ background: '#e8f5e9', color: '#2e7d32', padding: '15px', borderRadius: '4px', marginBottom: '30px', border: '1px solid #a5d6a7' }}>
-                        ✅ Bank Account linked successfully! You are now cleared to build your shop schema.
+                        ✅ Bank Account linked successfully! You are now cleared to set up your shop.
                     </div>
                     <h2>Welcome, {user.name}!</h2>
-                    <p style={{ marginBottom: '20px', color: '#555' }}>You haven't initialized your Shop Profile yet. Setup yours below to start selling!</p>
+                    <p style={{ marginBottom: '20px', color: '#555' }}>You haven't set up your Shop Profile yet. Setup now to start selling!</p>
                     <form onSubmit={handleSetupShop} style={{ display: 'flex', flexDirection: 'column', width: '350px', gap: '10px' }}>
-                        <input type="text" placeholder="Your Shop's Custom Name" required onChange={e => setShopName(e.target.value)} style={{ padding: '10px' }} />
+                        <input type="text" placeholder="Your Shop's Name" required onChange={e => setShopName(e.target.value)} style={{ padding: '10px' }} />
                         <textarea placeholder="Describe your shop..." onChange={e => setShopDesc(e.target.value)} style={{ padding: '10px', height: '100px' }} />
-                        <button type="submit" style={{ background: '#ee4d2d', color: '#fff', padding: '12px', border: 'none', cursor: 'pointer' }}>Activate My Shop</button>
+                        <button type="submit" style={{ background: '#ee4d2d', color: '#fff', padding: '12px', border: 'none', cursor: 'pointer' }}>Activate Shop</button>
                     </form>
                 </div>
             </div>
@@ -199,25 +199,25 @@ export default function SellerDashboard() {
                 <hr style={{ margin: '20px 0' }} />
 
                 <div style={{ background: '#fff', padding: '30px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', borderTop: '4px solid #ee4d2d' }}>
-                    <h2 style={{ marginTop: 0, color: '#333' }}>List a New Component</h2>
+                    <h2 style={{ marginTop: 0, color: '#333' }}>Create New Product</h2>
 
                     <form onSubmit={handleAddProduct} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
                         <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
                             <div style={{ flex: 2, minWidth: '250px' }}>
                                 <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>PRODUCT NAME</label>
-                                <input type="text" placeholder="E.g., Wireless Mouse" value={prodName} required onChange={e => setProdName(e.target.value)} style={{ padding: '10px', width: '100%', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '4px' }} />
+                                <input type="text" placeholder="E.g., T-shirt" value={prodName} required onChange={e => setProdName(e.target.value)} style={{ padding: '10px', width: '100%', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '4px' }} />
                             </div>
                             <div style={{ flex: 1, minWidth: '150px' }}>
-                                <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>CATEGORY TAG</label>
-                                <input list="category-options" placeholder="Search categories..." value={prodCategoryText} onChange={e => setProdCategoryText(e.target.value)} required style={{ padding: '10px', width: '100%', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '4px' }} />
+                                <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>CATEGORY</label>
+                                <input list="category-options" placeholder="Search..." value={prodCategoryText} onChange={e => setProdCategoryText(e.target.value)} required style={{ padding: '10px', width: '100%', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '4px' }} />
                                 <datalist id="category-options">
                                     {categories.map(c => <option key={c.id} value={c.name} />)}
                                 </datalist>
                             </div>
                             <div style={{ flex: 1, minWidth: '100px' }}>
                                 <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>PRICE ($)</label>
-                                <input type="number" step="0.01" value={prodPrice} required onChange={e => setProdPrice(e.target.value)} style={{ padding: '10px', width: '100%', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '4px' }} />
+                                <input type="number" step="0.01" placeholder='0.00' value={prodPrice} required onChange={e => setProdPrice(e.target.value)} style={{ padding: '10px', width: '100%', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '4px' }} />
                             </div>
                             <div style={{ flex: 1, minWidth: '100px' }}>
                                 <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>STOCK (QTY)</label>
@@ -230,7 +230,7 @@ export default function SellerDashboard() {
                         <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap' }}>
                             {/* Images Section */}
                             <div style={{ flex: 1 }}>
-                                <h4 style={{ margin: '0 0 10px 0', color: '#444' }}>🖼️ Photo Gallery ({images.length})</h4>
+                                <h4 style={{ margin: '0 0 10px 0', color: '#444' }}>🖼️ Photos ({images.length})</h4>
                                 <div style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
                                     <input type="text" placeholder="Image HTTPS URL..." value={imgUrl} onChange={e => setImgUrl(e.target.value)} style={{ padding: '8px', flex: 1, border: '1px solid #ccc', borderRadius: '4px' }} />
                                     <button type="button" onClick={() => { if (imgUrl) { setImages([...images, imgUrl]); setImgUrl(''); } }} style={{ background: '#f0f0f0', border: '1px solid #ccc', cursor: 'pointer', padding: '0 15px' }}>+</button>
@@ -263,11 +263,11 @@ export default function SellerDashboard() {
                             </div>
                         </div>
 
-                        <button type="submit" style={{ background: '#ee4d2d', color: '#fff', border: 'none', padding: '15px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', borderRadius: '4px', marginTop: '10px' }}>Publish Product to Web Store</button>
+                        <button type="submit" style={{ background: '#ee4d2d', color: '#fff', border: 'none', padding: '15px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', borderRadius: '4px', marginTop: '10px' }}>Publish</button>
                     </form>
                 </div>
 
-                <h3 style={{ marginTop: '40px' }}>Your Live Online Inventory ({shop.products ? shop.products.length : 0} items)</h3>
+                <h3 style={{ marginTop: '40px' }}>Your Inventory ({shop.products ? shop.products.length : 0} items)</h3>
                 <ul style={{ listStyle: 'none', padding: 0 }}>
                     {shop.products && shop.products.map(p => (
                         <li key={p.id} style={{ padding: '20px', border: '1px solid #eee', marginBottom: '15px', borderRadius: '8px', display: 'flex', gap: '20px', alignItems: 'center', background: '#fff', boxShadow: '0 2px 5px rgba(0,0,0,0.02)' }}>

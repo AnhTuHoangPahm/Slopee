@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 import pymysql
 import uuid
 import os
+import json
 
 carts_bp = Blueprint('carts', __name__)
 
@@ -32,7 +33,7 @@ def fetch_cart(user_id):
             conn.commit()
             
             query = """
-                SELECT ci.id as cartItemId, ci.quantity, 
+                SELECT ci.id as cartItemId, ci.quantity, ci.selectedVariants,
                        p.id as productId, p.name, p.unitPrice, p.inStock,
                        s.name as shopName
                 FROM cartItems ci
@@ -42,7 +43,19 @@ def fetch_cart(user_id):
                 ORDER BY ci.id DESC
             """
             cursor.execute(query, (cart_id,))
-            items = cursor.fetchall()
+            raw_items = cursor.fetchall()
+            
+            # Deserialize JSON block for accurate frontend routing
+            items = []
+            for i in raw_items:
+                if i['selectedVariants']:
+                    try:
+                        i['selectedVariants'] = json.loads(i['selectedVariants'])
+                    except:
+                        i['selectedVariants'] = {}
+                else:
+                    i['selectedVariants'] = {}
+                items.append(i)
             
             return jsonify({"cartId": cart_id, "items": items}), 200
     finally:
@@ -54,6 +67,10 @@ def add_to_cart():
     user_id = data.get('userId')
     product_id = data.get('productId')
     quantity = int(data.get('quantity', 1))
+    selected_variants = data.get('selectedVariants', {})
+    
+    # Deterministic sorting for variant string matching
+    variants_json = json.dumps(selected_variants, sort_keys=True)
 
     if quantity <= 0:
         return jsonify({"error": "Quantity must be greater than 0"}), 400
@@ -70,7 +87,7 @@ def add_to_cart():
 
             cart_id = get_or_create_cart(cursor, user_id)
             
-            cursor.execute("SELECT id, quantity FROM cartItems WHERE cartId=%s AND productId=%s", (cart_id, product_id))
+            cursor.execute("SELECT id, quantity FROM cartItems WHERE cartId=%s AND productId=%s AND selectedVariants=%s", (cart_id, product_id, variants_json))
             existing_item = cursor.fetchone()
             
             if existing_item:
@@ -80,8 +97,8 @@ def add_to_cart():
                 cursor.execute("UPDATE cartItems SET quantity=%s WHERE id=%s", (new_qty, existing_item['id']))
             else:
                 item_id = str(uuid.uuid4())
-                cursor.execute("INSERT INTO cartItems (id, cartId, productId, quantity) VALUES (%s, %s, %s, %s)", 
-                               (item_id, cart_id, product_id, quantity))
+                cursor.execute("INSERT INTO cartItems (id, cartId, productId, quantity, selectedVariants) VALUES (%s, %s, %s, %s, %s)", 
+                               (item_id, cart_id, product_id, quantity, variants_json))
                 
             conn.commit()
             return jsonify({"message": "Successfully added to cart!"}), 200

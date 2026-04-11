@@ -18,12 +18,12 @@ export default function Login() {
         try {
             const data = await loginAPI(username, password);
             localStorage.setItem('user', JSON.stringify(data.user));
-            
+
             // Re-fire Anonymous Cart Intents flawlessly before navigating!
             if (location.state?.pendingCartItem && data.user.role !== 'admin') {
                 try {
                     await addToCartAPI(data.user.id, location.state.pendingCartItem, 1);
-                } catch(err) { console.error('Intent execution failed:', err); }
+                } catch (err) { console.error('Execution failed:', err); }
             }
 
             if (data.user.role === 'admin') {
@@ -33,7 +33,7 @@ export default function Login() {
             }
         } catch (err) {
             if (err.message.includes('Failed to fetch')) {
-                setError('Network connection error: Server restarting or unreachable.');
+                setError('Connection error: Server unreachable.');
             } else {
                 setError(err.message);
             }
@@ -45,30 +45,30 @@ export default function Login() {
             <Navbar />
             <div className="auth-container" style={{ minHeight: 'calc(100vh - 70px)' }}>
                 <div className="auth-card">
-                <h2>Log in to Slopee</h2>
-                {error && <div className="auth-error">{error}</div>}
-                <form onSubmit={handleLogin}>
-                    <input 
-                        type="text" 
-                        placeholder="Username" 
-                        value={username}
-                        onChange={e => setUsername(e.target.value)}
-                        required 
-                    />
-                    <input 
-                        type="password" 
-                        placeholder="Password" 
-                        value={password}
-                        onChange={e => setPassword(e.target.value)}
-                        required 
-                    />
-                    <button type="submit" className="btn-primary">LOG IN</button>
-                </form>
-                <div className="auth-footer">
-                    New to Slopee? <Link to="/signup">Sign Up</Link>
+                    <h2>Log in to Slopee</h2>
+                    {error && <div className="auth-error">{error}</div>}
+                    <form onSubmit={handleLogin}>
+                        <input
+                            type="text"
+                            placeholder="Username"
+                            value={username}
+                            onChange={e => setUsername(e.target.value)}
+                            required
+                        />
+                        <input
+                            type="password"
+                            placeholder="Password"
+                            value={password}
+                            onChange={e => setPassword(e.target.value)}
+                            required
+                        />
+                        <button type="submit" className="btn-primary">LOG IN</button>
+                    </form>
+                    <div className="auth-footer">
+                        New to Slopee? <Link to="/signup">Sign Up</Link>
+                    </div>
                 </div>
             </div>
-        </div>
         </div>
     );
 }

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { fetchOrdersAPI, updateOrderStatusAPI } from '../api/payments';
+import Navbar from '../components/Navbar';
 
-export default function MyOrders() {
+export default function MyOrders({ hideNavbar = false }) {
     const user = JSON.parse(localStorage.getItem('user'));
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -33,11 +34,13 @@ export default function MyOrders() {
 
     return (
         <div style={{ width: '100%', fontFamily: 'Inter, sans-serif' }}>
+            {!hideNavbar && <Navbar />}
+
             <div style={{ padding: '20px' }}>
-                <h2 style={{ color: '#ee4d2d', marginTop: '0' }}>My Complete Purchases</h2>
+                <h2 style={{ color: '#ee4d2d', marginTop: '0' }}>Past Purchases</h2>
 
                 {loading ? (
-                    <div style={{ textAlign: 'center', marginTop: '50px' }}>Fetching transactions...</div>
+                    <div style={{ textAlign: 'center', marginTop: '50px' }}>Fetching...</div>
                 ) : orders.length === 0 ? (
                     <div style={{ background: '#fff', padding: '80px', textAlign: 'center', color: '#888', borderRadius: '4px' }}>
                         You have not made any purchases yet! Start shopping.
@@ -64,6 +67,11 @@ export default function MyOrders() {
                                         <div>
                                             <strong style={{ fontSize: '16px' }}>{it.productName}</strong> <br />
                                             <span style={{ fontSize: '13px', color: '#666' }}>Ordered: x{it.quantity} | Fulfilled by {it.shopName}</span>
+                                            {it.selectedVariants && Object.keys(it.selectedVariants).length > 0 && (
+                                                <div style={{ fontSize: '12px', color: '#ee4d2d', marginTop: '3px', fontWeight: '500' }}>
+                                                    Variant: {Object.entries(it.selectedVariants).map(([k, v]) => `${k}: ${v}`).join(', ')}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                     <div style={{ color: '#ee4d2d', fontWeight: '500' }}>${(it.unitPrice * it.quantity).toFixed(2)}</div>
