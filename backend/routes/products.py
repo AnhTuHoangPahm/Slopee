@@ -14,6 +14,16 @@ def get_db_connection():
         cursorclass=pymysql.cursors.DictCursor
     )
 
+@products_bp.route('/categories', methods=['GET'])
+def get_categories():
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM categories ORDER BY name ASC")
+            return jsonify({"categories": cursor.fetchall()}), 200
+    finally:
+        conn.close()
+
 @products_bp.route('/', methods=['GET'])
 def get_products():
     search_query = request.args.get('search', '').strip()
@@ -31,6 +41,16 @@ def get_products():
                 cursor.execute("SELECT p.*, s.name as shopName FROM products p JOIN shops s ON p.shopId = s.id WHERE p.isActive = TRUE ORDER BY p.name ASC")
             
             items = cursor.fetchall()
+            
+            # Phase 1: Attach rich data directly to the payload
+            for item in items:
+                cursor.execute("SELECT imageUrl FROM productImages WHERE productId=%s AND isPrimary=TRUE LIMIT 1", (item['id'],))
+                img = cursor.fetchone()
+                item['primaryImage'] = img['imageUrl'] if img else None
+                
+                cursor.execute("SELECT id, variantName, variantValue FROM productVariants WHERE productId=%s", (item['id'],))
+                item['variants'] = cursor.fetchall()
+                
             elapsed_time = time.time() - start_time
             
             return jsonify({
