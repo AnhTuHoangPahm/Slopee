@@ -103,39 +103,116 @@ def login():
     finally:
         conn.close()
 
-# In-memory tally of failed deletions, maps userId -> int
-failed_deletion_attempts = {}
-
-@auth_bp.route('/account', methods=['DELETE'])
-def delete_account():
+# Feature H: Deletion Request Pipeline replacing immediate cascade logic
+@auth_bp.route('/account/request-deletion', methods=['POST'])
+def request_account_deletion():
     data = request.json
     user_id = data.get('userId')
     password = data.get('password')
     
     if not user_id or not password:
-        return jsonify({"error": "Missing user ID or password"}), 400
+        return jsonify({"error": "Missing authorization vectors."}), 400
         
-    attempts = failed_deletion_attempts.get(user_id, 0)
-    if attempts >= 5:
-        return jsonify({"error": "Too many failed attempts. Account locked from deletion."}), 403
-
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT passwordHash FROM credentials WHERE userId=%s", (user_id,))
             user = cursor.fetchone()
             if not user:
-                return jsonify({"error": "User not found"}), 404
+                return jsonify({"error": "User anomaly detected"}), 404
                 
             if check_password_hash(user['passwordHash'], password):
-                # Password verified, cascade delete user
-                cursor.execute("DELETE FROM users WHERE id=%s", (user_id,))
+                # Request structurally flagged
+                cursor.execute("UPDATE users SET deletionRequestedAt = current_timestamp WHERE id=%s", (user_id,))
                 conn.commit()
-                if user_id in failed_deletion_attempts:
-                    del failed_deletion_attempts[user_id]
-                return jsonify({"message": "Account successfully deleted"}), 200
+                return jsonify({"message": "Deletion formal request dispatched to Admin division."}), 200
             else:
-                failed_deletion_attempts[user_id] = attempts + 1
-                return jsonify({"error": f"Invalid password. Attempts left: {5 - failed_deletion_attempts[user_id]}"}), 401
+                return jsonify({"error": "Invalid clearance security password."}), 401
+    finally:
+        conn.close()
+
+# Feature H: Profile Overrides
+@auth_bp.route('/profile', methods=['PUT'])
+def update_profile():
+    data = request.json
+    user_id = data.get('userId')
+    bio = data.get('bio', '')
+    
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("UPDATE users SET bio=%s WHERE id=%s", (bio, user_id))
+            conn.commit()
+            return jsonify({"message": "Bio successfully updated."}), 200
+    finally:
+        conn.close()
+
+@auth_bp.route('/username', methods=['PUT'])
+def update_username():
+    data = request.json
+    user_id = data.get('userId')
+    new_username = data.get('newUsername')
+    
+    if not new_username or len(new_username) <= 3:
+        return jsonify({"error": "Username excessively short."}), 400
+        
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            # Check collision
+            cursor.execute("SELECT userId FROM credentials WHERE username=%s AND userId != %s", (new_username, user_id))
+            if cursor.fetchone():
+                return jsonify({"error": "Username structurally collided. Already taken."}), 409
+                
+            cursor.execute("UPDATE credentials SET username=%s WHERE userId=%s", (new_username, user_id))
+            conn.commit()
+            return jsonify({"message": "Username dynamically rebound."}), 200
+    finally:
+        conn.close()
+
+@auth_bp.route('/password', methods=['PUT'])
+def update_password():
+    data = request.json
+    user_id = data.get('userId')
+    old_password = data.get('oldPassword')
+    new_password = data.get('newPassword')
+    
+    if not old_password or not new_password:
+        return jsonify({"error": "Both security strings required."}), 400
+        
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT passwordHash FROM credentials WHERE userId=%s", (user_id,))
+            user = cursor.fetchone()
+            
+            if not user or not check_password_hash(user['passwordHash'], old_password):
+                return jsonify({"error": "Invalid legacy password."}), 401
+                
+            new_hash = generate_password_hash(new_password)
+            cursor.execute("UPDATE credentials SET passwordHash=%s WHERE userId=%s", (new_hash, user_id))
+            conn.commit()
+            return jsonify({"message": "Security matrix password successfully updated."}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+@auth_bp.route('/reviews/<user_id>', methods=['GET'])
+def get_user_reviews(user_id):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT r.id, r.rating, r.comment, r.createdAt, p.name as productName, p.id as productId
+                FROM reviews r
+                JOIN products p ON r.productId = p.id
+                WHERE r.userId = %s
+                ORDER BY r.createdAt DESC
+            """, (user_id,))
+            history = cursor.fetchall()
+            return jsonify({"reviews": history}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     finally:
         conn.close()

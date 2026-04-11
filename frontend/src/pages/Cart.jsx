@@ -7,7 +7,7 @@ import '../assets/cart.css';
 export default function Cart() {
     const navigate = useNavigate();
     const user = JSON.parse(localStorage.getItem('user'));
-    
+
     const [items, setItems] = useState([]);
     const [selectedItems, setSelectedItems] = useState(new Set());
     const [loading, setLoading] = useState(true);
@@ -21,7 +21,7 @@ export default function Cart() {
     }, []);
 
     const loadCart = async () => {
-        if(!user) return;
+        if (!user) return;
         try {
             const data = await fetchCartAPI(user.id);
             setItems(data.items || []);
@@ -34,7 +34,7 @@ export default function Cart() {
     const handleUpdateQty = async (item, newQty) => {
         // Enforce user's 0-quantity prompt requirement
         if (newQty <= 0) {
-            if (window.confirm(`Do you want to completely drop ${item.name} from the shopping cart?`)) {
+            if (window.confirm(`Do you want to remove ${item.name} from your shopping cart?`)) {
                 await removeCartItemAPI(item.cartItemId);
                 setSelectedItems(prev => {
                     const next = new Set(prev);
@@ -50,12 +50,12 @@ export default function Cart() {
         }
 
         if (newQty > item.inStock) {
-            alert(`You cannot add more than ${item.inStock} of this item (Global Stock Limit Reached).`);
+            alert(`Limit reached.`);
             return;
         }
 
         // OPTIMISTIC UPDATE: Update UI instantly using the cached inStock parameters!
-        setItems(prevItems => prevItems.map(i => 
+        setItems(prevItems => prevItems.map(i =>
             i.cartItemId === item.cartItemId ? { ...i, quantity: newQty } : i
         ));
 
@@ -69,7 +69,7 @@ export default function Cart() {
     };
 
     const handleDelete = async (itemId) => {
-        const confirmDelete = window.confirm("Are you certain you want to eradicate this item from your cart?");
+        const confirmDelete = window.confirm("Do you want to remove this item from your cart?");
         if (confirmDelete) {
             try {
                 await removeCartItemAPI(itemId);
@@ -110,7 +110,7 @@ export default function Cart() {
         }, 0);
     };
 
-    if (loading) return <div className="cart-layout"><Navbar /><div style={{textAlign:'center', marginTop:'50px'}}>Loading Secure Cart Array...</div></div>;
+    if (loading) return <div className="cart-layout"><Navbar /><div style={{ textAlign: 'center', marginTop: '50px' }}>Loading Secure Cart Array...</div></div>;
 
     return (
         <div className="cart-layout">
@@ -122,29 +122,29 @@ export default function Cart() {
 
                 <div className="cart-table-header">
                     <div>
-                        <input 
-                            type="checkbox" 
+                        <input
+                            type="checkbox"
                             checked={items.length > 0 && selectedItems.size === items.length}
                             onChange={handleSelectAll}
                         />
                     </div>
                     <div>Product Name / Details</div>
-                    <div style={{textAlign:'center'}}>Unit Price</div>
-                    <div style={{textAlign:'center'}}>Quantity Allocation</div>
-                    <div style={{textAlign:'center'}}>Running Total</div>
-                    <div style={{textAlign:'center'}}>Actions</div>
+                    <div style={{ textAlign: 'center' }}>Unit Price</div>
+                    <div style={{ textAlign: 'center' }}>Quantity Allocation</div>
+                    <div style={{ textAlign: 'center' }}>Running Total</div>
+                    <div style={{ textAlign: 'center' }}>Actions</div>
                 </div>
 
                 {items.length === 0 ? (
-                    <div style={{ background:'#fff', padding: '80px', textAlign: 'center', color: '#888', fontSize: '18px' }}>
+                    <div style={{ background: '#fff', padding: '80px', textAlign: 'center', color: '#888', fontSize: '18px' }}>
                         Your shopping cart is currently empty. Head to the homepage!
                     </div>
                 ) : (
                     items.map(it => (
                         <div key={it.cartItemId} className="cart-item-row">
                             <div>
-                                <input 
-                                    type="checkbox" 
+                                <input
+                                    type="checkbox"
                                     checked={selectedItems.has(it.cartItemId)}
                                     onChange={() => toggleSelectItem(it.cartItemId)}
                                 />
@@ -152,27 +152,27 @@ export default function Cart() {
                             <div className="cart-item-product">
                                 <div className="cart-img-placeholder">THUMBNAIL</div>
                                 <div>
-                                    <div style={{fontWeight:'500'}}>{it.name}</div>
-                                    <div style={{fontSize:'12px', color:'#888', marginTop:'5px'}}>Fulfillment Shop: {it.shopName}</div>
+                                    <div style={{ fontWeight: '500' }}>{it.name}</div>
+                                    <div style={{ fontSize: '12px', color: '#888', marginTop: '5px' }}>Fulfillment Shop: {it.shopName}</div>
                                 </div>
                             </div>
-                            <div style={{textAlign:'center'}}>${it.unitPrice}</div>
-                            <div style={{display:'flex', justifyContent:'center'}}>
+                            <div style={{ textAlign: 'center' }}>${it.unitPrice}</div>
+                            <div style={{ display: 'flex', justifyContent: 'center' }}>
                                 <div className="cart-qty-controls">
                                     <button className="cart-qty-btn" onClick={() => handleUpdateQty(it, it.quantity - 1)}>-</button>
                                     <input className="cart-qty-input" type="text" readOnly value={it.quantity} />
                                     {/* Greys out native increment if strict stock boundary hits */}
-                                    <button className="cart-qty-btn" 
+                                    <button className="cart-qty-btn"
                                         onClick={() => handleUpdateQty(it, it.quantity + 1)}
                                         disabled={it.quantity >= it.inStock}
                                         title={it.quantity >= it.inStock ? "Maximum Stock Threshold Reached" : ""}
                                     >+</button>
                                 </div>
-                                {it.quantity >= it.inStock && <div style={{color:'red', fontSize:'10px', marginLeft: '5px', marginTop: '10px'}}>Max Limit</div>}
+                                {it.quantity >= it.inStock && <div style={{ color: 'red', fontSize: '10px', marginLeft: '5px', marginTop: '10px' }}>Max Limit</div>}
                             </div>
-                            <div style={{color:'#ee4d2d', textAlign:'center', fontWeight: 'bold'}}>${(it.unitPrice * it.quantity).toFixed(2)}</div>
-                            <div style={{textAlign:'center'}}>
-                                <button onClick={() => handleDelete(it.cartItemId)} style={{background:'transparent', border:'none', color:'#333', cursor:'pointer', padding: '5px'}}>Delete</button>
+                            <div style={{ color: '#ee4d2d', textAlign: 'center', fontWeight: 'bold' }}>${(it.unitPrice * it.quantity).toFixed(2)}</div>
+                            <div style={{ textAlign: 'center' }}>
+                                <button onClick={() => handleDelete(it.cartItemId)} style={{ background: 'transparent', border: 'none', color: '#333', cursor: 'pointer', padding: '5px' }}>Delete</button>
                             </div>
                         </div>
                     ))
@@ -180,25 +180,25 @@ export default function Cart() {
 
                 {items.length > 0 && (
                     <div className="cart-bottom-bar">
-                        <div style={{display:'flex', gap:'20px', alignItems:'center'}}>
-                            <label style={{cursor:'pointer'}}>
-                                <input 
-                                    type="checkbox" 
+                        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                            <label style={{ cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
                                     checked={items.length > 0 && selectedItems.size === items.length}
                                     onChange={handleSelectAll}
-                                /> 
-                                <span style={{marginLeft:'8px'}}>Select All ({items.length})</span>
+                                />
+                                <span style={{ marginLeft: '8px' }}>Select All ({items.length})</span>
                             </label>
-                            
+
                         </div>
-                        <div style={{display:'flex', gap:'20px', alignItems:'center'}}>
+                        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
                             <div>
-                                Selected Gross ({selectedItems.size} items): <span style={{color:'#ee4d2d', fontSize:'24px', fontWeight:'500', marginLeft: '10px'}}>${calculateTotal().toFixed(2)}</span>
+                                Selected Gross ({selectedItems.size} items): <span style={{ color: '#ee4d2d', fontSize: '24px', fontWeight: '500', marginLeft: '10px' }}>${calculateTotal().toFixed(2)}</span>
                             </div>
-                            <button 
-                                className="cart-checkout-btn" 
+                            <button
+                                className="cart-checkout-btn"
                                 onClick={() => {
-                                    if(selectedItems.size === 0) return alert('Select at least one item to checkout');
+                                    if (selectedItems.size === 0) return alert('Select at least one item to checkout');
                                     const selectedPayload = items.filter(it => selectedItems.has(it.cartItemId));
                                     navigate('/checkout', { state: { items: selectedPayload } });
                                 }}

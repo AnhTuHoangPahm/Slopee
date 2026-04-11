@@ -40,7 +40,7 @@ def get_users():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute("SELECT id, role, name, email, phone FROM users ORDER BY role")
+            cursor.execute("SELECT id, role, name, email, phone, deletionRequestedAt FROM users ORDER BY role")
             users = cursor.fetchall()
             return jsonify(users), 200
     finally:

@@ -22,12 +22,52 @@ export const signupAPI = async (userData) => {
     return data;
 };
 
-export const deleteAccountAPI = async (userId, password) => {
-    const res = await fetch(`${API_BASE}/account`, {
-        method: 'DELETE',
+export const requestDeletionAPI = async (userId, password) => {
+    const res = await fetch(`${API_BASE}/account/request-deletion`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, password })
     });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    return data;
+};
+
+export const updateProfileAPI = async (userId, bio) => {
+    const res = await fetch(`${API_BASE}/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, bio })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    return data;
+};
+
+export const updateUsernameAPI = async (userId, newUsername) => {
+    const res = await fetch(`${API_BASE}/username`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, newUsername })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    return data;
+};
+
+export const updatePasswordAPI = async (userId, oldPassword, newPassword) => {
+    const res = await fetch(`${API_BASE}/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, oldPassword, newPassword })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    return data;
+};
+
+export const fetchUserReviewsAPI = async (userId) => {
+    const res = await fetch(`${API_BASE}/reviews/${userId}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
     return data;
