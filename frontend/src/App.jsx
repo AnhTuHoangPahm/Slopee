@@ -9,6 +9,7 @@ import Checkout from './pages/Checkout';
 import MyOrders from './pages/MyOrders';
 import ProductView from './pages/ProductView';
 import UserSettings from './pages/UserSettings';
+import Tetris from './pages/Tetris';
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/checkout" element={<Checkout />} />
         <Route path="/orders" element={<MyOrders />} />
         <Route path="/settings" element={<UserSettings />} />
+        <Route path="/play/tetris" element={<Tetris />} />
       </Routes>
     </BrowserRouter>
   );
