@@ -31,7 +31,7 @@ def signup():
     if len(pass_phrase) != 6 or not pass_phrase.isdigit():
         return jsonify({"error": "Passphrase must be exactly a 6-digit number"}), 400
     if len(username) <= 3:
-        return jsonify({"error": "Username must be > 3 chars"}), 400
+        return jsonify({"error": "Username must be longer than 3 characters"}), 400
 
     conn = get_db_connection()
     try:
