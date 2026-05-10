@@ -48,7 +48,7 @@ See [test](https://github.com/AnhTuHoangPahm/Slopee/tree/main/test) folder for s
   
 There are [Playwright](https://playwright.dev/) (UI: Firefox only) tests to run as well  
 **First**, install Playwright (no browsers, we install later):  
-- `npm install @playwright/test`  
+- `npm install -D @playwright/test`  
 
 **Then** install Firefox:  
 - `npx playwright install firefox`  
