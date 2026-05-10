@@ -42,6 +42,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Initialize Database
+        env:
+          DB_HOST: 127.0.0.1
+          DB_USER: root
+          DB_PASSWORD: root
+          DB_NAME: slopee_test_db
+        run: |
+          cd backend
+          python init_db.py
+
       - name: Run Pytest
         env:
           DB_HOST: 127.0.0.1
