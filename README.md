@@ -19,21 +19,29 @@ The name is the combination of **Slop** and **Shopee** (Shout out to the word **
 ## Set up
 I don't think I should tell (I'm just stup-d), but just in case:  
 **First**, install dependencies:
-- `npm install` (/frontend)  
-- `pip install -r requirements.txt`  
-
+```shell
+cd frontend
+npm install
+pip install -r requirements.txt  
+```
 **Set up**:
-- Edit environment variables of your computer, add a global entry:
-  - DB_PASSWORD: your_databse_password
+- Edit environment variables of your computer, add a global entry:  
+```
+DB_PASSWORD: your_databse_password
+```
 - Database creation:  
-  - `python init_db.py`
+```shell
+python init_db.py
+```
 
-**Then**:
-- `npm run dev` (/frontend)
-- `python app.py` (/backend)
+**Then** (each line run in separate shells):
+```shell
+cd frontend && npm run dev
+cd backend && python app.py
+```
   
-Use your favourite browser to access the page.
-> Enjoy your stay
+Use your favourite browser to access the page.  
+ > Enjoy your stay
 
 ## Features
 - Basic e-commerce features: **Product Listing, Cart, Checkout, Order Management, User Authentication**, etc.
@@ -42,23 +50,33 @@ Use your favourite browser to access the page.
 > admin account: username: admin, password: admin
 
 ## Testing
-See [test](https://github.com/AnhTuHoangPahm/Slopee/tree/main/test) folder for some basic tests, written by our beloved AG  
-- To run test, simply run: `pytest test/ -v`  
+See [test](test/) folder for some basic tests, written by our beloved AG  
+- To run test, simply run:
+```shell
+pytest test/ -v
+```  
 (-v stands for 'more verbose', is optional)
   
 There are [Playwright](https://playwright.dev/) (UI: Firefox only) tests to run as well  
 **First**, install Playwright (no browsers, we install later):  
-- `npm install -D @playwright/test`  
-
+```shell
+npm install -D @playwright/test
+```  
 **Then** install Firefox:  
-- `npx playwright install firefox`  
+```shell
+npx playwright install firefox
+```  
+> [!NOTE]
+> If you want to use other browswers (chromium, safari, etc...), install them instead  
+> Edit [playwright.config.js](frontend/playwright.config.js), do note that you can [run test on multiple browsers](https://playwright.dev/docs/browsers#configure-browsers).
 
 **Final** touch: to be able to clean up database after test, install this package:
-- `npm install -D mysql2`
-
-After setting up the web, inside /frontend, run:  
-- `npm run test:e2e:ui`  
-  
-_See the magic yourself_
-
+```shell
+npm install -D mysql2
+```
+After setting up the web, inside /frontend, run:
+```shell
+npm run test:e2e:ui
+```  
+_See the magic yourself_  
 > That's it for now
