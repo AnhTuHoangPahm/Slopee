@@ -22,6 +22,7 @@ I don't think I should tell (I'm just stup-d), but just in case:
 ```shell
 cd frontend
 npm install
+cd ../backend
 pip install -r requirements.txt  
 ```
 **Set up**:

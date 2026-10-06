@@ -16,7 +16,7 @@ export default function MyOrders({ hideNavbar = false }) {
         } else {
             setLoading(false);
         }
-    }, [user]);
+    }, [user?.id]);
 
     const handleStatusChange = async (orderId, status) => {
         if (!window.confirm(`Are you sure you want to mark this order as '${status.toUpperCase()}'?`)) return;

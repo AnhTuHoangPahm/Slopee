@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS users (
 	name varchar(50) NOT NULL,
 	email varchar(50) NOT NULL UNIQUE,
 	phone char(10) NOT NULL UNIQUE,
-	bio text
+	bio text,
+    deletionRequestedAt timestamp NULL DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS credentials (
@@ -111,7 +112,7 @@ CREATE TABLE IF NOT EXISTS orders (
 	userId varchar(36) NOT NULL,
     paymentMethodId varchar(36),      
 	created_at timestamp NOT NULL DEFAULT current_timestamp,
-    status enum('pending', 'paid', 'shipped', 'cancelled') NOT NULL default 'pending',
+    status enum('pending', 'paid', 'shipped', 'cancelled', 'received') NOT NULL default 'pending',
     totalAmount decimal(11, 2) NOT NULL default 0,
     foreign key (userId) references users(id) on delete restrict,
     foreign key (paymentMethodId) references paymentMethods(id) on delete set null
@@ -124,6 +125,8 @@ CREATE TABLE IF NOT EXISTS orderLines (
     selectedVariants text,            
     unitPrice decimal(11, 2) NOT NULL,
 	quantity int NOT NULL CHECK (quantity > 0),
+    snapshotProductName varchar(255),
+    snapshotShopName varchar(255),
     FOREIGN KEY (orderId) REFERENCES orders (id) on delete cascade,
     FOREIGN KEY (productId) REFERENCES products (id) on delete restrict 
 );
