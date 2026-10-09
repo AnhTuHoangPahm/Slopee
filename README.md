@@ -17,7 +17,6 @@ The name is the combination of **Slop** and **Shopee** (Shout out to the word **
 - Google Antigravity(?)
 
 ## Set up
-I don't think I should tell (I'm just stup-d), but just in case:  
 **First**, install dependencies:
 ```shell
 cd frontend
@@ -26,9 +25,10 @@ cd ../backend
 pip install -r requirements.txt  
 ```
 **Set up**:
-- Edit environment variables of your computer, add a global entry:  
-```
-DB_PASSWORD: your_databse_password
+- Environment variables via .env:
+```shell
+cp .env.example .env
+# edit .env file...
 ```
 - Database creation:  
 ```shell
@@ -37,8 +37,8 @@ python init_db.py
 
 **Then** (each line run in separate shells):
 ```shell
-cd frontend && npm run dev
-cd backend && python app.py
+npm run dev # inside /frontend
+python app.py # inside /backend
 ```
   
 Use your favourite browser to access the page.  
