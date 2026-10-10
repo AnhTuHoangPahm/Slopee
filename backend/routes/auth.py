@@ -9,7 +9,7 @@ auth_bp = Blueprint('auth', __name__)
 def get_db_connection():
     return pymysql.connect(
         host=os.environ.get('DB_HOST', 'localhost'),
-        user=os.environ.get('DB_USER', 'root'),
+        user=os.environ.get('DB_USER', 'slopee'),
         password=os.environ.get('DB_PASSWORD', ''),
         database=os.environ.get('DB_NAME', 'slopee_db'),
         cursorclass=pymysql.cursors.DictCursor

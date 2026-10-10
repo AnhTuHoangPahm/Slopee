@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>BRD - Tự động hóa giao dịch TMĐT bằng Smart Contract (Slopee)</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap');
+    @page { size: A4; margin: 20mm 15mm 20mm 15mm; }
+    body {
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      font-size: 13px; line-height: 1.6; color: #24292f; margin: 0; padding: 0;
+    }
+    .cover-page {
+      height: 90vh; display: flex; flex-direction: column; justify-content: center;
+      align-items: center; text-align: center; page-break-after: always;
+      border-bottom: 2px solid #0969da; padding: 20px; box-sizing: border-box;
+    }
+    .cover-org { font-size: 13px; font-weight: 500; color: #57606a; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 25px; }
+    .cover-title { font-size: 22px; font-weight: 700; color: #0969da; text-transform: uppercase; margin-bottom: 12px; line-height: 1.3; }
+    .cover-subtitle { font-size: 14px; font-weight: 400; color: #424a53; max-width: 650px; margin-bottom: 35px; line-height: 1.5; }
+    .cover-meta-table { width: 80%; margin: 20px auto; border: none; font-size: 13px; }
+    .cover-meta-table td { border: none; padding: 6px 12px; background: transparent !important; }
+    .cover-meta-table td:first-child { font-weight: 600; text-align: right; width: 40%; color: #57606a; }
+    .cover-meta-table td:last-child { text-align: left; color: #1f2328; }
+    h1 { font-size: 17px; color: #0969da; border-bottom: 2px solid #0969da; padding-bottom: 5px; margin-top: 28px; page-break-after: avoid; text-transform: uppercase; }
+    h2 { font-size: 14.5px; color: #1f2328; border-bottom: 1px solid #d0d7de; padding-bottom: 4px; margin-top: 20px; page-break-after: avoid; }
+    h3 { font-size: 13px; color: #24292f; margin-top: 15px; page-break-after: avoid; }
+    p, li { text-align: justify; margin: 6px 0; }
+    ol, ul { padding-left: 20px; margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 12px; page-break-inside: avoid; }
+    th, td { border: 1px solid #d0d7de; padding: 7px 10px; text-align: left; vertical-align: top; }
+    th { background-color: #f6f8fa; font-weight: 600; color: #24292f; }
+    tr:nth-child(even) { background-color: #fcfcfc; }
+    .formula-box { background-color: #f0f7ff; border-left: 4px solid #0969da; padding: 10px 14px; margin: 12px 0; font-size: 12.5px; page-break-inside: avoid; }
+    .note-box { background-color: #fff8c5; border-left: 4px solid #9a6700; padding: 10px 14px; margin: 12px 0; font-size: 12.5px; page-break-inside: avoid; }
+    .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10.5px; font-weight: 600; }
+    .badge-green { background: #dafbe1; color: #1a7f37; }
+    .badge-orange { background: #fff8c5; color: #9a6700; }
+    code { font-family: 'JetBrains Mono', Consolas, monospace; font-size: 11.5px; background-color: #f0f2f5; padding: 2px 4px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+  <!-- TRANG BÌA -->
+  <div class="cover-page">
+    <div class="cover-org">BÁO CÁO PHÂN TÍCH YÊU CẦU NGHIỆP VỤ HỆ THỐNG</div>
+    <div class="cover-title">TÀI LIỆU YÊU CẦU NGHIỆP VỤ (BRD)</div>
+    <div class="cover-subtitle">Đề tài: Tự động hóa giao dịch trên Sàn TMĐT bằng Hợp đồng thông minh và Ký số không lưu khóa (Slopee)</div>
+    <table class="cover-meta-table">
+      <tr><td>Mã tài liệu:</td><td>BRD-SLOPEE-MVP-01</td></tr>
+      <tr><td>Phiên bản:</td><td>v5.3 (Kế hoạch 10 tuần - Bản hoàn thiện, cập nhật sau rà soát thiết kế và mã nguồn Slopee)</td></tr>
+      <tr><td>Nền tảng tích hợp:</td><td>Slopee Core (Flask / Python + MySQL) + EVM (Anvil)</td></tr>
+      <tr><td>Phạm vi:</td><td>Vertical Slice MVP (Crypto Escrow) + Extension Slots</td></tr>
+      <tr><td>Tài liệu đi kèm:</td><td>SRS-SLOPEE-MVP-01 v5.3; SDD-SLOPEE-MVP-01 v1.2</td></tr>
+    </table>
+  </div>
+
+  <h1>1. TỔNG QUAN DỰ ÁN & TÀI LIỆU THAM CHIẾU</h1>
+  <h2>1.1. Bối cảnh và vấn đề của sàn TMĐT truyền thống (Web2)</h2>
+  <p>Trên các sàn TMĐT truyền thống như Shopee, cơ chế ký quỹ và thanh toán tồn tại các hạn chế cấu trúc:</p>
+  <ul>
+    <li><strong>Giam giữ dòng tiền và rủi ro cấn trừ (từ T+4 đến T+15):</strong> Theo quy định Shopee công bố trên Seller Centre ([REF-02]) và Điều khoản Dịch vụ ([REF-01]), doanh thu đơn hàng được ghi nhận vào Số dư tài khoản Shopee của người bán ngay khi người mua bấm "Đã nhận được hàng", hoặc vào ngày thứ 4 kể từ khi giao thành công nếu không có yêu cầu trả hàng/hoàn tiền; đơn có nghi ngờ gian lận có thể phải chờ đến 15 ngày. Người mua vẫn được yêu cầu trả hàng/hoàn tiền trong vòng 15 ngày kể từ khi giao thành công (kể cả sau khi đã bấm nhận hàng), và sàn có thể cấn trừ Số dư của người bán nếu yêu cầu được chấp nhận. Sau khi tiền vào Số dư, rút về ngân hàng mất thêm khoảng 24-48 giờ làm việc. Người bán vì vậy bị đọng vốn và chịu rủi ro bị cấn trừ đơn phương.</li>
+    <li><strong>Trọng tài đơn phương:</strong> Sàn vừa nắm tiền vừa là bên duy nhất phân xử khiếu nại, tạo tâm lý thiếu minh bạch cho người bán.</li>
+    <li><strong>Chi phí đối soát thủ công:</strong> Sàn phải duy trì bộ phận kế toán chạy batch-job đối soát hoa hồng và phí thanh toán cuối kỳ.</li>
+    <li><strong>Rủi ro lưu khóa tập trung:</strong> Sàn lưu thông tin thanh toán và ủy quyền tập trung trên máy chủ, tiềm ẩn rủi ro lộ lọt dữ liệu.</li>
+  </ul>
+
+  <h2>1.2. Mục tiêu dự án và chỉ số đo lường (KPI)</h2>
+  <table>
+    <tr><th style="width:8%">Mã</th><th style="width:42%">Mục tiêu</th><th>Chỉ số đo lường / Cách kiểm chứng</th></tr>
+    <tr><td>G-01</td><td>Tiền của người mua được khóa bởi smart contract thay vì tài khoản của sàn.</td><td>Số dư contract khớp tổng tiền các đơn đang ở trạng thái <code>LOCKED/DELIVERED/DISPUTED</code> (kiểm tra bằng script đối soát).</td></tr>
+    <tr><td>G-02</td><td>Giải ngân và trích phí hoàn toàn tự động, không đối soát thủ công.</td><td>100% đơn hoàn tất có phí và tiền người bán đúng công thức BR-02 (test tự động).</td></tr>
+    <tr><td>G-03</td><td>Phân xử tranh chấp có kiểm soát, minh bạch, có chữ ký xác minh được.</td><td>Mọi quyết định giải quyết tranh chấp đều có 2 chữ ký EIP-712 hợp lệ trên chuỗi, hoặc sự kiện timeout của Trọng tài.</td></tr>
+    <tr><td>G-04</td><td>Không lưu khóa riêng tư của người dùng (BR-01).</td><td>Quét mã nguồn và CSDL: không có trường/biến chứa private key, seed phrase của người dùng.</td></tr>
+    <tr><td>G-05</td><td>Dữ liệu sàn luôn đồng bộ với blockchain.</td><td>Sau khi xóa trạng thái và chạy lại indexer từ block đầu, bảng <code>orders</code> khớp 100% với trạng thái on-chain.</td></tr>
+    <tr><td>G-06</td><td>Demo hoàn chỉnh end-to-end trước hội đồng.</td><td>Luồng thành công (happy path) hoàn tất trong dưới 3 phút; luồng tranh chấp hoàn tất trong dưới 5 phút.</td></tr>
+  </table>
+
+  <h2>1.3. Tài liệu dẫn chiếu</h2>
+  <ul>
+    <li><strong>[REF-01]:</strong> Shopee Việt Nam, <em>Điều khoản Dịch vụ Shopee</em>, phần về Shopee Đảm Bảo và Số Dư Tài Khoản Shopee. URL: https://help.shopee.vn/portal/article/77242 (Truy cập ngày: 10/10/2026).</li>
+    <li><strong>[REF-02]:</strong> Shopee Seller Centre (Học viện Shopee), <em>Quy trình Shopee thanh toán cho Người bán</em> và <em>Quy trình Trả hàng/Hoàn tiền dành cho Người bán</em>. URL: https://banhang.shopee.vn/edu/article/234 và https://banhang.shopee.vn/edu/article/563 (Truy cập ngày: 10/10/2026).</li>
+    <li><strong>[REF-03]:</strong> EIP-712: <em>Typed Structured Data Hashing and Signing</em> (Ethereum Foundation).</li>
+    <li><strong>[REF-04]:</strong> Luật Giao dịch điện tử số 20/2023/QH15 của Quốc hội Việt Nam.</li>
+    <li><strong>[REF-05]:</strong> EIP-191: <em>Signed Data Standard</em> và EIP-4361: <em>Sign-In with Ethereum</em> (cơ sở cho bước liên kết ví với tài khoản).</li>
+    <li><strong>[REF-06]:</strong> OpenZeppelin Contracts v5.x: <code>AccessControl</code>, <code>ReentrancyGuard</code>, <code>EIP712</code>, <code>ECDSA</code>, <code>SafeERC20</code>.</li>
+  </ul>
+
+  <h1>2. PHẠM VI DỰ ÁN 10 TUẦN: LÁT CẮT DỌC (VERTICAL SLICE MVP)</h1>
+  <p>Để sản phẩm chạy trọn vẹn từ đầu đến cuối (End-to-End) trong 10 tuần mà không phải đập đi xây lại khi mở rộng, dự án phân chia phạm vi như sau:</p>
+
+  <table>
+    <tr><th>Phân hệ</th><th>Phạm vi MVP (Làm thật 100%)</th><th>Phạm vi Mở rộng (Phase 2 - chỉ thiết kế chỗ cắm)</th></tr>
+    <tr>
+      <td><strong>Thanh toán &amp; Ký quỹ (Escrow)</strong></td>
+      <td><span class="badge badge-green">LÀM THẬT</span> Ký quỹ on-chain bằng <strong>token ERC-20 giả lập (MockUSD)</strong> làm phương thức mặc định trên giao diện, nhằm tránh biến động tỷ giá. Smart Contract hỗ trợ cả ETH gốc và được kiểm thử đầy đủ; giao diện ETH là hạng mục "nếu còn thời gian". Giỏ hàng nhiều shop thanh toán gom một lần và tách thành đơn escrow độc lập theo shop (BR-11).</td>
+      <td><span class="badge badge-orange">MỞ RỘNG</span> Fiat (VNPAY/MoMo), COD (sổ công nợ), SPayLater (hợp đồng tín dụng on-chain), stablecoin thật, oracle tỷ giá.</td>
+    </tr>
+    <tr>
+      <td><strong>Ký số &amp; Pháp lý</strong></td>
+      <td><span class="badge badge-green">LÀM THẬT</span> Ký giao dịch Web3 qua ví cá nhân (không lưu khóa); liên kết ví bằng chữ ký thông điệp; ký off-chain EIP-712 khi phân xử.</td>
+      <td><span class="badge badge-orange">MỞ RỘNG</span> Chứng thư số công cộng qua CA thật (VNPT/Viettel), đóng mộc số e-Seal cho hóa đơn PDF.</td>
+    </tr>
+    <tr>
+      <td><strong>Hệ thống sàn (Slopee)</strong></td>
+      <td><span class="badge badge-green">LÀM THẬT</span> Giữ nguyên Flask + MySQL; bổ sung Python Event Indexer; màn hình tối thiểu cho Buyer, Merchant, Shipper, Admin.</td>
+      <td><span class="badge badge-orange">MỞ RỘNG</span> Tự động hạch toán hóa đơn điện tử vào ERP kế toán; multisig cho khóa quản trị; mạng testnet công khai.</td>
+    </tr>
+  </table>
+
+  <h2>2.1. Ngoài phạm vi (Out of scope) của MVP</h2>
+  <ul>
+    <li>Triển khai trên mainnet hoặc xử lý tiền thật; hệ thống chỉ chạy trên Anvil localhost phục vụ học thuật.</li>
+    <li>Hoàn một phần tiền (partial refund); MVP chỉ hỗ trợ hoàn 100% hoặc giải ngân 100% theo từng đơn.</li>
+    <li>Một đơn on-chain có nhiều Merchant (mỗi đơn on-chain luôn gắn đúng một Merchant; giỏ nhiều shop được tách thành nhiều đơn độc lập, xem BR-11); thanh toán gom quá 10 shop trong một lần; thanh toán gom nhiều loại token.</li>
+    <li>Cơ chế bằng chứng tự động (video unbox lưu on-chain); Admin chỉ tham chiếu bằng chứng ngoài hệ thống, băm tài liệu lưu qua <code>docHash</code>.</li>
+    <li>Tính năng pause khẩn cấp, nâng cấp contract (upgradeable proxy).</li>
+    <li>Chính sách thời hạn theo từng sản phẩm riêng lẻ; MVP chỉ cấu hình theo nhóm hàng (BR-10).</li>
+  </ul>
+
+  <h1>3. MA TRẬN CHỦ THỂ NGHIỆP VỤ (STAKEHOLDERS)</h1>
+  <table>
+    <tr><th>Chủ thể</th><th>Hành vi nghiệp vụ trong MVP</th><th>Cơ chế xác thực / Bảo mật</th></tr>
+    <tr>
+      <td><strong>Người mua (Buyer)</strong></td>
+      <td>Liên kết ví, đặt hàng, nạp tiền vào Escrow qua MetaMask, xác nhận mở khóa sớm (Early Release), tạo khiếu nại, ký chấp nhận phán quyết.</td>
+      <td>Tự giữ private key tại ví cá nhân (non-custodial). Ký off-chain EIP-712 khi chấp nhận giải pháp tranh chấp.</td>
+    </tr>
+    <tr>
+      <td><strong>Người bán (Merchant)</strong></td>
+      <td>Đăng bán, liên kết ví nhận tiền, nhận thanh toán tự động (đã trừ phí sàn) khi kết thúc thời hạn kiểm tra, ký chấp thuận thỏa thuận tranh chấp.</td>
+      <td>Liên kết ví bằng chữ ký thông điệp. Ký off-chain EIP-712 khi tham gia phân xử.</td>
+    </tr>
+    <tr>
+      <td><strong>Đơn vị Vận chuyển (Shipper)</strong></td>
+      <td>Cập nhật trạng thái "Đã giao hàng" để kích hoạt cửa sổ kiểm tra.</td>
+      <td>Tài khoản Slopee có vai trò Shipper thao tác trên cổng giao vận; ví của sàn giữ <code>SHIPPER_ROLE</code> trên contract và gửi giao dịch thay mặt (xem mục 3.1).</td>
+    </tr>
+    <tr>
+      <td><strong>Sàn TMĐT (Slopee)</strong></td>
+      <td>Phát hành báo giá có chữ ký, thu phí hoa hồng tự động, đóng vai Trọng tài (<code>ARBITRATOR_ROLE</code>) trong cơ chế 2/3 chữ ký, xử lý timeout.</td>
+      <td>Sàn giữ 1 phiếu trong bộ 3. Sàn không thể tự rút tiền nếu thiếu chữ ký đối ứng, trừ trường hợp hết hạn tranh chấp (BR-05).</td>
+    </tr>
+    <tr>
+      <td><strong>Quản trị viên (Admin)</strong></td>
+      <td>Thẩm định khiếu nại, đề xuất phán quyết, cấu hình phí sàn trong ngưỡng an toàn và chính sách thời hạn theo nhóm hàng.</td>
+      <td>Tài khoản Slopee có vai trò Admin; thao tác ký của Trọng tài thực hiện qua dịch vụ ký phía máy chủ.</td>
+    </tr>
+  </table>
+
+  <h2>3.1. Quản lý khóa của sàn (ngoại lệ có kiểm soát của BR-01)</h2>
+  <p>Nguyên tắc "không lưu khóa" áp dụng cho <strong>khóa của người dùng cuối</strong> (Buyer, Merchant). Riêng các khóa vận hành của sàn (Trọng tài, Shipper, người ký báo giá, ví thu phí) bắt buộc phải do máy chủ nắm giữ để thực thi tự động. Các khóa này:</p>
+  <ul>
+    <li>Tách biệt hoàn toàn: mỗi vai trò dùng một khóa riêng, không dùng chung.</li>
+    <li>Nạp từ biến môi trường hoặc kho bí mật, tuyệt đối không ghi vào CSDL hay commit vào mã nguồn.</li>
+    <li>Trong MVP là khóa của môi trường Anvil; ở Phase 2 chuyển sang KMS/HSM và multisig.</li>
+  </ul>
+
+  <h1>4. QUY TẮC NGHIỆP VỤ CỐT LÕI (CORE BUSINESS RULES)</h1>
+
+  <h3>BR-01: Nguyên tắc Ký số Không Lưu Khóa (Non-Custodial Mandate)</h3>
+  <p>Cơ sở dữ liệu MySQL của Slopee tuyệt đối không lưu private key, passphrase hoặc seed phrase của <strong>người dùng cuối</strong>. Mọi thao tác nạp tiền, mở khóa, khiếu nại hay ký phán quyết của Buyer và Merchant đều do ví của chính họ thực hiện. Khóa vận hành của sàn tuân theo mục 3.1.</p>
+
+  <h3>BR-02: Quy tắc Phí sàn Cấu hình Động (Configurable Platform Fee)</h3>
+  <div class="formula-box">
+    <strong>Công thức trích phí sàn:</strong><br>
+    <code>Platform Fee = (Order Amount * feeBps) / 10.000</code><br>
+    <code>Merchant Payout = Order Amount - Platform Fee</code>
+  </div>
+  <ul>
+    <li>Phí cơ sở mặc định: <strong>300 BPS (3,0%)</strong>.</li>
+    <li>Admin cấu hình tỷ lệ phí mặc định (<code>defaultFeeBps</code>) trên chuỗi, không vượt trần an toàn <strong>1.000 BPS (10,0%)</strong>. Mức này đóng vai trò <strong>trần phí</strong>: contract từ chối mọi báo giá có phí cao hơn.</li>
+    <li>Tỷ lệ phí của đơn được <strong>chốt trong báo giá do sàn ký tại thời điểm tạo đơn</strong> (BR-06) và lưu vào đơn on-chain khi nạp tiền; thay đổi phí sau đó không ảnh hưởng đơn đã tạo. Phí trong báo giá bằng mức phí cấu hình của sàn nhưng không vượt trần hiện hành trên chuỗi.</li>
+    <li>Nếu Admin hạ trần phí sau khi báo giá đã phát hành và phí trong báo giá cao hơn trần mới, contract từ chối lần nạp và Buyer nhận báo giá mới với phí đã cập nhật. Buyer không bao giờ bị tính phí cao hơn mức đã hiển thị trong báo giá mà họ chấp nhận.</li>
+    <li>Phí chỉ thu khi tiền được giải ngân cho Merchant. Khi hoàn tiền cho Buyer, hoàn 100% và không thu phí.</li>
+    <li>Phép chia làm tròn xuống; phần dư (nếu có) thuộc về Merchant.</li>
+  </ul>
+
+  <h3>BR-03: Cửa sổ Kiểm tra Động &amp; Mở khóa sớm (Dynamic Inspection &amp; Early Release)</h3>
+  <ul>
+    <li>Khi Shipper xác nhận giao hàng, contract bắt đầu đếm ngược thời gian kiểm tra (<code>inspectionDuration</code>) từ <strong>1 giờ đến 30 ngày</strong> tùy loại hàng hóa. Thời lượng do sàn ấn định theo nhóm hàng (BR-10) và được chốt trong báo giá.</li>
+    <li>Nếu Buyer hài lòng và bấm "Xác nhận nhận hàng" &rarr; <strong>Mở khóa sớm (T+0)</strong>: giải ngân ngay cho Merchant mà không cần chờ hết hạn.</li>
+    <li>Nếu hết thời hạn mà Buyer không khiếu nại &rarr; bất kỳ ai cũng có thể kích hoạt lệnh giải ngân tự động cho Merchant.</li>
+    <li>Buyer chỉ được khiếu nại trong cửa sổ kiểm tra. Sau khi hết hạn, quyền khiếu nại chấm dứt.</li>
+  </ul>
+
+  <h3>BR-04: Phân xử Tranh chấp có Kiểm soát bằng 2/3 Chữ ký EIP-712</h3>
+  <p>Khi có khiếu nại, tiền bị phong tỏa trong Escrow. Contract chỉ giải ngân hoặc hoàn tiền khi nhận đủ 2 chữ ký số hợp lệ từ <strong>2 bên khác nhau</strong> thuộc bộ 3 vai trò <code>{Buyer, Merchant, Slopee Arbitrator}</code>. Địa chỉ nhận tiền (<code>payoutTo</code>) bắt buộc là Buyer hoặc Merchant. Mỗi chữ ký có <strong>thời hạn hiệu lực (deadline)</strong> và gắn với một số thứ tự (nonce) để không thể dùng lại ngoài ý muốn. Hạn hiệu lực của mọi chữ ký phải kết thúc <strong>trước</strong> thời điểm Trọng tài được quyền xử đơn phương (BR-05), và contract ép quy tắc này.</p>
+  <p>Để tránh một bên nắm 2 phiếu, Trọng tài không được tham gia giao dịch với tư cách Buyer hoặc Merchant, và hai địa chỉ cùng mang vai trò Trọng tài chỉ được tính là một phiếu.</p>
+
+  <h3>BR-05: Thoát hiểm khi Sự cố (Timeout &amp; Emergency Exit)</h3>
+  <ul>
+    <li><strong>Quá hạn giao hàng (Delivery Timeout):</strong> Quá 14 ngày kể từ khi nạp tiền mà Shipper chưa xác nhận giao hàng &rarr; Buyer (hoặc Admin) được gọi lệnh hủy đơn và nhận lại 100% tiền.</li>
+    <li><strong>Kẹt tranh chấp (Dispute Timeout):</strong> Quá thời hạn tranh chấp của đơn (<code>disputeTimeout</code>, quy định theo nhóm hàng tại BR-10, từ 7 đến 90 ngày, mặc định 30 ngày) kể từ lúc khiếu nại mà không đạt được thỏa thuận 2 chữ ký &rarr; Trọng tài sàn được quyền xử đơn phương: hoàn tiền cho Buyer hoặc giải ngân cho Merchant, để tiền không bị giam vĩnh viễn.</li>
+    <li><strong>Người nhận từ chối nhận ETH:</strong> Nếu ví nhận là contract từ chối nhận tiền, khoản tiền được ghi vào sổ chờ rút (pull-payment) để người nhận tự rút sau; không làm kẹt đơn hàng.</li>
+  </ul>
+
+  <h3>BR-06: Ràng buộc đơn hàng bằng báo giá có chữ ký của sàn (Signed Quote)</h3>
+  <p>Chỉ những đơn hàng đã được sàn xác nhận mới được ký quỹ. Khi Buyer đặt hàng, sàn phát hành một <strong>báo giá</strong> chứa mã đơn on-chain, ví Buyer, ví Merchant, loại token, số tiền, thời gian kiểm tra, thời hạn tranh chấp, tỷ lệ phí sàn (<code>feeBps</code>), mã băm chứng từ (<code>docHash</code>) và hạn dùng; báo giá được sàn ký EIP-712. Contract chỉ nhận tiền khi báo giá hợp lệ, chưa hết hạn, đúng người nạp và có tỷ lệ phí không vượt trần on-chain (BR-02). Quy tắc này ngăn: chiếm trước mã đơn, tự đổi ví Merchant, nạp sai số tiền, và phát hành báo giá với phí cao hơn mức quản trị cho phép.</p>
+
+  <h3>BR-07: Liên kết ví với tài khoản Slopee</h3>
+  <p>Mỗi ví chỉ được dùng cho giao dịch khi đã được liên kết với tài khoản Slopee bằng cách ký một thông điệp có mã dùng một lần (nonce) và thời hạn (theo EIP-191/EIP-4361). Một tài khoản có thể có một ví đang hoạt động; đổi ví yêu cầu ký lại. Sàn chỉ phát hành báo giá cho ví đã liên kết. Ví của Merchant phải được liên kết trước khi sản phẩm được phép nhận đơn Web3.</p>
+
+  <h3>BR-08: Định giá và quy đổi tiền tệ</h3>
+  <ul>
+    <li>Giá niêm yết trên sàn là VND. Khi tạo báo giá, sàn quy đổi sang số lượng token theo <strong>tỷ giá cố định cấu hình trong hệ thống</strong> (ví dụ 1 MockUSD = 25.000 VND), và chốt số lượng token trong báo giá.</li>
+    <li>Số tiền ký quỹ không thay đổi sau khi báo giá được chấp nhận, bất kể biến động tỷ giá về sau.</li>
+    <li>Toàn bộ nền tảng Slopee dùng VND, là số nguyên không có phần lẻ (giá sản phẩm, tổng đơn, số dư giả lập). Giá trị USD không còn xuất hiện trên giao diện.</li>
+    <li>Ở MVP không dùng oracle giá. Tích hợp oracle tỷ giá thuộc Phase 2.</li>
+  </ul>
+
+  <h3>BR-09: Nguồn sự thật và đồng bộ dữ liệu</h3>
+  <p>Trạng thái tiền và đơn Web3 lấy từ blockchain làm nguồn sự thật. Cơ sở dữ liệu của sàn chỉ phản ánh lại thông qua Event Indexer; giao diện không tự cập nhật trạng thái đơn từ phản hồi của ví. Mọi sự kiện xử lý phải idempotent và truy vết được (mã giao dịch, chỉ số log).</p>
+
+  <h3>BR-10: Chính sách thời hạn theo nhóm hàng (Category Policy)</h3>
+  <p>Hai thời hạn của đơn là <strong>cửa sổ kiểm tra</strong> (<code>inspectionDuration</code>) và <strong>thời hạn tranh chấp</strong> (<code>disputeTimeout</code>) không cố định cho mọi đơn mà do sàn cấu hình theo nhóm hàng, vì mỗi nhóm cần thời gian kiểm tra và giám định khác nhau. Hàng dễ hỏng cần xử lý nhanh, hàng điện tử hoặc đặt theo yêu cầu cần nhiều thời gian hơn.</p>
+  <table>
+    <tr><th>Nhóm hàng</th><th>Cửa sổ kiểm tra</th><th>Thời hạn tranh chấp</th><th>Lý do</th></tr>
+    <tr><td>Thực phẩm, hàng dễ hỏng</td><td>2 giờ</td><td>7 ngày</td><td>Hư hỏng nhanh, bằng chứng mất giá trị theo thời gian; cần chốt sớm.</td></tr>
+    <tr><td>Hàng tiêu dùng thông thường (mặc định)</td><td>3 ngày</td><td>30 ngày</td><td>Mức cân bằng cho phần lớn đơn hàng.</td></tr>
+    <tr><td>Điện tử, đồ gia dụng giá trị cao</td><td>7 ngày</td><td>45 ngày</td><td>Cần thời gian dùng thử, kiểm tra lỗi kỹ thuật và giám định.</td></tr>
+    <tr><td>Hàng cồng kềnh, đặt theo yêu cầu</td><td>14 ngày</td><td>60 ngày</td><td>Cần lắp đặt, đo đạc; khó kiểm tra ngay khi nhận.</td></tr>
+  </table>
+  <p><em>Các giá trị trên là mức đề xuất minh họa; nhóm dự án chốt bảng cuối cùng trước tuần 3.</em></p>
+  <ul>
+    <li><strong>Giới hạn do contract ép:</strong> <code>inspectionDuration</code> từ 1 giờ đến 30 ngày; <code>disputeTimeout</code> từ <strong>7 đến 90 ngày</strong>. Cận dưới 7 ngày đảm bảo hai bên có đủ thời gian ký phán quyết (chữ ký mặc định có hiệu lực 7 ngày) trước khi Trọng tài được quyền xử đơn phương.</li>
+    <li><strong>Chốt khi tạo đơn:</strong> hai thời hạn nằm trong báo giá do sàn ký (BR-06) và được lưu vào đơn on-chain. Admin đổi chính sách sau đó chỉ ảnh hưởng đơn mới, không ảnh hưởng đơn đã tạo.</li>
+    <li><strong>Cấu hình theo nhóm hàng, không theo từng sản phẩm.</strong> Merchant không được tự chọn hay rút ngắn các thời hạn này.</li>
+    <li><strong>Đơn gồm nhiều nhóm hàng:</strong> mỗi thời hạn lấy giá trị lớn nhất trong các nhóm có mặt trong đơn. Không xác định được nhóm thì dùng nhóm mặc định.</li>
+    <li>Trọng tài chỉ có quyền xử đơn phương sau khi hết <code>disputeTimeout</code> của chính đơn đó.</li>
+  </ul>
+
+  <h3>BR-11: Giỏ hàng nhiều shop: thanh toán gom một lần, vận hành tách đơn độc lập</h3>
+  <ul>
+    <li>Khi giỏ hàng có sản phẩm của nhiều shop, Buyer vẫn thanh toán một lần với đúng hai lần xác nhận ví: cho phép (approve) tổng số tiền của cả giỏ, rồi một giao dịch nạp gom.</li>
+    <li>Sàn tách giỏ thành một đơn cho mỗi shop. Mỗi đơn có báo giá, mã đơn on-chain, thời gian kiểm tra và thời hạn tranh chấp riêng, và gắn đúng một Merchant.</li>
+    <li>Nạp gom là nguyên tử: tất cả đơn trong lần thanh toán cùng thành công hoặc cùng bị từ chối; không có trạng thái nạp một phần.</li>
+    <li>Sau khi nạp, mỗi đơn vận hành hoàn toàn độc lập: mở khóa, khiếu nại, hoàn tiền, phán quyết và timeout của đơn này không ảnh hưởng đơn của shop khác.</li>
+    <li>Giới hạn MVP: một loại token cho cả lần thanh toán và tối đa 10 shop mỗi lần.</li>
+  </ul>
+
+  <h1>5. VÒNG ĐỜI ĐƠN HÀNG (ORDER LIFECYCLE)</h1>
+  <table>
+    <tr><th>Trạng thái</th><th>Ý nghĩa nghiệp vụ</th><th>Điều kiện chuyển</th><th>Nguồn</th></tr>
+    <tr><td><code>PENDING_PAYMENT</code></td><td>Đơn đã tạo, có báo giá, chờ Buyer ký quỹ.</td><td>Buyer nạp tiền &rarr; <code>LOCKED</code>; quá hạn báo giá &rarr; <code>EXPIRED</code></td><td>Sàn</td></tr>
+    <tr><td><code>EXPIRED</code></td><td>Báo giá hết hạn, đơn không được thanh toán.</td><td>Trạng thái cuối (có thể tạo báo giá mới).</td><td>Sàn</td></tr>
+    <tr><td><code>LOCKED</code></td><td>Tiền đã khóa trong contract, chờ giao hàng.</td><td>Shipper xác nhận &rarr; <code>DELIVERED</code>; quá 14 ngày &rarr; <code>REFUNDED</code></td><td>On-chain</td></tr>
+    <tr><td><code>DELIVERED</code></td><td>Đã giao hàng, đang trong cửa sổ kiểm tra.</td><td>Buyer xác nhận hoặc hết hạn &rarr; <code>COMPLETED</code>; Buyer khiếu nại &rarr; <code>DISPUTED</code></td><td>On-chain</td></tr>
+    <tr><td><code>DISPUTED</code></td><td>Tiền bị đóng băng chờ phân xử.</td><td>2/3 chữ ký hoặc Trọng tài xử sau <code>disputeTimeout</code> (theo nhóm hàng) &rarr; <code>COMPLETED</code> hoặc <code>REFUNDED</code></td><td>On-chain</td></tr>
+    <tr><td><code>COMPLETED</code></td><td>Đã giải ngân cho Merchant (trừ phí).</td><td>Trạng thái cuối.</td><td>On-chain</td></tr>
+    <tr><td><code>REFUNDED</code></td><td>Đã hoàn 100% tiền cho Buyer.</td><td>Trạng thái cuối.</td><td>On-chain</td></tr>
+  </table>
+
+  <h1>6. GIẢ ĐỊNH TIN CẬY &amp; MÔ HÌNH ĐE DỌA</h1>
+  <p>Hệ thống giảm bớt chứ không loại bỏ hoàn toàn nhu cầu tin cậy vào sàn. Các giả định được nêu rõ như sau:</p>
+  <table>
+    <tr><th>Kịch bản</th><th>Mức ảnh hưởng</th><th>Biện pháp trong MVP / Phase 2</th></tr>
+    <tr><td>Sàn và Merchant thông đồng để lấy tiền Buyer</td><td>Chỉ thực hiện được khi đơn ở trạng thái <code>DISPUTED</code>, mà trạng thái này chỉ do Buyer kích hoạt. Ngoài ra, sau khi hết thời hạn tranh chấp của đơn (7-90 ngày tùy nhóm hàng), sàn có thể xử đơn phương.</td><td>Ghi nhận như giả định tin cậy. Phase 2: Trọng tài là multisig hoặc bên thứ ba độc lập.</td></tr>
+    <tr><td>Sàn và Buyer thông đồng để hoàn tiền bất hợp lý</td><td>Cần Buyer khiếu nại và hai bên ký; Merchant mất hàng và tiền.</td><td>Lưu vết quyết định và bằng chứng (<code>docHash</code>); kiểm toán sau.</td></tr>
+    <tr><td>Shipper xác nhận giao hàng sai sự thật</td><td>Kích hoạt đồng hồ kiểm tra khi Buyer chưa nhận hàng; Buyer có thể bỏ lỡ cửa sổ khiếu nại.</td><td>Thông báo cho Buyer khi giao; thời gian kiểm tra tối thiểu 1 giờ; Phase 2: xác nhận giao hàng có chữ ký của Buyer hoặc oracle vận đơn.</td></tr>
+    <tr><td>Lộ khóa vận hành của sàn</td><td>Kẻ tấn công ký báo giá, xác nhận giao hàng hoặc phán quyết.</td><td>Tách khóa theo vai trò; nạp từ môi trường; phí trong báo giá bị chặn bởi trần on-chain do Admin đặt nên khóa ký báo giá bị lộ cũng không nâng được phí; Phase 2: KMS/HSM, multisig, giới hạn tần suất.</td></tr>
+    <tr><td>Buyer nạp tiền nhưng đơn bị Merchant hủy phía sàn</td><td>Tiền bị khóa đến khi hết 14 ngày.</td><td>Buyer hoặc Admin gọi hủy sau Delivery Timeout; Phase 2: cho phép Merchant chủ động hoàn tiền.</td></tr>
+  </table>
+
+  <h1>7. KHUNG PHÁP LÝ VÀ GIỚI HẠN ÁP DỤNG</h1>
+  <div class="note-box">
+    Dự án là mô hình học thuật chạy trên mạng thử nghiệm cục bộ. Theo hiểu biết hiện tại, tài sản mã hóa chưa được thừa nhận là phương tiện thanh toán hợp pháp tại Việt Nam, và việc triển khai thương mại cần rà soát lại quy định về thanh toán, thương mại điện tử và giao dịch điện tử [REF-04] tại thời điểm triển khai. Báo cáo cuối kỳ cần nêu rõ giới hạn này.
+  </div>
+  <ul>
+    <li>Chữ ký trong MVP là chữ ký số bằng khóa mật mã (ECDSA) của ví, <strong>không phải</strong> chữ ký số công cộng do CA được cấp phép cấp. Giá trị pháp lý tương đương chữ ký số chuyên dùng cần đánh giá riêng và nằm ngoài phạm vi (Phase 2).</li>
+    <li>Dữ liệu cá nhân chỉ lưu tối thiểu (mã tài khoản, địa chỉ ví); không đưa dữ liệu cá nhân lên blockchain, chỉ lưu giá trị băm (<code>docHash</code>).</li>
+  </ul>
+
+  <h1>8. TIÊU CHÍ NGHIỆM THU (ACCEPTANCE CRITERIA)</h1>
+  <table>
+    <tr><th style="width:8%">Mã</th><th>Tiêu chí</th><th style="width:22%">Liên quan</th></tr>
+    <tr><td>AC-01</td><td>Buyer liên kết ví, đặt hàng, nhận báo giá, ký quỹ thành công; đơn chuyển <code>LOCKED</code> trong CSDL trong vòng 10 giây sau khi giao dịch được xác nhận.</td><td>BR-06, 07, 09</td></tr>
+    <tr><td>AC-02</td><td>Báo giá sai (sai người nạp, sai số tiền, hết hạn, mã đơn đã dùng) đều bị contract từ chối.</td><td>BR-06</td></tr>
+    <tr><td>AC-03</td><td>Shipper có quyền xác nhận giao hàng; người khác gọi sẽ bị từ chối.</td><td>BR-03</td></tr>
+    <tr><td>AC-04</td><td>Mở khóa sớm và giải ngân sau hết hạn chia đúng phí theo <code>feeBps</code> đã chốt trong báo giá; thay đổi phí sau đó không ảnh hưởng đơn cũ.</td><td>BR-02, 03</td></tr>
+    <tr><td>AC-05</td><td>Khiếu nại trong hạn đóng băng tiền; khiếu nại sau hạn bị từ chối.</td><td>BR-03</td></tr>
+    <tr><td>AC-06</td><td>Giải quyết tranh chấp thành công với 2 chữ ký của 2 bên khác nhau; thất bại khi chữ ký trùng bên, hết hạn, sai người nhận, sai số tiền hoặc có hạn không trước thời điểm Trọng tài được xử đơn phương.</td><td>BR-04, 05</td></tr>
+    <tr><td>AC-07</td><td>Delivery Timeout và Dispute Timeout hoạt động đúng với từng giá trị <code>disputeTimeout</code> (kiểm thử bằng tua nhanh thời gian trên Anvil hoặc <code>vm.warp</code>).</td><td>BR-05</td></tr>
+    <tr><td>AC-08</td><td>Xóa trạng thái, chạy lại indexer từ đầu, dữ liệu khớp 100% on-chain; xử lý trùng sự kiện không gây ghi đôi.</td><td>BR-09</td></tr>
+    <tr><td>AC-09</td><td>Không có private key người dùng trong CSDL, mã nguồn, nhật ký ứng dụng.</td><td>BR-01</td></tr>
+    <tr><td>AC-10</td><td>Số dư contract khớp tổng tiền các đơn đang mở (script đối soát).</td><td>G-01</td></tr>
+    <tr><td>AC-11</td><td>Toàn bộ test contract đạt, độ phủ dòng lệnh từ 90% trở lên; luồng demo chạy lặp lại 3 lần liên tiếp không lỗi.</td><td>G-06</td></tr>
+    <tr><td>AC-12</td><td>Mỗi nhóm hàng nhận đúng cửa sổ kiểm tra và thời hạn tranh chấp trong báo giá; hai đơn khác nhóm có thời hạn độc lập; đổi chính sách sau khi tạo đơn không ảnh hưởng đơn cũ; giá trị ngoài khoảng 7-90 ngày bị contract từ chối.</td><td>BR-05, BR-10</td></tr>
+    <tr><td>AC-13</td><td>Báo giá có <code>feeBps</code> vượt trần on-chain bị contract từ chối; sau khi Admin hạ trần, báo giá cũ có phí cao hơn bị từ chối và Buyer lấy được báo giá mới hợp lệ; báo giá có ví người nạp khác người gửi giao dịch bị từ chối; phí của đơn trên chuỗi đúng bằng phí trong báo giá.</td><td>BR-02, BR-06</td></tr>
+    <tr><td>AC-14</td><td>Giỏ hàng có ít nhất 3 shop thanh toán chỉ cần đúng 2 lần xác nhận ví và tạo đúng từng ấy đơn độc lập; thao tác trên đơn của một shop (mở khóa, khiếu nại, hoàn tiền) không đổi trạng thái hay số tiền của đơn shop khác; nạp gom có một báo giá không hợp lệ thì toàn bộ bị từ chối và không đơn nào được tạo; số dư contract luôn bằng tổng tiền các đơn đang mở.</td><td>BR-11, BR-06</td></tr>
+  </table>
+
+  <h1>9. RỦI RO DỰ ÁN &amp; PHƯƠNG ÁN GIẢM THIỂU</h1>
+  <table>
+    <tr><th>Rủi ro</th><th>Khả năng</th><th>Tác động</th><th>Giảm thiểu</th></tr>
+    <tr><td>Contract có lỗi logic bị phát hiện muộn</td><td>Trung bình</td><td>Cao</td><td>Viết test song song từ tuần 1; có checklist bảo mật (reentrancy, replay, quyền); chốt contract cuối tuần 2, chỉ sửa lỗi sau đó.</td></tr>
+    <tr><td>Tích hợp MetaMask / EIP-712 (đặc biệt <code>signTypedData_v4</code>) tốn thời gian hơn dự kiến</td><td>Cao</td><td>Trung bình</td><td>Làm "lát cắt end-to-end thô" vào cuối tuần 4; dùng chung thư viện băm kiểu EIP-712 giữa test và frontend.</td></tr>
+    <tr><td>Indexer lệch trạng thái khi khởi động lại</td><td>Trung bình</td><td>Cao</td><td>Lưu con trỏ block đã xử lý; xử lý idempotent; có chế độ replay toàn bộ.</td></tr>
+    <tr><td>Phạm vi phình to (fiat, COD, ETH UI...)</td><td>Cao</td><td>Trung bình</td><td>Khóa phạm vi theo mục 2; tuần 9-10 chỉ kiểm thử, sửa lỗi, demo.</td></tr>
+    <tr><td>Nhóm chỉ có 3 người, mỗi người kiêm nhiều vai trò; một người nghỉ hoặc chậm làm tắc nghẽn cả tiến độ</td><td>Cao</td><td>Cao</td><td>Mỗi hạng mục có người chính và người dự phòng chéo; mọi thay đổi có người khác xem lại; họp ngắn 2 lần mỗi tuần; sau M1, thành viên làm contract chuyển sang hỗ trợ backend và giao diện; nếu trễ M2 quá 3 ngày thì cắt các tính năng phụ (giao diện rút khoản chờ rút, màn hình Merchant nâng cao) trước khi cắt luồng chính.</td></tr>
+    <tr><td>Demo lỗi do môi trường (Anvil, ví, mạng)</td><td>Trung bình</td><td>Cao</td><td>Script khởi tạo môi trường một lệnh; video quay sẵn luồng demo làm phương án dự phòng.</td></tr>
+  </table>
+
+  <h1>10. LỘ TRÌNH TỔNG QUAN &amp; CỘT MỐC</h1>
+  <table>
+    <tr><th>Cột mốc</th><th>Thời điểm</th><th>Kết quả có thể kiểm chứng</th></tr>
+    <tr><td>M1</td><td>Cuối tuần 2</td><td>Smart Contract hoàn chỉnh, bộ test đạt trên Anvil.</td></tr>
+    <tr><td>M2</td><td>Cuối tuần 4</td><td>Lát cắt end-to-end thô: liên kết ví, báo giá, ký quỹ, indexer, hiển thị trạng thái.</td></tr>
+    <tr><td>M3</td><td>Cuối tuần 7</td><td>Đủ luồng Buyer, Merchant, Shipper, Admin (gồm khiếu nại và ký EIP-712).</td></tr>
+    <tr><td>M4</td><td>Cuối tuần 8</td><td>Đóng băng tính năng; chạy kiểm thử tích hợp lần đầu.</td></tr>
+    <tr><td>M5</td><td>Cuối tuần 10</td><td>Hoàn thiện tài liệu, kịch bản demo, bảo vệ.</td></tr>
+  </table>
+  <p>Chi tiết công việc theo tuần, phân công theo vai trò và tiêu chí hoàn thành từng giai đoạn nằm trong SRS-SLOPEE-MVP-01, mục 11.</p>
+  <p><strong>Nhân sự:</strong> nhóm có 3 thành viên. Thành viên A phụ trách smart contract và bảo mật; thành viên B phụ trách backend và indexer; thành viên C phụ trách giao diện, kiểm thử end-to-end và tài liệu. Chi tiết phân công chéo và dự phòng ở SRS mục 11.</p>
+
+  <h1>11. THUẬT NGỮ</h1>
+  <table>
+    <tr><th style="width:22%">Thuật ngữ</th><th>Giải thích</th></tr>
+    <tr><td>Escrow</td><td>Cơ chế ký quỹ: tiền được khóa bởi bên thứ ba (ở đây là smart contract) cho đến khi điều kiện giao dịch được đáp ứng.</td></tr>
+    <tr><td>Non-custodial</td><td>Người dùng tự giữ khóa riêng tư; hệ thống không có khả năng di chuyển tài sản của họ.</td></tr>
+    <tr><td>EIP-712</td><td>Chuẩn ký dữ liệu có cấu trúc, hiển thị rõ nội dung cho người ký và chống dùng lại chữ ký ở hợp đồng khác.</td></tr>
+    <tr><td>BPS</td><td>Basis point, 1 BPS = 0,01%.</td></tr>
+    <tr><td>Indexer</td><td>Tiến trình lắng nghe sự kiện on-chain và ghi vào CSDL của sàn.</td></tr>
+    <tr><td>Pull-payment</td><td>Mô hình để người nhận tự rút tiền thay vì hệ thống đẩy tiền, tránh kẹt khi người nhận từ chối.</td></tr>
+    <tr><td>MockUSD</td><td>Token ERC-20 giả lập do dự án phát hành trên Anvil, dùng làm đồng tiền thanh toán mặc định.</td></tr>
+    <tr><td>Nhóm hàng</td><td>Phân loại sản phẩm dùng để tra chính sách thời hạn kiểm tra và thời hạn tranh chấp (BR-10).</td></tr>
+    <tr><td>disputeTimeout</td><td>Số giây tính từ lúc khiếu nại, sau đó Trọng tài được quyền xử đơn phương; chốt trong báo giá, nằm trong khoảng 7-90 ngày.</td></tr>
+  </table>
+
+</body>
+</html>
