@@ -1,15 +1,16 @@
+import { authFetch } from './http';
+
 const API_BASE = 'http://localhost:5000/api/payments';
 
-export const fetchPaymentMethodsAPI = async (userId) => {
-    const res = await fetch(`${API_BASE}/${userId}`);
+export const fetchPaymentMethodsAPI = async () => {
+    const res = await authFetch(`${API_BASE}/`);
     if (!res.ok) throw new Error("Failed to fetch payment methods");
     return await res.json();
 };
 
 export const addPaymentMethodAPI = async (data) => {
-    const res = await fetch(`${API_BASE}/`, {
+    const res = await authFetch(`${API_BASE}/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     });
     const resData = await res.json();
@@ -18,9 +19,8 @@ export const addPaymentMethodAPI = async (data) => {
 };
 
 export const checkoutAPI = async (data) => {
-    const res = await fetch(`${API_BASE}/checkout`, {
+    const res = await authFetch(`${API_BASE}/checkout`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     });
     const resData = await res.json();
@@ -28,16 +28,15 @@ export const checkoutAPI = async (data) => {
     return resData;
 };
 
-export const fetchOrdersAPI = async (userId) => {
-    const res = await fetch(`${API_BASE}/orders/${userId}`);
+export const fetchOrdersAPI = async () => {
+    const res = await authFetch(`${API_BASE}/orders`);
     if (!res.ok) throw new Error("Failed to fetch orders");
     return await res.json();
 };
 
 export const updateOrderStatusAPI = async (orderId, status) => {
-    const res = await fetch(`${API_BASE}/orders/${orderId}`, {
+    const res = await authFetch(`${API_BASE}/orders/${orderId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
     });
     const resData = await res.json();

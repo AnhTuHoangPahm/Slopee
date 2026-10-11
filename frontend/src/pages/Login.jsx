@@ -4,6 +4,7 @@ import { loginAPI } from '../api/auth';
 import { addToCartAPI } from '../api/carts';
 import Navbar from '../components/Navbar';
 import '../assets/auth.css';
+import { setSession } from '../api/http';
 
 export default function Login() {
     const [username, setUsername] = useState('');
@@ -17,12 +18,12 @@ export default function Login() {
         setError('');
         try {
             const data = await loginAPI(username, password);
-            localStorage.setItem('user', JSON.stringify(data.user));
+            setSession(data.token, data.user);
 
             // Re-fire Anonymous Cart Intents flawlessly before navigating!
             if (location.state?.pendingCartItem && data.user.role !== 'admin') {
                 try {
-                    await addToCartAPI(data.user.id, location.state.pendingCartItem, 1);
+                    await addToCartAPI(location.state.pendingCartItem, 1);
                 } catch (err) { console.error('Execution failed:', err); }
             }
 

@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchCartAPI } from '../api/carts';
 import '../assets/navbar.css';
+import { getUser, clearSession } from '../api/http';
+import { formatVND } from '../utils/formatVND';
 
 export default function Navbar() {
     const navigate = useNavigate();
-    const user = JSON.parse(localStorage.getItem('user'));
+    const user = getUser();
     const [searchTerm, setSearchTerm] = useState('');
 
     // Cart Hover State
@@ -15,7 +17,7 @@ export default function Navbar() {
     useEffect(() => {
         // Dynamically fetch fresh cart details the moment the user hovers over the icon
         if (user && isCartHovered) {
-            fetchCartAPI(user.id).then(data => setCartItems(data.items || [])).catch(() => null);
+            fetchCartAPI().then(data => setCartItems(data.items || [])).catch(() => null);
         }
     }, [isCartHovered, user]);
 
@@ -26,7 +28,7 @@ export default function Navbar() {
     };
 
     const handleLogout = () => {
-        localStorage.removeItem('user');
+        clearSession();
         navigate('/');
     };
 
@@ -80,7 +82,7 @@ export default function Navbar() {
                                                                 <div style={{ width: '40px', height: '40px', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#999' }}>IMG</div>
                                                                 <div style={{ fontSize: '12px', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
                                                             </div>
-                                                            <div style={{ color: '#ee4d2d', fontSize: '13px' }}>${item.unitPrice}</div>
+                                                            <div style={{ color: '#ee4d2d', fontSize: '13px' }}>{formatVND(item.unitPrice)}</div>
                                                         </div>
                                                     ))}
                                                 </div>

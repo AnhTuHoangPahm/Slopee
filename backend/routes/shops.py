@@ -1,7 +1,10 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 import pymysql
 import uuid
 import os
+
+from auth_utils import require_auth
+from money import to_vnd, InvalidMoney
 
 shops_bp = Blueprint('shops', __name__)
 
@@ -57,14 +60,15 @@ def run_migration():
         conn.close()
 
 @shops_bp.route('/', methods=['POST'])
+@require_auth('seller')
 def setup_shop():
-    data = request.json
-    seller_id = data.get('seller_id')
+    data = request.get_json(silent=True) or {}
+    seller_id = g.user_id
     name = data.get('name')
     description = data.get('description', '')
     
-    if not seller_id or not name:
-        return jsonify({"error": "Seller ID and Name required"}), 400
+    if not name:
+        return jsonify({"error": "Shop name required"}), 400
 
     conn = get_db_connection()
     try:
@@ -93,8 +97,10 @@ def setup_shop():
     finally:
         conn.close()
 
-@shops_bp.route('/<seller_id>', methods=['GET'])
-def get_shop(seller_id):
+@shops_bp.route('/me', methods=['GET'])
+@require_auth('seller')
+def get_shop():
+    seller_id = g.user_id
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
@@ -118,9 +124,11 @@ def get_shop(seller_id):
     finally:
         conn.close()
 
-@shops_bp.route('/<seller_id>/name', methods=['PUT'])
-def update_shop_name(seller_id):
-    data = request.json
+@shops_bp.route('/me/name', methods=['PUT'])
+@require_auth('seller')
+def update_shop_name():
+    seller_id = g.user_id
+    data = request.get_json(silent=True) or {}
     new_name = data.get('name')
     if not new_name: return jsonify({"error": "Name required"}), 400
     conn = get_db_connection()
@@ -133,20 +141,30 @@ def update_shop_name(seller_id):
         conn.close()
 
 @shops_bp.route('/products', methods=['POST'])
+@require_auth('seller')
 def add_product():
-    data = request.json
-    shop_id = data.get('shopId')
+    data = request.get_json(silent=True) or {}
     name = data.get('name')
     description = data.get('description', '')
     category_id = data.get('categoryId', 1) 
     in_stock = data.get('inStock', 0)
-    unit_price = data.get('unitPrice', 0)
+    try:
+        unit_price = to_vnd(data.get('unitPrice', 0))
+    except InvalidMoney as e:
+        return jsonify({"error": f"unitPrice: {e}"}), 400
     
-    if not all([shop_id, name]): return jsonify({"error": "Shop ID and Product Name required"}), 400
+    if not name: return jsonify({"error": "Product Name required"}), 400
     
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
+            # Shop được xác định từ token của seller, không nhận shopId từ client
+            cursor.execute("SELECT id FROM shops WHERE sellerId=%s", (g.user_id,))
+            shop = cursor.fetchone()
+            if not shop:
+                return jsonify({"error": "You must set up your shop first."}), 403
+            shop_id = shop['id']
+
             cursor.execute("SELECT id FROM categories WHERE id=%s", (category_id,))
             if not cursor.fetchone():
                 cursor.execute("INSERT INTO categories (name) VALUES ('General')")
@@ -167,6 +185,7 @@ def add_product():
         conn.close()
 
 @shops_bp.route('/products/<product_id>', methods=['DELETE'])
+@require_auth('seller')
 def delete_product(product_id):
     conn = get_db_connection()
     try:
@@ -181,16 +200,20 @@ def delete_product(product_id):
         conn.close()
 
 @shops_bp.route('/products/<product_id>', methods=['PUT'])
+@require_auth('seller')
 def update_product(product_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            data = request.json
-            price = float(data.get('unitPrice', 0))
+            data = request.get_json(silent=True) or {}
+            price = to_vnd(data.get('unitPrice', 0))
             stock = int(data.get('inStock', 0))
             cursor.execute("UPDATE products SET unitPrice=%s, inStock=%s WHERE id=%s", (price, stock, product_id))
             conn.commit()
             return jsonify({"message": "Product updated"}), 200
+    except InvalidMoney as e:
+        conn.rollback()
+        return jsonify({"error": f"unitPrice: {e}"}), 400
     except Exception as e:
         conn.rollback()
         return jsonify({"error": str(e)}), 400
@@ -200,8 +223,9 @@ def update_product(product_id):
 # --- PHASE 1 FEATURE F: PRODUCT RICHNESS APIS ---
 
 @shops_bp.route('/products/<product_id>/images', methods=['POST'])
+@require_auth('seller')
 def add_product_image(product_id):
-    data = request.json
+    data = request.get_json(silent=True) or {}
     url = data.get('imageUrl')
     is_primary = data.get('isPrimary', False)
     if not url: return jsonify({"error": "Missing imageUrl"}), 400
@@ -219,6 +243,7 @@ def add_product_image(product_id):
         conn.close()
 
 @shops_bp.route('/products/images/<image_id>', methods=['DELETE'])
+@require_auth('seller')
 def delete_product_image(image_id):
     conn = get_db_connection()
     try:
@@ -230,8 +255,9 @@ def delete_product_image(image_id):
         conn.close()
 
 @shops_bp.route('/products/<product_id>/variants', methods=['POST'])
+@require_auth('seller')
 def add_product_variant(product_id):
-    data = request.json
+    data = request.get_json(silent=True) or {}
     name = data.get('variantName')
     val = data.get('variantValue')
     if not name or not val: return jsonify({"error": "Variant configurations accurately required"}), 400
@@ -247,6 +273,7 @@ def add_product_variant(product_id):
         conn.close()
 
 @shops_bp.route('/products/variants/<variant_id>', methods=['DELETE'])
+@require_auth('seller')
 def delete_product_variant(variant_id):
     conn = get_db_connection()
     try:

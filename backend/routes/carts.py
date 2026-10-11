@@ -1,8 +1,10 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 import pymysql
 import uuid
 import os
 import json
+
+from auth_utils import require_auth
 
 carts_bp = Blueprint('carts', __name__)
 
@@ -24,8 +26,10 @@ def get_or_create_cart(cursor, user_id):
     cursor.execute("INSERT INTO carts (id, userId) VALUES (%s, %s)", (cart_id, user_id))
     return cart_id
 
-@carts_bp.route('/<user_id>', methods=['GET'])
-def fetch_cart(user_id):
+@carts_bp.route('/', methods=['GET'])
+@require_auth
+def fetch_cart():
+    user_id = g.user_id
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
@@ -62,9 +66,10 @@ def fetch_cart(user_id):
         conn.close()
 
 @carts_bp.route('/items', methods=['POST'])
+@require_auth
 def add_to_cart():
-    data = request.json
-    user_id = data.get('userId')
+    data = request.get_json(silent=True) or {}
+    user_id = g.user_id
     product_id = data.get('productId')
     quantity = int(data.get('quantity', 1))
     selected_variants = data.get('selectedVariants', {})
@@ -106,6 +111,7 @@ def add_to_cart():
         conn.close()
 
 @carts_bp.route('/items/<item_id>', methods=['PUT', 'DELETE'])
+@require_auth
 def manage_cart_item(item_id):
     conn = get_db_connection()
     try:
@@ -116,7 +122,7 @@ def manage_cart_item(item_id):
                 return jsonify({"message": "Item deleted."}), 200
                 
             elif request.method == 'PUT':
-                data = request.json
+                data = request.get_json(silent=True) or {}
                 new_qty = int(data.get('quantity', 1))
                 if new_qty <= 0:
                     return jsonify({"error": "Quantity must be > 0"}), 400

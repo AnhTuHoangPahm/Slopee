@@ -1,3 +1,5 @@
+import { authFetch } from './http';
+
 const API_BASE = 'http://localhost:5000/api/products';
 
 export const fetchProductsAPI = async (searchQuery = '') => {
@@ -27,9 +29,8 @@ export const fetchProductReviewsAPI = async (productId, offset=0, limit=5) => {
 };
 
 export const publishProductReviewAPI = async (productId, reviewData) => {
-    const res = await fetch(`http://localhost:5000/api/reviews/${productId}`, {
+    const res = await authFetch(`http://localhost:5000/api/reviews/${productId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(reviewData)
     });
     const data = await res.json();

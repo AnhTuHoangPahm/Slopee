@@ -43,14 +43,21 @@
 
 | Mã việc | Mô tả kỹ thuật | Khắc phục lỗi | Phụ trách | Tình trạng | PR / Commit |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| **P0-01** | Lớp xác thực token ký (`itsdangerous`, `SECRET_KEY` từ env, `AUTH_TOKEN_TTL_SECONDS`), decorator `require_auth`, loại bỏ `userId` từ body/URL, lưu token tại `sessionStorage` | S-01, S-12 | **B** | `[ ] Sẵn sàng` | `#PR-` |
-| **P0-02** | Đăng ký chỉ cho phép role `user` / `seller`; Khóa `admin_bp`; Bỏ route cấp số dư giả lập vô hạn; Seed tài khoản admin bằng CLI | S-02, S-03, S-04, S-10 | **B** | `[ ] Sẵn sàng` | `#PR-` |
+| **P0-01** | Lớp xác thực token ký (`itsdangerous`, `SECRET_KEY` từ env, `AUTH_TOKEN_TTL_SECONDS`), decorator `require_auth`, loại bỏ `userId` từ body/URL, lưu token tại `sessionStorage` | S-01, S-12 | **B** | `[~] Đã code, chờ review` | `#PR-` |
+| **P0-02** | Đăng ký chỉ cho phép role `user` / `seller`; Khóa `admin_bp`; Bỏ route cấp số dư giả lập vô hạn; Seed tài khoản admin bằng CLI | S-02, S-03, S-04, S-10 | **B** | `[~] Đã code, chờ review` | `#PR-` |
 | **P0-03** | Kiểm tra quyền sở hữu tài nguyên (đơn hàng, giỏ hàng, shop, sản phẩm, payment method); Chặn ghi đè `orders.status` đối với đơn Web3 (`WEB3_ORDER_MANAGED`) | S-05, S-06, S-11 | **A** | `[ ] Sẵn sàng` | `#PR-` |
 | **P0-04** | Xóa bỏ endpoint `GET /api/shops/migrate`; Viết runner migration tự động đánh số qua bảng `schema_migrations`; Dọn schema trùng `reviews` / `reviewImages` (sửa lỗi MySQL strict 1364) | S-07, S-13 | **A** | `[ ] Sẵn sàng` | `#PR-` |
 | **P0-05** | Thanh toán an toàn: Lock dòng bằng `SELECT ... FOR UPDATE`, `UPDATE ... WHERE inStock >= qty`; Xóa bỏ tính tiền bằng `float`; Khóa tạm tài khoản sau 5 lần sai mã PIN/mật khẩu | S-08, S-09 | **A** | `[ ] Sẵn sàng` | `#PR-` |
 | **P0-06** | Tắt `debug=True` trên production; Chuẩn hóa trả về lỗi chung cho client, chi tiết ghi log máy chủ; Validate schema body JSON | S-10, S-14 | **A** | `[ ] Sẵn sàng` | `#PR-` |
-| **P0-07** | Chuyển toàn bộ Slopee sang VND: 4 cột tiền đổi sang `DECIMAL(15,0)`; Đổi frontend dùng chung `formatVND` (`Intl.NumberFormat('vi-VN')`), xóa sạch biểu tượng `$` | Q-09, DD-12 | **B + C** | `[ ] Sẵn sàng` | `#PR-` |
-| **P0-08** | Cập nhật bộ test cũ: Sửa test checkout, cart, auth theo token phiên và VND; Chuyển test race condition sang chạy trên MySQL service thật | SRS 12.3 | **B + C** | `[ ] Sẵn sàng` | `#PR-` |
+| **P0-07** | Chuyển toàn bộ Slopee sang VND: 4 cột tiền đổi sang `DECIMAL(15,0)`; Đổi frontend dùng chung `formatVND` (`Intl.NumberFormat('vi-VN')`), xóa sạch biểu tượng `$` | Q-09, DD-12 | **B + C** | `[~] Đã code, chờ review` | `#PR-` |
+| **P0-08** | Cập nhật bộ test cũ: Sửa test checkout, cart, auth theo token phiên và VND; Chuyển test race condition sang chạy trên MySQL service thật | SRS 12.3 | **B + C** | `[~] Đã code, chờ review` | `#PR-` |
+
+**Ghi chú Phase 0 (cập nhật gần nhất):**
+- `[~]` = đã code và test xanh cục bộ, **chờ PR được thành viên khác duyệt**; điền cột PR/Commit khi mở PR.
+- **P0-01/02:** token mặc định hết hạn sau 3600 s (đặt `AUTH_TOKEN_TTL_SECONDS`; SDD 16.3 gợi ý 8 giờ → nhóm chốt giá trị). Token mang `role` và không kiểm lại DB. Route theo người dùng đã đổi sang `/me` hoặc bỏ tham số (xem `AI_CONTEXT.md` mục 6). Số dư phương thức thanh toán mới = 0.
+- **P0-07:** `migrations/0001_money_to_vnd.sql` mới chạy tay và chỉ làm tròn dữ liệu USD cũ (SDD 16.3 bước 8 yêu cầu nhân với `FX_VND_PER_TOKEN`); DB demo nên tạo lại bằng `init_db.py`. P0-04 cần đưa file này vào runner.
+- **P0-08:** test race condition checkout đã chạy trên MySQL thật (`test/integration_test/test_checkout_race_mysql.py`) và CI có MySQL service (`.github/workflows/tests.yml`). Hiện chỉ yêu cầu "không bán lố, tiền khớp"; sau P0-05 request thua cuộc nên trả 400 thay vì 500.
+- **Còn hở cho A (P0-03…06):** kiểm tra chủ sở hữu cho sản phẩm/ảnh/biến thể/cart item/đơn; `GET /api/shops/migrate` còn công khai; `debug=True` và `str(e)` còn trả cho client; chưa có giới hạn thử sai PIN/mật khẩu; chưa dùng `FOR UPDATE`.
 
 ---
 
@@ -61,9 +68,9 @@
 - [ ] **[C] Thành viên A:** Cài đặt contract `MockUSD.sol` (6 decimals, hàm `mint` phục vụ test).
 - [ ] **[C] Thành viên A:** Cài đặt `SlopeeEscrowMaster.sol` phần nạp đơn: `depositEscrow` (kèm xác minh EIP-712 `Quote`), `confirmDelivery`, `earlyRelease`, `cancelIfUnfulfilled`.
 - [ ] **[B] Thành viên B:** Viết script khởi tạo môi trường một lệnh `./scripts/bootstrap.sh` (chạy Anvil `--block-time 2`, deploy, xuất JSON).
-- [ ] **[B] Thành viên B:** Triển khai **P0-01** (Auth Token) và **P0-02** (Phân quyền Role & bảo vệ Admin).
-- [ ] **[B + C]:** Triển khai **P0-07** (Chuyển schema và giao diện sang VND số nguyên).
-- [ ] **[F] Thành viên C:** Thiết lập Client API dùng chung (`lib/client.js`), Route Guard (`components/RequireRole.jsx`), hàm định dạng `formatVND`.
+- [~] **[B] Thành viên B:** Triển khai **P0-01** (Auth Token) và **P0-02** (Phân quyền Role & bảo vệ Admin). *(đã code, chờ review)*
+- [~] **[B + C]:** Triển khai **P0-07** (Chuyển schema và giao diện sang VND số nguyên). *(đã code, chờ review)*
+- [ ] **[F] Thành viên C:** Thiết lập Client API dùng chung (`lib/client.js`), Route Guard (`components/RequireRole.jsx`), hàm định dạng `formatVND`. *(một phần: `api/http.js` và `utils/formatVND.js` đã có; còn `RequireRole.jsx`; xác nhận tên file so với SDD `lib/client.js`/`lib/format.js`)*
 - [ ] **[F] Thành viên C:** Khung kết nối ví MetaMask (`hooks/useWallet.js`), đọc thông tin chain từ `deployments/local.json`.
 - [ ] **[Q] Cả nhóm:** Khóa file `shared/eip712/types.json` và tạo vector test chéo ngôn ngữ `shared/eip712/vectors.json`.
 
@@ -215,6 +222,8 @@
 ---
 
 ### 5.2. Integration, System & Backend API Test Suite
+> `[~]` = test đã viết và pass cục bộ, chờ CI/PR; `[x] PASS` chỉ đặt sau khi CI xanh trên nhánh chính.
+
 | Mã test | Phạm vi kiểm thử | Tiêu chuẩn đánh giá | Tình trạng |
 | :---: | :--- | :--- | :---: |
 | **I-01** | Liên kết ví: Nonce dùng lại, nonce hết hạn, chữ ký sai, ví đã thuộc user khác | AC-01 / Trả đúng mã lỗi HTTP | `[ ] PASS` |
@@ -224,11 +233,11 @@
 | **I-05** | Đồng bộ thời gian: `now_chain()` theo sát block Anvil; tua thời gian cấp quote mới chuẩn | AC-02 | `[ ] PASS` |
 | **I-06** | Đồng bộ ngược: Cập nhật `order_web3` tự động cập nhật `orders.status` cũ; Chặn route ghi đè cũ | AC-08 / Bảng ánh xạ 5.1 | `[ ] PASS` |
 | **I-07** | Giỏ 3 shop: Tạo đúng 3 đơn 1 group, tổng token khớp lệnh, Indexer xóa đúng giỏ hàng | AC-14 | `[ ] PASS` |
-| **A-01** | Mọi API yêu cầu token: Không token hoặc token hết hạn trả HTTP 401 | Mục 15 (P0-01) | `[ ] PASS` |
-| **A-02** | Kiểm tra quyền Role: User/Seller gọi API Admin bị chặn HTTP 403; Shipper chỉ xem đơn gán | Mục 15 (P0-02) | `[ ] PASS` |
+| **A-01** | Mọi API yêu cầu token: Không token hoặc token hết hạn trả HTTP 401 | Mục 15 (P0-01) | `[~] pass cục bộ` |
+| **A-02** | Kiểm tra quyền Role: User/Seller gọi API Admin bị chặn HTTP 403; Shipper chỉ xem đơn gán | Mục 15 (P0-02) | `[~] pass cục bộ` |
 | **A-03** | Kiểm tra sở hữu dữ liệu: Xem đơn, giỏ, shop của người khác bị 403 hoặc 404 | Mục 15 (P0-03) | `[ ] PASS` |
-| **A-04** | Đăng ký tài khoản với role `admin` hoặc `shipper` bị từ chối | Mục 15 (P0-02) | `[ ] PASS` |
-| **A-05** | Đua tranh đặt hàng (Race condition): Tồn kho không bao giờ bị âm | Mục 15 (P0-05) | `[ ] PASS` |
+| **A-04** | Đăng ký tài khoản với role `admin` hoặc `shipper` bị từ chối | Mục 15 (P0-02) | `[~] pass cục bộ` |
+| **A-05** | Đua tranh đặt hàng (Race condition): Tồn kho không bao giờ bị âm | Mục 15 (P0-05) | `[~] một phần (chặn nhờ CHECK, chưa FOR UPDATE)` |
 | **A-06** | Giới hạn brute-force: Nhập sai PIN hoặc Password quá 5 lần bị khóa tạm | Mục 15 (P0-05) | `[ ] PASS` |
 | **A-07** | Endpoint `/api/shops/migrate` đã bị xóa bỏ; Không còn API cấp số dư vô hạn | Mục 15 (P0-04) | `[ ] PASS` |
 
@@ -237,7 +246,7 @@
 ### 5.3. Frontend Logic & Unit Test Suite (Vitest)
 | Mã test | Mô tả ca kiểm thử | Kết quả mong đợi | Tình trạng |
 | :---: | :--- | :--- | :---: |
-| **F-01** | Hàm định dạng `formatVND`: Kiểm tra số nguyên, làm tròn, số 0, số cực lớn, không còn ký hiệu `$` | Chuẩn định dạng tiếng Việt | `[ ] PASS` |
+| **F-01** | Hàm định dạng `formatVND`: Kiểm tra số nguyên, làm tròn, số 0, số cực lớn, không còn ký hiệu `$` | Chuẩn định dạng tiếng Việt | `[~] pass cục bộ` |
 | **F-02** | Reducer nạp tiền (`depositReducer`): Đủ allowance bỏ bước approve, từ chối ví (4001), hết hạn quote | Chuyển state chính xác | `[ ] PASS` |
 | **F-03** | Ánh xạ lỗi tiếng Việt: `BATCH_TOO_LARGE`, `FEE_CAP_CHANGED`, `Invalid batch size` | Hiển thị thông báo dễ hiểu | `[ ] PASS` |
 | **F-04** | Client API chung: Tự gắn `Authorization`, tự động xóa token và chuyển trang khi gặp 401 | Hoạt động thông suốt | `[ ] PASS` |
@@ -283,3 +292,12 @@
 ## 7. QUẢN LÝ RỦI RO & PHƯƠNG ÁN CẮT GIẢM PHẠM VI (SCOPE CONTINGENCY)
 
 Nếu tiến độ bị trễ so với các cột mốc quy định, nhóm sẽ kích hoạt quy tắc cắt giảm phạm vi theo thứ tự ưu tiên dưới đây nhằm bảo toàn tiến độ bảo vệ:
+
+| Thứ tự cắt | Hạng mục cắt giảm | Điều kiện kích hoạt | Nguồn |
+| :---: | :--- | :--- | :---: |
+| 1 | Giao diện rút khoản chờ rút (`claimPending`) và màn hình Merchant nâng cao | Trễ M2 quá 3 ngày | BRD mục 9 |
+| 2 | Giao diện thanh toán bằng ETH (contract và test vẫn giữ) | Còn là hạng mục "nếu còn thời gian" | BRD mục 2 |
+| 3 *(đề xuất, cần nhóm xác nhận)* | Màn hình Admin ánh xạ danh mục ➔ nhóm chính sách (seed bằng SQL) | Trễ M3 | - |
+| 4 *(đề xuất, cần nhóm xác nhận)* | Thu hẹp E2E tự động còn E-01, E-03; các ca còn lại chạy thủ công có biên bản | Trễ M4 | - |
+
+**Không được cắt:** luồng chính (liên kết ví ➔ báo giá ➔ ký quỹ ➔ giao hàng ➔ giải ngân/tranh chấp), **P0-01 và P0-02** (SDD 16.4), test contract T-01…T-34 và đối soát số dư (AC-10). Tuần 9–10 chỉ kiểm thử, sửa lỗi và demo; không thêm tính năng (BRD mục 9).

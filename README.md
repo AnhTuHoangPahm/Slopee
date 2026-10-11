@@ -30,9 +30,16 @@ pip install -r requirements.txt
 ```
 DB_PASSWORD: your_databse_password
 ```
+- Backend env: copy `backend/.env.example` to `backend/.env` and set a random `SECRET_KEY`
+  (the app refuses to start without it unless `SLOPEE_ENV=development`).
 - Database creation:  
 ```shell
 python init_db.py
+```
+- Create the admin account (there is no default admin anymore):  
+```shell
+cd backend
+flask --app app seed-admin
 ```
 
 **Then** (each line run in separate shells):
@@ -48,7 +55,7 @@ Use your favourite browser to access the page.
 - Basic e-commerce features: **Product Listing, Cart, Checkout, Order Management, User Authentication**, etc.
 - Basic management features: **Product Management, Order Management, User Account Management**, etc.
 - Other features: **Product Reviews, Product Ratings, Product Search**, **Game**, etc.
-> admin account: username: admin, password: admin
+> Admin accounts are created with `flask --app app seed-admin` (password ≥ 12 chars).
 
 ## Testing
 See [test](test/) folder for some basic tests, written by our beloved AG  
@@ -57,6 +64,8 @@ See [test](test/) folder for some basic tests, written by our beloved AG
 pytest test/ -v
 ```  
 (-v stands for 'more verbose', is optional)
+- Integration/race-condition tests run against a **real MySQL** (`DB_HOST`/`DB_USER`/`DB_PASSWORD`); they create and drop a throw-away `slopee_test_<pid>` database and are skipped when MySQL is unreachable. CI uses a MySQL service (`.github/workflows/tests.yml`).
+- Money is stored and handled as whole VND (`DECIMAL(15,0)`). For an existing database run `backend/migrations/0001_money_to_vnd.sql` (or recreate it with `init_db.py`).
   
 There are [Playwright](https://playwright.dev/) (UI: Firefox only) tests to run as well  
 **First**, install Playwright (no browsers, we install later):  

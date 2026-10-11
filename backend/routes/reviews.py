@@ -1,19 +1,24 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 import uuid
 from routes.auth import get_db_connection
+from auth_utils import require_auth
 
 reviews_bp = Blueprint('reviews', __name__)
 
 @reviews_bp.route('/<product_id>', methods=['POST'])
+@require_auth
 def add_review(product_id):
-    data = request.json
-    user_id = data.get('userId')
-    rating = int(data.get('rating', 0))
+    data = request.get_json(silent=True) or {}
+    user_id = g.user_id
+    try:
+        rating = int(data.get('rating', 0))
+    except (TypeError, ValueError):
+        rating = 0
     comment = data.get('comment', '')
     images = data.get('images', [])
     
-    if not user_id or not (1 <= rating <= 5) or not comment.strip():
-        return jsonify({"error": "Valid User ID, a 1-5 rating, and a written comment are required."}), 400
+    if not (1 <= rating <= 5) or not comment.strip():
+        return jsonify({"error": "A 1-5 rating, and a written comment are required."}), 400
         
     conn = get_db_connection()
     try:

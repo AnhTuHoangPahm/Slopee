@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import MyOrders from './MyOrders';
 import { updateProfileAPI, updateUsernameAPI, updatePasswordAPI, requestDeletionAPI, fetchUserReviewsAPI } from '../api/auth';
+import { getUser, updateStoredUser } from '../api/http';
 
 export default function UserSettings() {
     const navigate = useNavigate();
-    const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')));
+    const [user, setUser] = useState(getUser());
 
     const [activeTab, setActiveTab] = useState('profile');
     const [loading, setLoading] = useState(false);
@@ -39,7 +40,7 @@ export default function UserSettings() {
         e.preventDefault();
         setLoading(true);
         try {
-            await updateProfileAPI(user.id, bio);
+            await updateProfileAPI(bio);
             showMsg("Bio profile updated.");
         } catch (err) {
             showMsg(err.message, 'error');
@@ -51,10 +52,10 @@ export default function UserSettings() {
         e.preventDefault();
         setLoading(true);
         try {
-            await updateUsernameAPI(user.id, newUsername);
+            await updateUsernameAPI(newUsername);
             // Must rewrite local session to prevent corruption
             const updatedUser = { ...user, username: newUsername };
-            localStorage.setItem('user', JSON.stringify(updatedUser));
+            updateStoredUser(updatedUser);
             setUser(updatedUser);
             showMsg("Username changed.");
         } catch (err) {
@@ -67,7 +68,7 @@ export default function UserSettings() {
         e.preventDefault();
         setLoading(true);
         try {
-            await updatePasswordAPI(user.id, oldPassword, newPassword);
+            await updatePasswordAPI(oldPassword, newPassword);
             showMsg("Password changed.");
             setOldPassword('');
             setNewPassword('');
@@ -82,7 +83,7 @@ export default function UserSettings() {
         if (!window.confirm("WARNING: This action is irreversible. Are you sure?")) return;
         setLoading(true);
         try {
-            await requestDeletionAPI(user.id, deletePass);
+            await requestDeletionAPI(deletePass);
             showMsg("Deletion request sent.");
             setDeletePass('');
         } catch (err) {
@@ -93,7 +94,7 @@ export default function UserSettings() {
 
     const fetchMyReviews = async () => {
         try {
-            const data = await fetchUserReviewsAPI(user.id);
+            const data = await fetchUserReviewsAPI();
             setReviews(data.reviews);
         } catch (err) {
             showMsg("Failed to fetch reviews.", "error");

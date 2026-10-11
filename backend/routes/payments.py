@@ -1,8 +1,11 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from werkzeug.security import check_password_hash
 import pymysql
 import uuid
 import os
+
+from auth_utils import require_auth
+from money import to_vnd, format_vnd, InvalidMoney
 
 payments_bp = Blueprint('payments', __name__)
 
@@ -15,8 +18,10 @@ def get_db_connection():
         cursorclass=pymysql.cursors.DictCursor
     )
 
-@payments_bp.route('/<user_id>', methods=['GET'])
-def get_payment_methods(user_id):
+@payments_bp.route('/', methods=['GET'])
+@require_auth
+def get_payment_methods():
+    user_id = g.user_id
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
@@ -27,21 +32,22 @@ def get_payment_methods(user_id):
         conn.close()
 
 @payments_bp.route('/', methods=['POST'])
+@require_auth
 def add_payment_method():
-    data = request.json
-    user_id = data.get('userId')
+    data = request.get_json(silent=True) or {}
+    user_id = g.user_id
     method_type = data.get('methodType', 'bank')
     provider_name = data.get('providerName', 'Default Bank')
     account_number = data.get('accountNumber', 'xxxx0000')
 
     method_id = str(uuid.uuid4())
-    # $10k fake balance automatically granted to prototype logic
+    # S-04: không còn cấp số dư giả lập; phương thức mới luôn bắt đầu với số dư 0.
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
             cursor.execute(
                 "INSERT INTO paymentMethods (id, userId, methodType, providerName, accountNumber, balance) VALUES (%s, %s, %s, %s, %s, %s)",
-                (method_id, user_id, method_type, provider_name, account_number, 10000.00)
+                (method_id, user_id, method_type, provider_name, account_number, 0)
             )
             conn.commit()
             return jsonify({"message": "Payment method added successfully!"}), 201
@@ -49,9 +55,10 @@ def add_payment_method():
         conn.close()
 
 @payments_bp.route('/checkout', methods=['POST'])
+@require_auth
 def execute_checkout():
-    data = request.json
-    user_id = data.get('userId')
+    data = request.get_json(silent=True) or {}
+    user_id = g.user_id
     payment_method_id = data.get('paymentMethodId')
     pass_phrase = data.get('passPhrase')
     cart_item_ids = data.get('cartItemIds', [])
@@ -69,7 +76,7 @@ def execute_checkout():
                 return jsonify({"error": "Invalid 6-Digit Payment Passphrase!"}), 401
                 
             # 2. Lock items and calculate totals, grouping items by Seller Shop effectively
-            total_sum = 0
+            total_sum = 0  # VND, số nguyên
             items_payload = []
             
             # Use placeholders for querying multiple items natively
@@ -91,27 +98,26 @@ def execute_checkout():
             for item in cart_items:
                 if item['inStock'] < item['quantity']:
                     return jsonify({"error": f"Insufficient stock for Product #{item['productId']} during checkout race!"}), 400
-                total_sum += float(item['unitPrice'] * item['quantity'])
+                total_sum += to_vnd(item['unitPrice']) * int(item['quantity'])
                 items_payload.append(item)
                 
             # 3. Check Buyer's Payment Balance
-            buyer_balance = 0
+            buyer_balance = 0  # VND, số nguyên
             buyer_method_type = 'bank'
             if payment_method_id:
                 if payment_method_id == 'CASH_ON_DELIVERY':
                     buyer_method_type = 'cash'
-                    buyer_balance = 99999999.0  # Bypass balance checks logically
-                    payment_method_id = None    # Set FK to null logically
+                    payment_method_id = None    # Set FK to null logically; COD bỏ qua kiểm tra số dư
                 else:
                     cursor.execute("SELECT methodType, balance FROM paymentMethods WHERE id=%s AND userId=%s", (payment_method_id, user_id))
                     pm = cursor.fetchone()
                     if not pm:
                         return jsonify({"error": "Select payment method does not exist."}), 404
-                    buyer_balance = float(pm['balance'])
+                    buyer_balance = to_vnd(pm['balance'])
                     buyer_method_type = pm['methodType']
                 
                 if buyer_method_type != 'cash' and buyer_balance < total_sum:
-                    return jsonify({"error": f"Insufficient funds. You require ${total_sum} but your balance is only ${buyer_balance}!"}), 400
+                    return jsonify({"error": f"Insufficient funds. You require {format_vnd(total_sum)} but your balance is only {format_vnd(buyer_balance)}!"}), 400
             else:
                 return jsonify({"error": "Payment Method Required"}), 400
                 
@@ -124,7 +130,7 @@ def execute_checkout():
             # Group distributions to Sellers safely
             shop_payouts = {}
             for item in items_payload:
-                cost = float(item['unitPrice'] * item['quantity'])
+                cost = to_vnd(item['unitPrice']) * int(item['quantity'])
                 shop_payouts[item['shopId']] = shop_payouts.get(item['shopId'], 0) + cost
                 
             for shop_id, payout in shop_payouts.items():
@@ -158,6 +164,9 @@ def execute_checkout():
             conn.commit()
             return jsonify({"message": f"Successfully completed. Receipt generated!"}), 200
             
+    except InvalidMoney as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         conn.rollback()
         return jsonify({"error": "Transaction Failed: " + str(e)}), 500
@@ -165,8 +174,9 @@ def execute_checkout():
         conn.close()
 
 @payments_bp.route('/orders/<order_id>', methods=['PUT'])
+@require_auth
 def update_order_status(order_id):
-    data = request.json
+    data = request.get_json(silent=True) or {}
     new_status = data.get('status')
     if new_status not in ['cancelled', 'received']:
         return jsonify({"error": "Invalid order status transformation."}), 400
@@ -183,8 +193,10 @@ def update_order_status(order_id):
     finally:
         conn.close()
 
-@payments_bp.route('/orders/<user_id>', methods=['GET'])
-def get_orders(user_id):
+@payments_bp.route('/orders', methods=['GET'])
+@require_auth
+def get_orders():
+    user_id = g.user_id
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:

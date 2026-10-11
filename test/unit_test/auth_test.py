@@ -52,6 +52,12 @@ def test_login_success(client, mocker, mock_db_cursor):
     assert data['message'] == "Login successful"
     assert data['user']['name'] == "Test User"
     assert data['user']['role'] == "user"
+
+    # P0-01: login phải trả token ký, giải mã ra đúng danh tính
+    from auth_utils import verify_token
+    payload = verify_token(data['token'])
+    assert payload == {'uid': 1, 'role': 'user'}
+    assert data['expiresIn'] > 0
     
     # ADVANCED ASSERTION: Verify the SQL query was actually executed with the correct username!
     mock_db_cursor.execute.assert_called_once()

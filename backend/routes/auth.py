@@ -1,10 +1,14 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from werkzeug.security import generate_password_hash, check_password_hash
 import pymysql
 import uuid
 import os
 
+from auth_utils import issue_token, get_token_ttl, require_auth
+
 auth_bp = Blueprint('auth', __name__)
+
+ALLOWED_SIGNUP_ROLES = ('user', 'seller')
 
 def get_db_connection():
     return pymysql.connect(
@@ -17,8 +21,10 @@ def get_db_connection():
 
 @auth_bp.route('/signup', methods=['POST'])
 def signup():
-    data = request.json
-    role = data.get('role', 'user') # 'user' or 'seller'
+    data = request.get_json(silent=True) or {}
+    role = data.get('role', 'user') # chỉ cho phép 'user' hoặc 'seller'
+    if role not in ALLOWED_SIGNUP_ROLES:
+        return jsonify({"error": "Invalid role. Only 'user' or 'seller' can be registered."}), 403
     name = data.get('name')
     email = data.get('email')
     phone = data.get('phone')
@@ -69,7 +75,7 @@ def signup():
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     username = data.get('username')
     password = data.get('password')
 
@@ -90,6 +96,8 @@ def login():
             if user and check_password_hash(user['passwordHash'], password):
                 return jsonify({
                     "message": "Login successful",
+                    "token": issue_token(user['userId'], user['role']),
+                    "expiresIn": get_token_ttl(),
                     "user": {
                         "id": user['userId'],
                         "name": user['name'],
@@ -105,12 +113,13 @@ def login():
 
 # Feature H: Deletion Request Pipeline replacing immediate cascade logic
 @auth_bp.route('/account/request-deletion', methods=['POST'])
+@require_auth
 def request_account_deletion():
-    data = request.json
-    user_id = data.get('userId')
+    data = request.get_json(silent=True) or {}
+    user_id = g.user_id
     password = data.get('password')
     
-    if not user_id or not password:
+    if not password:
         return jsonify({"error": "Missing authorization vectors."}), 400
         
     conn = get_db_connection()
@@ -133,9 +142,10 @@ def request_account_deletion():
 
 # Feature H: Profile Overrides
 @auth_bp.route('/profile', methods=['PUT'])
+@require_auth
 def update_profile():
-    data = request.json
-    user_id = data.get('userId')
+    data = request.get_json(silent=True) or {}
+    user_id = g.user_id
     bio = data.get('bio', '')
     
     conn = get_db_connection()
@@ -148,9 +158,10 @@ def update_profile():
         conn.close()
 
 @auth_bp.route('/username', methods=['PUT'])
+@require_auth
 def update_username():
-    data = request.json
-    user_id = data.get('userId')
+    data = request.get_json(silent=True) or {}
+    user_id = g.user_id
     new_username = data.get('newUsername')
     
     if not new_username or len(new_username) <= 3:
@@ -171,9 +182,10 @@ def update_username():
         conn.close()
 
 @auth_bp.route('/password', methods=['PUT'])
+@require_auth
 def update_password():
-    data = request.json
-    user_id = data.get('userId')
+    data = request.get_json(silent=True) or {}
+    user_id = g.user_id
     old_password = data.get('oldPassword')
     new_password = data.get('newPassword')
     
@@ -198,8 +210,10 @@ def update_password():
     finally:
         conn.close()
 
-@auth_bp.route('/reviews/<user_id>', methods=['GET'])
-def get_user_reviews(user_id):
+@auth_bp.route('/reviews/me', methods=['GET'])
+@require_auth
+def get_user_reviews():
+    user_id = g.user_id
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:

@@ -4,6 +4,8 @@ import { fetchProductsAPI } from '../api/products';
 import { addToCartAPI } from '../api/carts';
 import Navbar from '../components/Navbar';
 import '../assets/home.css';
+import { getUser } from '../api/http';
+import { formatVND } from '../utils/formatVND';
 
 export default function Home() {
     const [products, setProducts] = useState([]);
@@ -27,7 +29,7 @@ export default function Home() {
     };
 
     const navigate = useNavigate();
-    const user = JSON.parse(localStorage.getItem('user'));
+    const user = getUser();
 
     const [toasts, setToasts] = useState([]);
 
@@ -97,7 +99,7 @@ export default function Home() {
                                 </div>
                                 <div className="product-info">
                                     <h4 className="product-title">{p.name}</h4>
-                                    <div className="product-price">${p.unitPrice}</div>
+                                    <div className="product-price">{formatVND(p.unitPrice)}</div>
                                     <div className="product-meta">
                                         <span style={{ color: '#ee4d2d', fontWeight: 'bold' }}>{p.averageRating > 0 ? `★ ${p.averageRating}` : 'No Ratings'}</span>
                                         <span>Sold by {p.shopName}</span>
