@@ -1,3 +1,4 @@
+import logging
 import os
 
 import click
@@ -10,8 +11,15 @@ load_dotenv()  # đọc backend/.env (SECRET_KEY, DB_*, ...) trước khi nạp 
 import config
 
 # Initialize flask app
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
+
 app = Flask(__name__)
 app.config.from_object(config.Config)
+app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024  # P0-06: body tối đa 1 MB
+
+# P0-06: 404/405/500... luôn trả JSON chung; chi tiết lỗi chỉ ghi vào log máy chủ
+from errors import register_app_errors
+register_app_errors(app)
 
 from json_provider import SlopeeJSONProvider
 app.json = SlopeeJSONProvider(app)
@@ -55,10 +63,18 @@ def seed_admin_command(username, name, email, password):
     click.echo(f"Admin '{username}' created.")
 
 
+@app.cli.command('migrate')
+@click.argument('action', default='up', type=click.Choice(['up', 'status']))
+def migrate_command(action):
+    """Chạy migration CSDL: flask --app app migrate [up|status]  (P0-04, không có route HTTP)."""
+    import migrate
+    migrate.main([action])
+
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "healthy", "message": "Slopee Backend is running!"})
 
 if __name__ == '__main__':
-    # Run the server in debug mode at port 5000
-    app.run(debug=True, port=5000)
+    # P0-06: debug chỉ bật khi SLOPEE_ENV=development (xem config.is_development); mặc định tắt
+    app.run(debug=app.config['DEBUG'], port=5000)

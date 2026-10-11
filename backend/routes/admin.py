@@ -3,8 +3,11 @@ import pymysql
 import os
 
 from auth_utils import authenticate_request
+from errors import register_blueprint_errors
+from validation import json_body, get_str
 
 admin_bp = Blueprint('admin', __name__)
+register_blueprint_errors(admin_bp)
 
 
 @admin_bp.before_request
@@ -99,10 +102,8 @@ def get_admin_categories():
 
 @admin_bp.route('/categories', methods=['POST'])
 def create_category():
-    data = request.get_json(silent=True) or {}
-    name = data.get('name')
-    if not name:
-        return jsonify({"error": "Category name required"}), 400
+    data = json_body()
+    name = get_str(data, 'name', max_len=100, label='Category name', required_msg="Category name required")
         
     conn = get_db_connection()
     try:
@@ -110,17 +111,13 @@ def create_category():
             cursor.execute("INSERT INTO categories (name) VALUES (%s)", (name,))
             conn.commit()
             return jsonify({"message": "Category securely logged."}), 201
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
 
 @admin_bp.route('/categories/<int:cat_id>', methods=['PUT'])
 def rename_category(cat_id):
-    data = request.get_json(silent=True) or {}
-    name = data.get('name')
-    if not name:
-        return jsonify({"error": "Category name required"}), 400
+    data = json_body()
+    name = get_str(data, 'name', max_len=100, label='Category name', required_msg="Category name required")
         
     conn = get_db_connection()
     try:
@@ -145,7 +142,5 @@ def delete_category(cat_id):
             cursor.execute("DELETE FROM categories WHERE id=%s", (cat_id,))
             conn.commit()
             return jsonify({"message": "Global category permanently eliminated."}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
     finally:
         conn.close()

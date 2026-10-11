@@ -5,8 +5,13 @@ import os
 import json
 
 from auth_utils import require_auth
+from errors import ApiError, register_blueprint_errors
+from validation import json_body, get_int, get_str, invalid
 
 carts_bp = Blueprint('carts', __name__)
+register_blueprint_errors(carts_bp)
+
+MAX_QTY = 10000
 
 def get_db_connection():
     return pymysql.connect(
@@ -68,12 +73,14 @@ def fetch_cart():
 @carts_bp.route('/items', methods=['POST'])
 @require_auth
 def add_to_cart():
-    data = request.get_json(silent=True) or {}
-    user_id = g.user_id
-    product_id = data.get('productId')
-    quantity = int(data.get('quantity', 1))
-    selected_variants = data.get('selectedVariants', {})
-    
+    data = json_body()
+    user_id = g.user_id  # userId trong body bị bỏ qua (S-01)
+    product_id = get_str(data, 'productId', max_len=15, label='productId')
+    quantity = get_int(data, 'quantity', default=1, label='quantity', maximum=MAX_QTY)
+    selected_variants = data.get('selectedVariants') or {}
+    if not isinstance(selected_variants, dict):
+        raise invalid("selectedVariants must be an object")
+
     # Deterministic sorting for variant string matching
     variants_json = json.dumps(selected_variants, sort_keys=True)
 
@@ -113,34 +120,43 @@ def add_to_cart():
 @carts_bp.route('/items/<item_id>', methods=['PUT', 'DELETE'])
 @require_auth
 def manage_cart_item(item_id):
+    """P0-03: chỉ thao tác được trên dòng giỏ thuộc giỏ của chính mình; dòng của người khác -> 404."""
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
             if request.method == 'DELETE':
-                cursor.execute("DELETE FROM cartItems WHERE id=%s", (item_id,))
+                cursor.execute("""
+                    DELETE FROM cartItems
+                    WHERE id=%s AND cartId IN (SELECT id FROM carts WHERE userId=%s)
+                """, (item_id, g.user_id))
+                if cursor.rowcount == 0:
+                    raise ApiError("Item not found", 'not_found', 404)
                 conn.commit()
                 return jsonify({"message": "Item deleted."}), 200
-                
-            elif request.method == 'PUT':
-                data = request.get_json(silent=True) or {}
-                new_qty = int(data.get('quantity', 1))
-                if new_qty <= 0:
-                    return jsonify({"error": "Quantity must be > 0"}), 400
-                    
-                cursor.execute("""
-                    SELECT p.inStock FROM cartItems ci 
-                    JOIN products p ON ci.productId = p.id 
-                    WHERE ci.id=%s
-                """, (item_id,))
-                prod = cursor.fetchone()
-                if not prod:
-                    return jsonify({"error": "Item not found"}), 404
-                    
-                if new_qty > prod['inStock']:
-                    return jsonify({"error": "Exceeds available stock!"}), 400
-                    
-                cursor.execute("UPDATE cartItems SET quantity=%s WHERE id=%s", (new_qty, item_id))
-                conn.commit()
-                return jsonify({"message": "Quantity updated"}), 200
+
+            data = json_body()
+            new_qty = get_int(data, 'quantity', default=1, label='quantity', maximum=MAX_QTY)
+            if new_qty <= 0:
+                return jsonify({"error": "Quantity must be > 0"}), 400
+
+            cursor.execute("""
+                SELECT p.inStock FROM cartItems ci
+                JOIN products p ON ci.productId = p.id
+                JOIN carts c ON ci.cartId = c.id
+                WHERE ci.id=%s AND c.userId=%s
+            """, (item_id, g.user_id))
+            prod = cursor.fetchone()
+            if not prod:
+                raise ApiError("Item not found", 'not_found', 404)
+
+            if new_qty > prod['inStock']:
+                return jsonify({"error": "Exceeds available stock!"}), 400
+
+            cursor.execute("""
+                UPDATE cartItems SET quantity=%s
+                WHERE id=%s AND cartId IN (SELECT id FROM carts WHERE userId=%s)
+            """, (new_qty, item_id, g.user_id))
+            conn.commit()
+            return jsonify({"message": "Quantity updated"}), 200
     finally:
         conn.close()

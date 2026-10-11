@@ -36,6 +36,12 @@ DB_PASSWORD: your_databse_password
 ```shell
 python init_db.py
 ```
+- **Existing database** (created before the migration runner existed): apply pending schema changes with  
+```shell
+cd backend
+python migrate.py          # or: flask --app app migrate   (use `status` to list)
+```
+  This is required: login and checkout need the `authAttempts` table. There is no HTTP migration endpoint anymore.
 - Create the admin account (there is no default admin anymore):  
 ```shell
 cd backend
@@ -47,6 +53,8 @@ flask --app app seed-admin
 cd frontend && npm run dev
 cd backend && python app.py
 ```
+`debug` mode (and the dev `SECRET_KEY` fallback) is only enabled when `SLOPEE_ENV=development`; leave it unset in production.
+Wrong password / PIN is limited to `AUTH_MAX_ATTEMPTS` (default 5) tries, then locked for `AUTH_LOCK_SECONDS` (default 900).
   
 Use your favourite browser to access the page.  
  > Enjoy your stay
@@ -65,7 +73,7 @@ pytest test/ -v
 ```  
 (-v stands for 'more verbose', is optional)
 - Integration/race-condition tests run against a **real MySQL** (`DB_HOST`/`DB_USER`/`DB_PASSWORD`); they create and drop a throw-away `slopee_test_<pid>` database and are skipped when MySQL is unreachable. CI uses a MySQL service (`.github/workflows/tests.yml`).
-- Money is stored and handled as whole VND (`DECIMAL(15,0)`). For an existing database run `backend/migrations/0001_money_to_vnd.sql` (or recreate it with `init_db.py`).
+- Money is stored and handled as whole VND (`DECIMAL(15,0)`). For an existing database run `python migrate.py` in `backend/` (or recreate it with `init_db.py`).
   
 There are [Playwright](https://playwright.dev/) (UI: Firefox only) tests to run as well  
 **First**, install Playwright (no browsers, we install later):  

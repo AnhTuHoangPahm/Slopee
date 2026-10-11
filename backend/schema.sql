@@ -71,24 +71,6 @@ CREATE TABLE IF NOT EXISTS productVariants (
     foreign key (productId) references products (id) on delete cascade
 );
 
-CREATE TABLE IF NOT EXISTS reviews (
-	id varchar(36) PRIMARY KEY,
-    userId varchar(36) NOT NULL,
-    productId varchar(15) NOT NULL,
-    rating int NOT NULL check (rating >= 1 and rating <= 5), 
-    comment mediumtext,
-    createdAt timestamp NOT NULL default current_timestamp,
-    foreign key (productId) references products (id) on delete cascade, 
-    foreign key (userId) references users (id) on delete restrict 
-);
-
-CREATE TABLE IF NOT EXISTS reviewImages (
-    id varchar(36) PRIMARY KEY,
-    reviewId varchar(36) NOT NULL,
-    imageUrl varchar(500) NOT NULL,
-    foreign key (reviewId) references reviews (id) on delete cascade
-);
-
 CREATE TABLE IF NOT EXISTS carts (
 	id varchar(36) PRIMARY KEY,
 	userId varchar(36) NOT NULL,
@@ -104,7 +86,7 @@ CREATE TABLE IF NOT EXISTS cartItems (
     selectedVariants text,            
 	quantity int NOT NULL check (quantity > 0),
 	foreign key (cartId) references carts (id) on delete cascade,
-	foreign key (productId) references products (id) on delete restrict 
+	foreign key (productId) references products (id) on delete cascade
 );
 
 CREATE TABLE IF NOT EXISTS orders (
@@ -121,14 +103,14 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS orderLines (
 	id varchar(36) PRIMARY KEY,
 	orderId varchar(36),
-	productId varchar(15) NOT NULL,
+	productId varchar(15) NULL,
     selectedVariants text,            
     unitPrice decimal(15, 0) NOT NULL,
 	quantity int NOT NULL CHECK (quantity > 0),
     snapshotProductName varchar(255),
     snapshotShopName varchar(255),
     FOREIGN KEY (orderId) REFERENCES orders (id) on delete cascade,
-    FOREIGN KEY (productId) REFERENCES products (id) on delete restrict 
+    FOREIGN KEY (productId) REFERENCES products (id) on delete set null
 );
 
 CREATE TABLE IF NOT EXISTS reviews (
@@ -144,8 +126,16 @@ CREATE TABLE IF NOT EXISTS reviews (
 );
 
 CREATE TABLE IF NOT EXISTS reviewImages (
-    id int auto_increment PRIMARY KEY,
+    id varchar(36) PRIMARY KEY,
     reviewId varchar(36) NOT NULL,
     imageUrl varchar(500) NOT NULL,
     FOREIGN KEY (reviewId) REFERENCES reviews(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS authAttempts (
+    scope varchar(16) NOT NULL,
+    subject varchar(80) NOT NULL,
+    failedCount int NOT NULL DEFAULT 0,
+    lockedUntil bigint NOT NULL DEFAULT 0,
+    PRIMARY KEY (scope, subject)
 );

@@ -13,10 +13,23 @@
 ### 1.1. File lõi (`backend/`)
 | File | Vai trò | Hàm / đối tượng | Làm gì |
 | --- | --- | --- | --- |
-| `app.py` | Điểm vào Flask | `app` | Tạo Flask, nạp `config`, gắn `SlopeeJSONProvider`, bật CORS (`localhost:5173`), đăng ký blueprint |
+| `app.py` | Điểm vào Flask | `app` | Tạo Flask, nạp `config`, gắn `SlopeeJSONProvider`, bật CORS (`localhost:5173`), đăng ký blueprint, `register_app_errors`, `MAX_CONTENT_LENGTH` 1 MB; `app.run(debug=app.config['DEBUG'])` (chỉ `SLOPEE_ENV=development`) |
 | | | `health_check()` | `GET /api/health` → trạng thái server |
 | | | `seed_admin_command(username,name,email,password)` | CLI `flask --app app seed-admin`; gọi `admin_seed.seed_admin` |
-| `config.py` | Cấu hình | `Config` | `DB_*`, `SECRET_KEY` (qua `get_secret_key`), `AUTH_TOKEN_TTL_SECONDS` |
+| | | `migrate_command(action)` | CLI `flask --app app migrate [up\|status]`; gọi `migrate.main` |
+| `config.py` | Cấu hình | `Config`, `is_development()` | `DB_*`, `SECRET_KEY` (qua `get_secret_key`), `AUTH_TOKEN_TTL_SECONDS`, `DEBUG` (chỉ khi `SLOPEE_ENV=development`) |
+| `errors.py` | Lỗi chung (P0-06) | `ApiError(message, code, status, headers, extra)` | lỗi người dùng có chủ đích → JSON `{error, code}` |
+| | | `register_blueprint_errors(bp)`, `register_app_errors(app)` | `ApiError` → đúng status; `HTTPException` → JSON; ngoại lệ khác → `internal_error()` |
+| | | `internal_error(exc)` | ghi log chi tiết + traceback, trả 500 `{code: internal_error}` thông báo chung |
+| `validation.py` | Kiểm đầu vào (P0-06) | `json_body()` | body rỗng → `{}`; không phải JSON object → `ApiError 400 invalid_body` |
+| | | `get_str`, `get_int`, `as_int`, `get_bool`, `get_enum` | ép kiểu + giới hạn độ dài/khoảng, sai → 400 |
+| | | `validate_url`, `get_url_list` | chỉ `http(s)` tuyệt đối, ≤ 500 ký tự, không khoảng trắng/ký tự điều khiển |
+| `throttle.py` | Khóa tạm (P0-05) | `check(cur,scope,subject)` | ném `429 too_many_attempts` nếu đang khóa; trả số lần sai đang lưu |
+| | | `record_failure`, `reset`, `attempts_remaining` | tăng bộ đếm (khóa dòng), xóa khi thành công |
+| | | `password_subject(user_id\|username)`, `pin_subject(user_id)` | khóa đếm: `id:<userId>` hoặc `u:<sha256 username>`; scope `password`/`pin` |
+| `guards.py` | Guard (P0-03) | `is_web3_order(cursor, order_id)` | đơn có dòng `order_web3`; chưa có bảng (lỗi 1146) → `False` |
+| `migrate.py` | Runner migration (P0-04) | `split_sql`, `discover`, `migrate(conn)`, `mark_applied`, `status`, `main` | `python migrate.py [up\|status\|mark-applied]`; `schema_migrations`, `GET_LOCK`, `.sql` và `.py` |
+| `dbschema.py` | Tiện ích migration | `column_exists`, `add_column_if_missing`, `index_exists`, `foreign_keys`, `ensure_foreign_key` | dùng `DATABASE()`, idempotent |
 | `auth_utils.py` | Xác thực token | `get_secret_key()` | Đọc `SECRET_KEY` từ env; khóa dev chỉ khi `SLOPEE_ENV` = development/test, nếu không ném `RuntimeError` |
 | | | `get_token_ttl()` | TTL giây từ env (mặc định 3600) |
 | | | `issue_token(user_id, role)` | Ký token `{uid, role}` |
@@ -28,10 +41,13 @@
 | | | `InvalidMoney` | Ngoại lệ dữ liệu tiền sai |
 | `json_provider.py` | JSON | `SlopeeJSONProvider` | `Decimal` → `int` (nếu nguyên) / `float` |
 | `admin_seed.py` | Seed admin | `seed_admin(conn, username, password, name, email, phone)` → `user_id` | Validate (username > 3 ký tự, mật khẩu ≥ 12), kiểm trùng, chèn `users` + `credentials` (role `admin`); ném `ValueError` |
-| `init_db.py` | Khởi tạo DB | `create_connection()`, `init_database()` | Tạo DB và chạy `schema.sql` (tách theo `;`); **không** tạo admin |
-| `schema.sql` | Lược đồ | — | 14 bảng gốc (mục 1.4); 4 cột tiền `DECIMAL(15,0)` |
-| `migrations/0001_money_to_vnd.sql` | Migration tay | — | `MODIFY` 4 cột tiền sang `DECIMAL(15,0)` |
-| `.env.example` | Mẫu env | — | `SECRET_KEY`, `AUTH_TOKEN_TTL_SECONDS`, `SLOPEE_ENV`, `DB_*` |
+| `init_db.py` | Khởi tạo DB | `create_connection()`, `init_database()` | Tạo DB, chạy `schema.sql` (tách bằng `migrate.split_sql`); DB mới → `mark_applied` mọi migration; DB cũ → nhắc chạy `migrate.py`; **không** tạo admin |
+| `schema.sql` | Lược đồ mới nhất | — | 14 bảng gốc + `authAttempts` (mục 1.4); 4 cột tiền `DECIMAL(15,0)`; `reviews`/`reviewImages` khai báo một lần |
+| `migrations/0001_money_to_vnd.sql` | Migration | — | `MODIFY` 4 cột tiền sang `DECIMAL(15,0)` |
+| `migrations/0002_product_fk_snapshots.py` | Migration | `upgrade(cursor)` | (thay route `/migrate` cũ) cột snapshot + backfill; `cartItems.productId` CASCADE; `orderLines.productId` NULL + SET NULL |
+| `migrations/0003_reviews_dedupe.py` | Migration | `upgrade(cursor)` | DB cũ: `comment NOT NULL`, bỏ trùng, `UNIQUE(userId,productId)`, FK `userId` CASCADE |
+| `migrations/0004_auth_attempts.sql` | Migration | — | tạo `authAttempts` |
+| `.env.example` | Mẫu env | — | `SECRET_KEY`, `AUTH_TOKEN_TTL_SECONDS`, `SLOPEE_ENV`, `DB_*`, `AUTH_MAX_ATTEMPTS`, `AUTH_LOCK_SECONDS` |
 
 ### 1.2. Route (`backend/routes/`)
 Mỗi file có `get_db_connection()` mở kết nối PyMySQL (trừ `products`, `reviews` import từ `routes.auth`).
@@ -39,12 +55,12 @@ Mỗi file có `get_db_connection()` mở kết nối PyMySQL (trừ `products`,
 #### `auth.py` — prefix `/api/auth`
 | Method + path | Auth | Request | Response | Hành vi chính |
 | --- | :-: | --- | --- | --- |
-| `POST /signup` | — | `name,email,phone,username,password,pass_phrase,role?` | 201 `{message}` | role chỉ `user`/`seller` (sai → 403); PIN đúng 6 chữ số; username > 3 ký tự; trùng email/phone/username → 400 |
-| `POST /login` | — | `username,password` | 200 `{message,token,expiresIn,user{id,role,name,email,...}}` | sai thông tin → 401 `Invalid username or password` |
-| `POST /account/request-deletion` | U | `password` | 200 `{message}` | đánh dấu yêu cầu xóa tài khoản để Admin xử lý; sai mật khẩu → 401 |
+| `POST /signup` | — | `name,email,phone,username,password,pass_phrase,role?` | 201 `{message}` | role chỉ `user`/`seller` (sai → 403); PIN đúng 6 chữ số; username 4–25 ký tự; email hợp lệ (≤ 50); phone 9–10 chữ số; trùng email/phone/username → 400 (đua song song → 409) |
+| `POST /login` | — | `username,password` | 200 `{message,token,expiresIn,user{id,role,name,email,...}}` | sai thông tin → 401 `Invalid username or password` (+ `attemptsRemaining`); sai 5 lần → khóa 15 phút, 429 `too_many_attempts` + `Retry-After` (kể cả username không tồn tại) |
+| `POST /account/request-deletion` | U | `password` | 200 `{message}` | đánh dấu yêu cầu xóa tài khoản để Admin xử lý; sai mật khẩu → 401; chung bộ đếm khóa với đăng nhập |
 | `PUT /profile` | U | `bio` | 200 `{message}` | cập nhật tiểu sử của chính mình |
 | `PUT /username` | U | `newUsername` | 200 / 400 / 409 | đổi tên đăng nhập (kiểm độ dài, trùng) |
-| `PUT /password` | U | `oldPassword,newPassword` | 200 / 401 | đổi mật khẩu (băm mới) |
+| `PUT /password` | U | `oldPassword,newPassword` | 200 / 401 / 429 | đổi mật khẩu (băm mới); sai mật khẩu cũ được đếm chung với đăng nhập |
 | `GET /reviews/me` | U | — | `{reviews:[...]}` | lịch sử đánh giá của chính mình |
 
 #### `products.py` — prefix `/api/products` (công khai)
@@ -53,44 +69,43 @@ Mỗi file có `get_db_connection()` mở kết nối PyMySQL (trừ `products`,
 | `GET /categories` | — | `{categories}` | danh sách danh mục |
 | `GET /?search=` | query `search` | `{time_taken_sec, items:[product+shopName+ảnh chính+averageRating]}` | tìm theo tên sản phẩm hoặc tên shop, chỉ `isActive` |
 | `GET /<product_id>` | — | `{product{..., images[], variants[]}}` / 404 | chi tiết sản phẩm |
-| `GET /<product_id>/reviews?offset=&limit=` | query | `{reviews[], stats{average,total}}` | đánh giá phân trang (mặc định limit 5) |
+| `GET /<product_id>/reviews?offset=&limit=` | query | `{reviews[], stats{average,total}}` / 400 | đánh giá phân trang (mặc định limit 5; `offset` ≥ 0, `limit` 1–50, sai → 400) |
 
 #### `reviews.py` — prefix `/api/reviews`
 | Method + path | Auth | Request | Response | Hành vi chính |
 | --- | :-: | --- | --- | --- |
-| `POST /<product_id>` | U | `rating(1-5),comment,images[]` | 201 `{message,reviewId}` / 403 / 409 | chỉ người **đã mua** mới đánh giá; mỗi người một đánh giá/sản phẩm; lưu ảnh vào `reviewImages` |
+| `POST /<product_id>` | U | `rating(1-5),comment,images[]` | 201 `{message,reviewId}` / 400 / 403 / 409 | chỉ người **đã mua** mới đánh giá; mỗi người một đánh giá/sản phẩm; `images` ≤ 5 URL `http(s)`, backend cấp UUID cho `reviewImages.id` |
 
 #### `carts.py` — prefix `/api/carts`
 | Hàm | Method + path | Auth | Request | Response | Hành vi chính |
 | --- | --- | :-: | --- | --- | --- |
 | `get_or_create_cart(cursor,user_id)` | (nội bộ) | | | `cart_id` | lấy/tạo giỏ `active` của user |
 | `fetch_cart` | `GET /` | U | — | `{cartId, items[]}` | giỏ của chính mình kèm thông tin sản phẩm |
-| `add_to_cart` | `POST /items` | U | `productId,quantity,selectedVariants?` | 200 / 400 / 404 | kiểm tồn kho; cộng dồn nếu đã có (không vượt tồn) |
-| `manage_cart_item` | `PUT\|DELETE /items/<item_id>` | U | `quantity` (PUT) | 200 / 400 / 404 | đổi số lượng (≤ tồn kho) hoặc xóa dòng |
+| `add_to_cart` | `POST /items` | U | `productId,quantity,selectedVariants?` | 200 / 400 / 404 | validate kiểu (`quantity` nguyên ≤ 10000); kiểm tồn kho; cộng dồn nếu đã có (không vượt tồn) |
+| `manage_cart_item` | `PUT\|DELETE /items/<item_id>` | U | `quantity` (PUT) | 200 / 400 / 404 | đổi số lượng (≤ tồn kho) hoặc xóa dòng; **chỉ dòng thuộc giỏ của mình**, của người khác → 404 |
 
 #### `payments.py` — prefix `/api/payments`
 | Hàm | Method + path | Auth | Request | Response | Hành vi chính |
 | --- | --- | :-: | --- | --- | --- |
 | `get_payment_methods` | `GET /` | U | — | `{methods[]}` | phương thức thanh toán của mình (kèm `balance` VND) |
-| `add_payment_method` | `POST /` | U | `methodType,providerName,accountNumber` | 201 | tạo phương thức, **số dư khởi tạo 0** |
-| `execute_checkout` | `POST /checkout` | U | `cartItemIds[],paymentMethodId` (hoặc `"CASH_ON_DELIVERY"`), `passPhrase` | 200 `{message}` / 400 / 401 / 404 | xác minh PIN → tải dòng giỏ của mình → kiểm tồn kho + số dư → trừ số dư người mua, cộng cho ví người bán, trừ tồn kho, tạo **một** `orders` (`paid`) + `orderLines`, xóa `cartItems`; mọi thứ trong một transaction |
-| `update_order_status` | `PUT /orders/<order_id>` | U | `status ∈ {cancelled,received}` | 200 / 400 | đổi trạng thái đơn cũ (⚠ chưa kiểm chủ đơn/trạng thái, chưa hoàn tiền/kho — P0-03) |
+| `add_payment_method` | `POST /` | U | `methodType,providerName,accountNumber` | 201 / 400 | tạo phương thức (`methodType` ∈ `bank|credit_card|cash`, độ dài có giới hạn), **số dư khởi tạo 0** |
+| `execute_checkout` | `POST /checkout` | U | `cartItemIds[],paymentMethodId` (hoặc `"CASH_ON_DELIVERY"`), `passPhrase` | 200 `{message}` / 400 / 401 / 404 / 409 / 429 | `_verify_pin` (PIN chưa đặt → 401 `pin_not_set`; sai 5 lần → 429; bộ đếm commit riêng) → **transaction tiền**: khóa `cartItems` của mình → khóa `products` (`isActive`) → đọc `shops` → khóa `paymentMethods` (người mua + người bán, `ORDER BY id FOR UPDATE`) → kiểm tồn kho/số dư theo giá đã khóa → `UPDATE … balance >= x`, cộng ví người bán, `UPDATE products … inStock >= qty` (kiểm `rowcount`) → tạo **một** `orders` (`paid`) + `orderLines`, xóa `cartItems`. Deadlock → 409 `checkout_conflict` |
+| `update_order_status` | `PUT /orders/<order_id>` | U | `status ∈ {cancelled,received}` | 200 / 400 / 404 / 409 | đổi trạng thái đơn cũ: chỉ **chủ đơn** (khác → 404), khóa dòng; đơn có `order_web3` → 409 `WEB3_ORDER_MANAGED`; chỉ `paid\|shipped→received`, `pending\|paid→cancelled` (sai → 409 `INVALID_STATE`); UPDATE kèm điều kiện trạng thái cũ. ⚠ hủy đơn vẫn **không hoàn tiền/kho** |
 | `get_orders` | `GET /orders` | U | — | `{orders:[{orderId,totalAmount,created_at,status,items[]}]}` | đơn của mình, nhóm theo đơn (🔲 thêm cờ khiếu nại Web3) |
 
 #### `shops.py` — prefix `/api/shops`
 | Hàm | Method + path | Auth | Request | Response | Hành vi chính |
 | --- | --- | :-: | --- | --- | --- |
-| `run_migration` | `GET /migrate` | — | — | text | ⚠ chạy `ALTER TABLE` công khai — **sẽ bị xóa ở P0-04** |
 | `setup_shop` | `POST /` | S | `name,description?` | 201 `{shopId}` / 400 / 403 | tạo shop cho seller (một shop/seller; phải có ≥ 1 phương thức thanh toán) |
 | `get_shop` | `GET /me` | S | — | shop + `products[]` (kèm ảnh, biến thể) / 404 | shop của chính seller |
 | `update_shop_name` | `PUT /me/name` | S | `name` | 200 | đổi tên shop của mình |
 | `add_product` | `POST /products` | S | `name,description?,categoryId?,inStock,unitPrice(VND nguyên)` | 201 `{productId}` / 400 / 403 | shop suy ra từ token; `unitPrice` qua `to_vnd` |
-| `update_product` | `PUT /products/<product_id>` | S | `unitPrice,inStock` | 200 / 400 | sửa giá/tồn (⚠ chưa kiểm chủ shop — P0-03) |
-| `delete_product` | `DELETE /products/<product_id>` | S | — | 200 | xóa sản phẩm (⚠ chưa kiểm chủ) |
-| `add_product_image` | `POST /products/<product_id>/images` | S | `imageUrl,isPrimary?` | 201 `{imageId}` | thêm ảnh |
-| `delete_product_image` | `DELETE /products/images/<image_id>` | S | — | 200 | xóa ảnh |
-| `add_product_variant` | `POST /products/<product_id>/variants` | S | `variantName,variantValue` | 201 `{variantId}` | thêm biến thể |
-| `delete_product_variant` | `DELETE /products/variants/<variant_id>` | S | — | 200 | xóa biến thể |
+| `update_product` | `PUT /products/<product_id>` | S | `unitPrice,inStock` | 200 / 400 / 404 | sửa giá/tồn; **chỉ sản phẩm thuộc shop của mình** (khác → 404); `inStock` nguyên 0…1.000.000 |
+| `delete_product` | `DELETE /products/<product_id>` | S | — | 200 / 404 | xóa sản phẩm của mình (lịch sử đơn giữ nhờ snapshot, `orderLines.productId` → NULL) |
+| `add_product_image` | `POST /products/<product_id>/images` | S | `imageUrl,isPrimary?` | 201 `{imageId}` / 400 / 404 | thêm ảnh cho sản phẩm của mình; `imageUrl` chỉ `http(s)` ≤ 500 ký tự |
+| `delete_product_image` | `DELETE /products/images/<image_id>` | S | — | 200 / 404 | xóa ảnh (JOIN tới `shops.sellerId` = mình) |
+| `add_product_variant` | `POST /products/<product_id>/variants` | S | `variantName,variantValue` | 201 `{variantId}` / 404 | thêm biến thể cho sản phẩm của mình |
+| `delete_product_variant` | `DELETE /products/variants/<variant_id>` | S | — | 200 / 404 | xóa biến thể (JOIN tới `shops.sellerId` = mình) |
 
 #### `admin.py` — prefix `/api/admin` (toàn bộ blueprint chỉ cho `A`, qua `before_request`)
 | Hàm | Method + path | Request | Response | Hành vi chính |
@@ -106,7 +121,9 @@ Mỗi file có `get_db_connection()` mở kết nối PyMySQL (trừ `products`,
 ### 1.3. Hợp đồng nội bộ quan trọng
 - `g.user_id` / `g.role` chỉ tồn tại sau `@require_auth`; **mọi route cần danh tính dùng `g.user_id`, không đọc từ body/URL**.
 - Tiền: DB `Decimal` → `to_vnd()` → `int`; so sánh/cộng bằng `int`; JSON ra là số.
-- Khởi tạo ngoại lệ: `InvalidMoney` → 400; `SignatureExpired`/`BadSignature` → 401 (do `authenticate_request`).
+- Khởi tạo ngoại lệ: `InvalidMoney` → 400; `SignatureExpired`/`BadSignature` → 401 (do `authenticate_request`); `ApiError` → status/`code` của nó; mọi ngoại lệ khác → 500 `internal_error` (chi tiết chỉ trong log). **Mỗi blueprint mới phải gọi `register_blueprint_errors(bp)`.**
+- Quyền sở hữu: tài nguyên không thuộc người gọi → **404** (không 403); sở hữu sản phẩm/ảnh/biến thể kiểm qua `shops.sellerId = g.user_id`.
+- Mọi route đọc body bằng `json_body()` (không dùng `request.get_json(silent=True) or {}`).
 
 ### 1.4. Bảng CSDL gốc (`schema.sql`)
 | Bảng | Mục đích | Cột chính / ghi chú |
@@ -118,10 +135,12 @@ Mỗi file có `get_db_connection()` mở kết nối PyMySQL (trừ `products`,
 | `categories` | danh mục | `id` INT, `name` |
 | `products` | sản phẩm | `id`(varchar 15), `categoryId`, `shopId`, `name`, `description`, `inStock`(CHECK ≥ 0), `unitPrice` DECIMAL(15,0), `isActive` |
 | `productImages`, `productVariants` | ảnh / biến thể | gắn `productId`; ảnh có `isPrimary` |
-| `reviews`, `reviewImages` | đánh giá (⚠ khai báo trùng, S-13) | `userId`, `productId`, `rating`, `comment` |
-| `carts`, `cartItems` | giỏ | `carts.status` `active|ordered`; `cartItems`: `cartId`, `productId`, `quantity`, `selectedVariants` |
+| `reviews`, `reviewImages` | đánh giá (khai báo một lần, S-13) | `reviews`: `userId`, `productId`, `rating`, `comment NOT NULL`, `UNIQUE(userId,productId)`; `reviewImages`: `id` VARCHAR(36) do backend cấp, `reviewId`, `imageUrl` |
+| `carts`, `cartItems` | giỏ | `carts.status` `active|ordered`; `cartItems`: `cartId`, `productId` (FK CASCADE), `quantity`, `selectedVariants` |
 | `orders` | đơn | `id`, `userId`, `paymentMethodId`, `created_at`, `status`(`pending|paid|shipped|cancelled|received`), `totalAmount` DECIMAL(15,0) |
-| `orderLines` | dòng đơn | `orderId`, `productId`, `selectedVariants`, `unitPrice`, `quantity`, `snapshotProductName`, `snapshotShopName` |
+| `orderLines` | dòng đơn | `orderId`, `productId` (NULL được, FK SET NULL), `selectedVariants`, `unitPrice`, `quantity`, `snapshotProductName`, `snapshotShopName` |
+| `authAttempts` | đếm sai mật khẩu/PIN (P0-05) | PK `(scope, subject)`, `failedCount`, `lockedUntil` (epoch giây, BIGINT) |
+| `schema_migrations` | migration đã chạy (do `migrate.py` tạo, không nằm trong `schema.sql`) | `version` (tên tệp), `appliedAt` |
 
 ---
 
@@ -173,14 +192,19 @@ Chưa có route guard theo role phía client (🔲 `RequireRole.jsx`); quyền t
 ## 3. Test ✅ (`test/`)
 | File | Phạm vi |
 | --- | --- |
-| `conftest.py` | fixture: `app`, `client`, `mock_db_cursor`, `make_auth_headers(user_id,role)`, `auth_headers`, `seller_headers`, `mysql_db` (DB tạm từ `schema.sql`), `db_conn` |
+| `conftest.py` | fixture: `app`, `client`, `mock_db_cursor`, `make_auth_headers(user_id,role)`, `auth_headers`, `seller_headers`, `mysql_db` (DB tạm từ `schema.sql`), `db_conn`; **`FakeCursor`/`fake_db(module)`** (trả dữ liệu theo nội dung SQL, `cur.on(fragment, rows, rowcount)`, `cur.executed(fragment)`), `fake_conn`, `attempts_store` (giả lập `authAttempts`) |
 | `unit_test/test_auth_token.py` | token ký/hết hạn/giả mạo, SECRET_KEY bắt buộc, header sai, route `/<userId>` đã biến mất |
 | `unit_test/test_p0_02_admin.py` | đăng ký chỉ user/seller, `admin_bp` chỉ admin, không xóa admin/chính mình, số dư mới = 0, `seed_admin` |
 | `unit_test/auth_test.py` | đăng nhập (trả token), đăng ký (validate) |
-| `unit_test/test_cart.py`, `test_products.py`, `test_checkout.py` | giỏ, sản phẩm (kiểm giá VND), checkout (tổng nguyên VND, thiếu tiền, COD) — mock DB |
+| `unit_test/test_cart.py`, `test_products.py`, `test_checkout.py` | giỏ, sản phẩm (kiểm giá VND), checkout (tổng nguyên VND, thiếu tiền, COD) — mock DB (`checkout_helpers.py` dựng dữ liệu giả dùng chung) |
+| `unit_test/test_p0_03_ownership.py` | A-03: đơn/giỏ/sản phẩm/ảnh/biến thể của người khác → 404 và không ghi gì; chuyển trạng thái đơn; `WEB3_ORDER_MANAGED`; hồ sơ/username chỉ theo token |
+| `unit_test/test_p0_04_migrations.py` | A-07: route migrate biến mất; `split_sql`; runner (thứ tự, bỏ qua đã chạy, lỗi không ghi nhận, khóa); `dbschema`; `schema.sql` không khai báo trùng; ảnh đánh giá có UUID |
+| `unit_test/test_p0_05_payment_security.py` | A-05/A-06: thứ tự khóa `FOR UPDATE`, `UPDATE` có điều kiện + `rowcount`, deadlock → 409, PIN chưa đặt → 401, khóa 5 lần (PIN, đăng nhập, đổi mật khẩu, xin xóa), mở khóa khi hết hạn |
+| `unit_test/test_p0_06_hardening.py` | lỗi chung không lộ chi tiết (+ có log), JSON body sai → 400, validate từng trường/URL ảnh/query, `debug` chỉ ở development |
 | `unit_test/test_money.py` | `to_vnd`, `format_vnd`, JSON provider, schema `DECIMAL(15,0)` |
 | `integration_test/test_checkout_race_mysql.py` | **MySQL thật**: nhiều người mua tranh tồn kho, không bán lố, tiền khớp; số tiền lưu là int VND |
 | `integration_test/test_products_api.py` | **MySQL thật**: `GET /api/products/` trả danh sách hợp lệ |
+| `integration_test/test_p0_mysql.py` | **MySQL thật** (chưa chạy khi viết): sở hữu đơn, đơn Web3, bấm thanh toán 2 lần chỉ ra 1 đơn, thanh toán chéo không deadlock, khóa đăng nhập/PIN, ảnh đánh giá ở strict mode, runner + migration 0002/0003 idempotent, xóa sản phẩm giữ lịch sử đơn |
 
 ---
 

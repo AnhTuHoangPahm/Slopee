@@ -53,10 +53,14 @@ HTTP request
    ▼  Blueprint route (Controller)   routes/*.py   ← kiểm quyền bằng @require_auth, parse JSON, validate, ghi SQL
    │      │ dùng
    │      ├── auth_utils.py   (xác thực, g.user_id / g.role)
+   │      ├── validation.py   (json_body, get_str/get_int, validate_url — P0-06)
+   │      ├── errors.py       (ApiError + handler lỗi chung gắn vào blueprint — P0-06)
+   │      ├── throttle.py     (khóa tạm sai mật khẩu/PIN, bảng authAttempts — P0-05)
+   │      ├── guards.py       (is_web3_order — P0-03)
    │      ├── money.py        (tiền VND số nguyên)
    │      └── get_db_connection() → PyMySQL (Model = bảng MySQL, không ORM)
    ▼
-JSON response ({"error": "..."} hoặc payload) + HTTP status
+JSON response ({"error": "...", "code": "..."} hoặc payload) + HTTP status
 ```
 
 - **Không có ORM, không có repository, không có service.** Logic nghiệp vụ và SQL nằm cùng hàm route. Mỗi route mở kết nối riêng (`get_db_connection()`) và đóng trong `finally`.
@@ -169,7 +173,7 @@ Dùng `now_system()` cho nonce ví, phiên, rate limit; dùng `now_chain()` cho 
 - Bảng/cột Slopee gốc: `camelCase` (`userId`, `cartItems`, `unitPrice`), khóa chính `VARCHAR(36)` UUID (riêng `products.id` là `VARCHAR(15)`, `categories.id` là INT).
 - Bảng/cột Web3 🔲: `snake_case` (`order_web3`, `checkout_groups`, `onchain_order_id`, `amount_raw`).
 - Tiền: `DECIMAL(15,0)` (VND) cho 4 cột Slopee; `VARCHAR(78)` cho số lượng token on-chain; mốc thời gian on-chain `BIGINT UNSIGNED` (giây UTC).
-- Migration 🔲: `NNN_tên.sql` đánh số, ghi `schema_migrations`, idempotent (hiện có `migrations/0001_money_to_vnd.sql`, sẽ đánh lại theo runner của P0-04).
+- Migration ✅ (P0-04): `migrations/NNNN_tên.sql|.py` chạy bằng `python migrate.py` (không có route HTTP), tên tệp ghi vào `schema_migrations`, khóa `GET_LOCK`, **idempotent** (DDL MySQL tự commit nên không rollback được). Hiện có `0001`–`0004`. `schema.sql` luôn là lược đồ mới nhất cho DB tạo mới và `init_db.py` đánh dấu các migration hiện có là đã áp dụng; thêm migration phải đồng thời cập nhật `schema.sql`. Migration Web3 (`001_wallets`…`015_shipper` trong SRS) nên đánh số từ `0005` để không trùng tiền tố. Bảng hạ tầng: `schema_migrations`, `authAttempts`.
 
 ### JavaScript / React
 | Đối tượng | Quy ước | Ví dụ |
@@ -186,7 +190,7 @@ Dùng `now_system()` cho nonce ví, phiên, rate limit; dùng `now_chain()` cho 
 Hàm `camelCase`, sự kiện/struct `PascalCase`, hằng `UPPER_SNAKE` (`QUOTE_TYPEHASH`), vai trò `*_ROLE`; một contract `SlopeeEscrowMaster`, `MockUSD` 6 decimals.
 
 ### Test
-- Python: `test/unit_test/test_*.py`, `test/integration_test/test_*.py`; hàm `test_<đối_tượng>_<hành_vi>`; test cần MySQL thật gắn `pytestmark = pytest.mark.mysql`.
+- Python: `test/unit_test/test_*.py`, `test/integration_test/test_*.py`; hàm `test_<đối_tượng>_<hành_vi>`; test cần MySQL thật gắn `pytestmark = pytest.mark.mysql`. Dữ liệu giả dùng chung đặt ở `conftest.py` hoặc module không bắt đầu bằng `test_` (vd. `unit_test/checkout_helpers.py`).
 - Frontend: `src/__tests__/*.test.{js,jsx}` (Vitest), `frontend/tests/*.spec.js` (Playwright).
 - Mã test của dự án (`T-xx` contract, `I-xx` tích hợp, `A-xx` API/bảo mật, `F-xx` frontend, `E-xx` E2E) theo `PROGRESS.md` mục 5.
 - Mã tham chiếu trong code/PR: `BR-xx`, `UC-xx`, `DD-xx`, `INV-xx`, `S-xx` (lỗ hổng), `P0-xx`.
@@ -198,10 +202,11 @@ Hàm `camelCase`, sự kiện/struct `PascalCase`, hằng `UPPER_SNAKE` (`QUOTE_
 - Token: `URLSafeTimedSerializer(SECRET_KEY, salt='slopee-auth-token-v1')`, payload `{uid, role}`, hết hạn theo `AUTH_TOKEN_TTL_SECONDS` (mặc định 3600). Token **không** kiểm lại DB.
 - Vai trò tài khoản: `user` (Buyer), `seller` (Merchant), `admin`; 🔲 thêm `shipper` (cuối ENUM `users.role`). Trọng tài là dịch vụ ký phía server, không phải tài khoản đăng nhập.
 - Ma trận: route công khai (đăng nhập, đăng ký, sản phẩm, danh mục, `/api/health`) · `@require_auth` (mọi user) · `@require_auth('seller')` (shop/sản phẩm) · `admin_bp` (`before_request` chỉ cho `admin`).
-- Quyền sở hữu tài nguyên: 🔲 P0-03 (chưa kiểm cho sản phẩm/ảnh/biến thể/cart item/đơn).
+- Quyền sở hữu tài nguyên ✅ (P0-03): id người dùng luôn lấy từ token (`g.user_id`), không từ body/URL. Cart item, đơn, phương thức thanh toán lọc theo `userId`; sản phẩm/ảnh/biến thể kiểm qua `products → shops.sellerId`. Tài nguyên không thuộc người gọi trả **404** (như không tồn tại), không phải 403. Đơn có dòng `order_web3` không đổi được bằng `PUT /api/payments/orders/:id` (`409 WEB3_ORDER_MANAGED`), và chuyển trạng thái theo bảng `paid|shipped→received`, `pending|paid→cancelled` (`409 INVALID_STATE`).
+- Chống dò mật khẩu/PIN ✅ (P0-05): sai 5 lần liên tiếp (`AUTH_MAX_ATTEMPTS`) → khóa `AUTH_LOCK_SECONDS` (mặc định 900 s), `429 too_many_attempts` + `Retry-After`, kể cả khi nhập đúng lúc đang khóa. Đăng nhập/đổi mật khẩu/xin xóa tài khoản dùng chung bộ đếm theo tài khoản (scope `password`); PIN thanh toán dùng scope `pin`; username không tồn tại cũng bị đếm (lưu băm). Bộ đếm `commit` riêng nên không bị rollback.
 
 ## 6. Xử lý lỗi
-- ✅ Hiện tại: `{"error": ...}` + 400/401/403/404/409/500; vẫn còn route trả `str(e)` cho client (nợ kỹ thuật, P0-06).
+- ✅ Hiện tại (P0-06): `{"error": ..., "code": ...}` + 400/401/403/404/409/413/429/500. Route ném `ApiError` cho lỗi người dùng; mọi ngoại lệ khác → `500 {"code": "internal_error"}` với thông báo chung, chi tiết + traceback chỉ ghi log máy chủ (`errors.py`, gắn vào từng blueprint bằng `register_blueprint_errors` và vào app bằng `register_app_errors`). **Không** trả `str(e)`. Body phải là JSON object (`json_body()` → `400 invalid_body`); giới hạn body 1 MB. Mã hiện có: `invalid_body`, `missing_field`, `invalid_field`, `not_found`, `already_exists`, `invalid_pin`, `pin_not_set`, `invalid_credentials`, `too_many_attempts`, `insufficient_stock`, `insufficient_funds`, `checkout_conflict`, `INVALID_STATE`, `WEB3_ORDER_MANAGED`, `internal_error`. Frontend chỉ xóa phiên với các mã trong `SESSION_ERROR_CODES` (401 sai PIN/mật khẩu **không** đăng xuất).
 - 🔲 Web3: ngoại lệ miền → mã HTTP + `code` (`WALLET_NOT_LINKED 409`, `WALLET_TAKEN 409`, `NONCE_INVALID 400`, `BAD_SIGNATURE 400`, `QUOTE_EXPIRED 410`, `INVALID_STATE 409`, `FORBIDDEN 403`, `POLICY_OUT_OF_RANGE 422`, `CHAIN_TX_FAILED 502`, `FEE_CAP_CHANGED 409`, `BATCH_TOO_LARGE 422`, `WEB3_ORDER_MANAGED`). Frontend ánh xạ lỗi contract/ví sang tiếng Việt ở một nơi (`lib/errors.js`).
 
 ## 7. Cấu hình
@@ -209,7 +214,9 @@ Hàm `camelCase`, sự kiện/struct `PascalCase`, hằng `UPPER_SNAKE` (`QUOTE_
 | --- | --- | --- |
 | `SECRET_KEY` | bắt buộc (trừ khi `SLOPEE_ENV` = `development`/`test`) | `auth_utils`, `config` |
 | `AUTH_TOKEN_TTL_SECONDS` | 3600 | `auth_utils` |
-| `SLOPEE_ENV` | (trống = production-like) | `auth_utils` |
+| `SLOPEE_ENV` | (trống = production-like) | `auth_utils`, `config` — chỉ `development` bật `debug` và khóa dev |
+| `AUTH_MAX_ATTEMPTS` | 5 | `throttle` |
+| `AUTH_LOCK_SECONDS` | 900 | `throttle` |
 | `DB_HOST/DB_USER/DB_PASSWORD/DB_NAME` | `localhost` / `root` (riêng `routes/auth.py`: `slopee`) / `` / `slopee_db` | mọi nơi mở kết nối |
 | 🔲 `RPC_URL`, `CHAIN_ID`, `ESCROW_ADDRESS`, `MOCKUSD_ADDRESS`, `QUOTE_SIGNER_KEY`, `ARBITRATOR_KEY`, `SHIPPER_KEY`, `POLL_SECONDS`, `CONFIRMATIONS`, `REORG_DEPTH` | — | Web3 |
 | 🔲 `platform_settings` (DB) | tỷ giá, `PLATFORM_FEE_BPS` (300), `QUOTE_TTL_SECONDS`, `DISPUTE_SIG_TTL_SECONDS` | Admin đổi không cần restart |
@@ -220,7 +227,7 @@ Khóa vận hành chỉ đọc một lần lúc khởi động vào `EnvKeySigne
 | Tầng | Công cụ | Cách làm |
 | --- | --- | --- |
 | Logic thuần (`money`, `auth_utils`, `admin_seed`) | pytest | không DB |
-| Route (mock con trỏ DB) | pytest + `client` + `mocker` | chỉ cho logic thuần; fixture `auth_headers`, `seller_headers`, `make_auth_headers` |
+| Route (mock con trỏ DB) | pytest + `client` + `fake_db` (`FakeCursor`) | `FakeCursor` trả dữ liệu theo nội dung SQL, kiểm được SQL/tham số đã chạy; `AttemptsStore` giả lập `authAttempts`; fixture `auth_headers`, `seller_headers`; chỉ cho logic/luồng, **không** chứng minh khóa dòng |
 | Route/tiền/tồn kho/phân quyền | pytest + **MySQL thật** | fixture `mysql_db` (DB `slopee_test_<pid>` từ `schema.sql`), `db_conn`; tự skip nếu không kết nối được |
 | Frontend | Vitest + Testing Library | mock `fetch` trong `src/__tests__/setup.js` |
 | E2E | Playwright (Firefox) | 🔲 ví EIP-1193 giả bằng khóa Anvil, nạp qua `addInitScript` |
@@ -230,6 +237,7 @@ Khóa vận hành chỉ đọc một lần lúc khởi động vào `EnvKeySigne
 ## 9. Nợ kỹ thuật và mâu thuẫn đã biết
 - `get_db_connection()` bị **lặp** ở `admin`, `auth`, `carts`, `payments`, `shops` (còn `products` và `reviews` import từ `routes.auth`); mặc định `DB_USER` không đồng nhất (`slopee` ở `auth.py`, `root` ở nơi khác) → luôn đặt `DB_USER` rõ ràng. Khi refactor, gom về một module `db.py`.
 - Hai đường import: code chạy với `backend/` trên `sys.path` (`from routes.auth import ...`), test dùng `backend.routes.*`; hai module này là hai object khác nhau (xem `AI_CONTEXT.md` mục 7).
-- Chưa kiểm chủ sở hữu tài nguyên (P0-03), còn `GET /api/shops/migrate` (P0-04), chưa `FOR UPDATE`/khóa thử sai (P0-05), `debug=True` và `str(e)` (P0-06).
+- Hủy đơn `paid` chưa hoàn tiền/tồn kho (S-05); COD vẫn cộng số dư người bán; `orders.userId` FK `RESTRICT`. Cần nhóm quyết hành vi.
+- Test MySQL mới của P0-03…06 (`integration_test/test_p0_mysql.py`) và migration `0002`/`0003` chưa được chạy trên MySQL thật khi viết.
 - SDD ghi `lib/client.js`/`lib/format.js`; code là `api/http.js`/`utils/formatVND.js`.
-- `schema.sql` khai báo trùng `reviews`/`reviewImages` (S-13).
+- `backend/schema.txt` là bản schema cũ (DECIMAL(11,2), khai báo trùng) không còn được dùng — nên xóa.

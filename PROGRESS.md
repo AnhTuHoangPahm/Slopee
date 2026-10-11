@@ -45,19 +45,23 @@
 | :--- | :--- | :---: | :---: | :---: | :---: |
 | **P0-01** | Lớp xác thực token ký (`itsdangerous`, `SECRET_KEY` từ env, `AUTH_TOKEN_TTL_SECONDS`), decorator `require_auth`, loại bỏ `userId` từ body/URL, lưu token tại `sessionStorage` | S-01, S-12 | **B** | `[~] Đã code, chờ review` | `#PR-` |
 | **P0-02** | Đăng ký chỉ cho phép role `user` / `seller`; Khóa `admin_bp`; Bỏ route cấp số dư giả lập vô hạn; Seed tài khoản admin bằng CLI | S-02, S-03, S-04, S-10 | **B** | `[~] Đã code, chờ review` | `#PR-` |
-| **P0-03** | Kiểm tra quyền sở hữu tài nguyên (đơn hàng, giỏ hàng, shop, sản phẩm, payment method); Chặn ghi đè `orders.status` đối với đơn Web3 (`WEB3_ORDER_MANAGED`) | S-05, S-06, S-11 | **A** | `[ ] Sẵn sàng` | `#PR-` |
-| **P0-04** | Xóa bỏ endpoint `GET /api/shops/migrate`; Viết runner migration tự động đánh số qua bảng `schema_migrations`; Dọn schema trùng `reviews` / `reviewImages` (sửa lỗi MySQL strict 1364) | S-07, S-13 | **A** | `[ ] Sẵn sàng` | `#PR-` |
-| **P0-05** | Thanh toán an toàn: Lock dòng bằng `SELECT ... FOR UPDATE`, `UPDATE ... WHERE inStock >= qty`; Xóa bỏ tính tiền bằng `float`; Khóa tạm tài khoản sau 5 lần sai mã PIN/mật khẩu | S-08, S-09 | **A** | `[ ] Sẵn sàng` | `#PR-` |
-| **P0-06** | Tắt `debug=True` trên production; Chuẩn hóa trả về lỗi chung cho client, chi tiết ghi log máy chủ; Validate schema body JSON | S-10, S-14 | **A** | `[ ] Sẵn sàng` | `#PR-` |
+| **P0-03** | Kiểm tra quyền sở hữu tài nguyên (đơn hàng, giỏ hàng, shop, sản phẩm, payment method); Chặn ghi đè `orders.status` đối với đơn Web3 (`WEB3_ORDER_MANAGED`) | S-05, S-06, S-11 | **A** | `[~] Đã code, chờ review` | `#PR-` |
+| **P0-04** | Xóa bỏ endpoint `GET /api/shops/migrate`; Viết runner migration tự động đánh số qua bảng `schema_migrations`; Dọn schema trùng `reviews` / `reviewImages` (sửa lỗi MySQL strict 1364) | S-07, S-13 | **A** | `[~] Đã code, chờ review` | `#PR-` |
+| **P0-05** | Thanh toán an toàn: Lock dòng bằng `SELECT ... FOR UPDATE`, `UPDATE ... WHERE inStock >= qty`; Xóa bỏ tính tiền bằng `float`; Khóa tạm tài khoản sau 5 lần sai mã PIN/mật khẩu | S-08, S-09 | **A** | `[~] Đã code, chờ review` | `#PR-` |
+| **P0-06** | Tắt `debug=True` trên production; Chuẩn hóa trả về lỗi chung cho client, chi tiết ghi log máy chủ; Validate schema body JSON | S-10, S-14 | **A** | `[~] Đã code, chờ review` | `#PR-` |
 | **P0-07** | Chuyển toàn bộ Slopee sang VND: 4 cột tiền đổi sang `DECIMAL(15,0)`; Đổi frontend dùng chung `formatVND` (`Intl.NumberFormat('vi-VN')`), xóa sạch biểu tượng `$` | Q-09, DD-12 | **B + C** | `[~] Đã code, chờ review` | `#PR-` |
 | **P0-08** | Cập nhật bộ test cũ: Sửa test checkout, cart, auth theo token phiên và VND; Chuyển test race condition sang chạy trên MySQL service thật | SRS 12.3 | **B + C** | `[~] Đã code, chờ review` | `#PR-` |
 
 **Ghi chú Phase 0 (cập nhật gần nhất):**
 - `[~]` = đã code và test xanh cục bộ, **chờ PR được thành viên khác duyệt**; điền cột PR/Commit khi mở PR.
 - **P0-01/02:** token mặc định hết hạn sau 3600 s (đặt `AUTH_TOKEN_TTL_SECONDS`; SDD 16.3 gợi ý 8 giờ → nhóm chốt giá trị). Token mang `role` và không kiểm lại DB. Route theo người dùng đã đổi sang `/me` hoặc bỏ tham số (xem `AI_CONTEXT.md` mục 6). Số dư phương thức thanh toán mới = 0.
-- **P0-07:** `migrations/0001_money_to_vnd.sql` mới chạy tay và chỉ làm tròn dữ liệu USD cũ (SDD 16.3 bước 8 yêu cầu nhân với `FX_VND_PER_TOKEN`); DB demo nên tạo lại bằng `init_db.py`. P0-04 cần đưa file này vào runner.
-- **P0-08:** test race condition checkout đã chạy trên MySQL thật (`test/integration_test/test_checkout_race_mysql.py`) và CI có MySQL service (`.github/workflows/tests.yml`). Hiện chỉ yêu cầu "không bán lố, tiền khớp"; sau P0-05 request thua cuộc nên trả 400 thay vì 500.
-- **Còn hở cho A (P0-03…06):** kiểm tra chủ sở hữu cho sản phẩm/ảnh/biến thể/cart item/đơn; `GET /api/shops/migrate` còn công khai; `debug=True` và `str(e)` còn trả cho client; chưa có giới hạn thử sai PIN/mật khẩu; chưa dùng `FOR UPDATE`.
+- **P0-07:** `migrations/0001_money_to_vnd.sql` mới chạy tay và chỉ làm tròn dữ liệu USD cũ (SDD 16.3 bước 8 yêu cầu nhân với `FX_VND_PER_TOKEN`); DB demo nên tạo lại bằng `init_db.py`. File này đã nằm trong runner của P0-04 (xem ghi chú P0-04).
+- **P0-08:** test race condition checkout đã chạy trên MySQL thật (`test/integration_test/test_checkout_race_mysql.py`) và CI có MySQL service (`.github/workflows/tests.yml`). Yêu cầu "không bán lố, tiền khớp" vẫn đúng; sau P0-05 request thua cuộc trả 400 (không còn 500 do `CHECK`).
+- **P0-03:** chỉ chủ mới sửa/xóa được cart item, đơn, sản phẩm, ảnh và biến thể; tài nguyên của người khác trả **404** như thể không tồn tại (không lộ sự tồn tại). `PUT /api/payments/orders/:id` khóa dòng `orders` (`FOR UPDATE`), từ chối đơn có dòng `order_web3` bằng `409 WEB3_ORDER_MANAGED` (nếu chưa có bảng `order_web3` thì coi là đơn cũ), và chỉ cho `paid|shipped→received`, `pending|paid→cancelled` (sai → `409 INVALID_STATE`). Thông báo lỗi giữ tiếng Anh như code hiện tại (SRS quy ước tiếng Việt cho API Web3 → nhóm chốt khi làm UC-00).
+- **P0-04:** đã xóa `GET /api/shops/migrate`. Runner: `python migrate.py [up|status|mark-applied <tệp>]` hoặc `flask --app app migrate`; bảng `schema_migrations`, khóa `GET_LOCK`, hỗ trợ migration `.sql` và `.py`. Nội dung route cũ chuyển thành `0002_product_fk_snapshots.py` (cột snapshot, `cartItems` CASCADE, `orderLines.productId` NULL + SET NULL); `0003_reviews_dedupe.py` đưa DB cũ về `reviews` có `UNIQUE(userId, productId)`; `0004_auth_attempts.sql` tạo bảng đếm thử sai. `schema.sql` đã gộp khai báo `reviews`/`reviewImages` (giữ `reviewImages.id VARCHAR(36)`, backend sinh UUID) và phản ánh cả 4 migration; `init_db.py` đánh dấu chúng đã áp dụng cho DB **mới**. **DB cũ phải chạy `python migrate.py`** (bắt buộc: bảng `authAttempts` cần cho đăng nhập/thanh toán). `schema.txt` là bản cũ không còn dùng (nên xóa).
+- **P0-05:** checkout khóa theo thứ tự cố định `cartItems → products → paymentMethods` (`ORDER BY id FOR UPDATE`), trừ kho `UPDATE … WHERE inStock >= qty` và trừ tiền `… AND balance >= amount` đều kiểm `rowcount`; giá/tồn đọc dưới khóa; deadlock → `409 checkout_conflict`. PIN chưa đặt → `401 pin_not_set` (hết 500). Sai mật khẩu/PIN 5 lần liên tiếp → khóa 15 phút (`AUTH_MAX_ATTEMPTS`, `AUTH_LOCK_SECONDS`), `429 too_many_attempts` + `Retry-After`; đăng nhập, đổi mật khẩu và xin xóa tài khoản dùng chung một bộ đếm; username không tồn tại cũng bị đếm như thật. Bộ đếm lưu trong bảng `authAttempts`.
+- **P0-06:** `debug` chỉ bật khi `SLOPEE_ENV=development`; mọi blueprint và app có handler lỗi chung (`{"error","code":"internal_error"}`, chi tiết ghi log); không còn `str(e)`; `json_body()` từ chối body không phải object (`400 invalid_body`); kiểm kiểu/độ dài/khoảng giá trị cho các trường, URL ảnh chỉ nhận `http(s)`; `MAX_CONTENT_LENGTH` 1 MB. Đăng ký nay yêu cầu email hợp lệ và số điện thoại 9–10 chữ số.
+- **Còn mở sau P0-03…06 (cần nhóm quyết, chưa tự đổi hành vi):** (1) hủy đơn `paid` vẫn **không hoàn tiền/tồn kho** (S-05) — hoàn tiền mà không thu lại tiền người bán sẽ tạo tiền; (2) thanh toán COD vẫn **cộng số dư cho người bán** như cũ; (3) `orders.userId` FK `RESTRICT` nên admin không xóa được người dùng đã có đơn; (4) tên migration: hiện `0001…0004` còn SRS dự kiến `001_wallets.sql…015_shipper.sql` của B — nên đánh số từ `0005` trở đi để không trùng tiền tố; (5) các test MySQL mới (`test/integration_test/test_p0_mysql.py`) và SQL của migration `0002/0003` **chưa được chạy trên MySQL thật** — chờ CI.
 
 ---
 
@@ -92,7 +96,7 @@
 ---
 
 ### TUẦN 3: Liên kết ví, Tạo đơn, Báo giá có chữ ký (Backend Core)
-- [ ] **[A ➔ B] Thành viên A:** Hỗ trợ Thành viên B hoàn thiện Giai đoạn 0 (P0-03 đến P0-06).
+- [~] **[A ➔ B] Thành viên A:** Hỗ trợ Thành viên B hoàn thiện Giai đoạn 0 (P0-03 đến P0-06). *(đã code, chờ review)*
 - [ ] **[B] Thành viên B:** Cài đặt UC-00: API Nonce dùng một lần `POST /api/wallet/nonce` và Liên kết ví `POST /api/wallet/link` (mẫu SIWE).
 - [ ] **[B] Thành viên B:** Cài đặt UC-01: API tạo đơn Web3 `POST /api/orders` (nhóm theo shop, cấp `onchain_order_id`, quy đổi VND ➔ token, tính `docHash`, tra nhóm chính sách `category_policies`, ký `OrderQuote` EIP-712 bằng `QUOTE_SIGNER_KEY`).
 - [ ] **[B] Thành viên B:** Cài đặt API cấp lại báo giá cho cả lô `POST /api/checkout-groups/:id/quote`.
@@ -235,11 +239,11 @@
 | **I-07** | Giỏ 3 shop: Tạo đúng 3 đơn 1 group, tổng token khớp lệnh, Indexer xóa đúng giỏ hàng | AC-14 | `[ ] PASS` |
 | **A-01** | Mọi API yêu cầu token: Không token hoặc token hết hạn trả HTTP 401 | Mục 15 (P0-01) | `[~] pass cục bộ` |
 | **A-02** | Kiểm tra quyền Role: User/Seller gọi API Admin bị chặn HTTP 403; Shipper chỉ xem đơn gán | Mục 15 (P0-02) | `[~] pass cục bộ` |
-| **A-03** | Kiểm tra sở hữu dữ liệu: Xem đơn, giỏ, shop của người khác bị 403 hoặc 404 | Mục 15 (P0-03) | `[ ] PASS` |
+| **A-03** | Kiểm tra sở hữu dữ liệu: Xem đơn, giỏ, shop của người khác bị 403 hoặc 404 | Mục 15 (P0-03) | `[~] unit pass cục bộ; MySQL chờ CI` |
 | **A-04** | Đăng ký tài khoản với role `admin` hoặc `shipper` bị từ chối | Mục 15 (P0-02) | `[~] pass cục bộ` |
-| **A-05** | Đua tranh đặt hàng (Race condition): Tồn kho không bao giờ bị âm | Mục 15 (P0-05) | `[~] một phần (chặn nhờ CHECK, chưa FOR UPDATE)` |
-| **A-06** | Giới hạn brute-force: Nhập sai PIN hoặc Password quá 5 lần bị khóa tạm | Mục 15 (P0-05) | `[ ] PASS` |
-| **A-07** | Endpoint `/api/shops/migrate` đã bị xóa bỏ; Không còn API cấp số dư vô hạn | Mục 15 (P0-04) | `[ ] PASS` |
+| **A-05** | Đua tranh đặt hàng (Race condition): Tồn kho không bao giờ bị âm | Mục 15 (P0-05) | `[~] unit pass cục bộ (FOR UPDATE + UPDATE có điều kiện); race MySQL chờ CI` |
+| **A-06** | Giới hạn brute-force: Nhập sai PIN hoặc Password quá 5 lần bị khóa tạm | Mục 15 (P0-05) | `[~] unit pass cục bộ; MySQL chờ CI` |
+| **A-07** | Endpoint `/api/shops/migrate` đã bị xóa bỏ; Không còn API cấp số dư vô hạn | Mục 15 (P0-04) | `[~] unit pass cục bộ` |
 
 ---
 

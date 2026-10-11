@@ -1,13 +1,31 @@
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, jsonify, g
 from werkzeug.security import check_password_hash
+import json
 import pymysql
+import re
 import uuid
 import os
 
+import throttle
 from auth_utils import require_auth
+from errors import ApiError, register_blueprint_errors
+from guards import is_web3_order
 from money import to_vnd, format_vnd, InvalidMoney
+from validation import json_body, get_str, get_enum, invalid
 
 payments_bp = Blueprint('payments', __name__)
+register_blueprint_errors(payments_bp)
+
+_PIN_RE = re.compile(r'^[0-9]{6}$')
+MAX_CHECKOUT_ITEMS = 100
+ER_LOCK_DEADLOCK = 1213
+ER_LOCK_WAIT_TIMEOUT = 1205
+
+# P0-03 (S-05): bảng chuyển trạng thái hợp lệ cho đường ghi trạng thái đơn cũ
+ORDER_TRANSITIONS = {
+    'received': ('paid', 'shipped'),
+    'cancelled': ('pending', 'paid'),
+}
 
 def get_db_connection():
     return pymysql.connect(
@@ -34,11 +52,11 @@ def get_payment_methods():
 @payments_bp.route('/', methods=['POST'])
 @require_auth
 def add_payment_method():
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     user_id = g.user_id
-    method_type = data.get('methodType', 'bank')
-    provider_name = data.get('providerName', 'Default Bank')
-    account_number = data.get('accountNumber', 'xxxx0000')
+    method_type = get_enum(data, 'methodType', ('bank', 'credit_card', 'cash'), default='bank', label='methodType')
+    provider_name = get_str(data, 'providerName', required=False, max_len=100, label='providerName') or 'Default Bank'
+    account_number = get_str(data, 'accountNumber', required=False, max_len=50, label='accountNumber') or 'xxxx0000'
 
     method_id = str(uuid.uuid4())
     # S-04: không còn cấp số dư giả lập; phương thức mới luôn bắt đầu với số dư 0.
@@ -54,144 +72,245 @@ def add_payment_method():
     finally:
         conn.close()
 
+
+def _placeholders(n):
+    return ','.join(['%s'] * n)
+
+
+def _parse_cart_item_ids(raw):
+    if not isinstance(raw, list) or not raw:
+        raise ApiError("No items completely selected for checkout", 'no_items', 400)
+    if len(raw) > MAX_CHECKOUT_ITEMS:
+        raise invalid(f"At most {MAX_CHECKOUT_ITEMS} items per checkout", 'too_many_items')
+    for v in raw:
+        if isinstance(v, bool) or not isinstance(v, (str, int)):
+            raise invalid("cartItemIds must be a list of ids")
+    return list(dict.fromkeys(raw))  # bỏ trùng, giữ thứ tự
+
+
+def _verify_pin(conn, cursor, user_id, pass_phrase):
+    """P0-05: PIN chưa thiết lập -> 401 (không còn 500); sai quá 5 lần -> khóa tạm (429).
+    Bộ đếm được commit riêng, trước giao dịch tiền, nên không bị rollback theo đơn hàng."""
+    cursor.execute("SELECT passPhraseHash FROM credentials WHERE userId=%s", (user_id,))
+    cred = cursor.fetchone()
+    if not cred or not cred['passPhraseHash']:
+        raise ApiError("No payment passphrase is set for this account.", 'pin_not_set', 401)
+    subject = throttle.pin_subject(user_id)
+    failed = throttle.check(cursor, throttle.SCOPE_PIN, subject)  # 429 nếu đang khóa
+    if not check_password_hash(cred['passPhraseHash'], pass_phrase):
+        failed, _locked_until = throttle.record_failure(cursor, throttle.SCOPE_PIN, subject)
+        conn.commit()
+        raise ApiError("Invalid 6-Digit Payment Passphrase!", 'invalid_pin', 401,
+                       extra={"attemptsRemaining": throttle.attempts_remaining(failed)})
+    if failed:
+        throttle.reset(cursor, throttle.SCOPE_PIN, subject)
+    conn.commit()  # kết thúc giao dịch kiểm tra PIN; giao dịch tiền bắt đầu từ câu lệnh tiếp theo
+
+
 @payments_bp.route('/checkout', methods=['POST'])
 @require_auth
 def execute_checkout():
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     user_id = g.user_id
     payment_method_id = data.get('paymentMethodId')
     pass_phrase = data.get('passPhrase')
-    cart_item_ids = data.get('cartItemIds', [])
-    
-    if not cart_item_ids:
-        return jsonify({"error": "No items completely selected for checkout"}), 400
+    cart_item_ids = _parse_cart_item_ids(data.get('cartItemIds'))
+    if payment_method_id is not None and (isinstance(payment_method_id, bool)
+                                          or not isinstance(payment_method_id, (str, int))):
+        raise invalid("paymentMethodId is not valid")
+    if not isinstance(pass_phrase, str) or not _PIN_RE.match(pass_phrase):
+        raise invalid("Passphrase must be exactly a 6-digit number", 'invalid_pin_format')
 
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # 1. Verify Passphrase 6-digit PIN Match
-            cursor.execute("SELECT passPhraseHash FROM credentials WHERE userId=%s", (user_id,))
-            cred = cursor.fetchone()
-            if not cred or not check_password_hash(cred['passPhraseHash'], pass_phrase):
-                return jsonify({"error": "Invalid 6-Digit Payment Passphrase!"}), 401
-                
-            # 2. Lock items and calculate totals, grouping items by Seller Shop effectively
-            total_sum = 0  # VND, số nguyên
-            items_payload = []
-            
-            # Use placeholders for querying multiple items natively
-            format_strings = ','.join(['%s'] * len(cart_item_ids))
-            cursor.execute(f"""
-                SELECT ci.id as cartItemId, ci.quantity, ci.cartId, ci.selectedVariants,
-                       p.id as productId, p.unitPrice, p.inStock, p.shopId, p.name as name, s.name as shopName
-                FROM cartItems ci
-                JOIN products p ON p.id = ci.productId
-                JOIN shops s ON p.shopId = s.id
-                WHERE ci.id IN ({format_strings}) AND ci.cartId IN (SELECT id FROM carts WHERE userId=%s)
-            """, tuple(cart_item_ids) + (user_id,))
-            
-            cart_items = cursor.fetchall()
-            
-            if len(cart_items) != len(cart_item_ids):
-                return jsonify({"error": "Failed to map some cart entities securely."}), 400
-                
-            for item in cart_items:
-                if item['inStock'] < item['quantity']:
-                    return jsonify({"error": f"Insufficient stock for Product #{item['productId']} during checkout race!"}), 400
-                total_sum += to_vnd(item['unitPrice']) * int(item['quantity'])
-                items_payload.append(item)
-                
-            # 3. Check Buyer's Payment Balance
-            buyer_balance = 0  # VND, số nguyên
-            buyer_method_type = 'bank'
-            if payment_method_id:
-                if payment_method_id == 'CASH_ON_DELIVERY':
-                    buyer_method_type = 'cash'
-                    payment_method_id = None    # Set FK to null logically; COD bỏ qua kiểm tra số dư
-                else:
-                    cursor.execute("SELECT methodType, balance FROM paymentMethods WHERE id=%s AND userId=%s", (payment_method_id, user_id))
-                    pm = cursor.fetchone()
-                    if not pm:
-                        return jsonify({"error": "Select payment method does not exist."}), 404
-                    buyer_balance = to_vnd(pm['balance'])
-                    buyer_method_type = pm['methodType']
-                
-                if buyer_method_type != 'cash' and buyer_balance < total_sum:
-                    return jsonify({"error": f"Insufficient funds. You require {format_vnd(total_sum)} but your balance is only {format_vnd(buyer_balance)}!"}), 400
-            else:
-                return jsonify({"error": "Payment Method Required"}), 400
-                
-            # --- START TRANSACTION MANIPULATIONS ---
-            
-            # A. Deduct from Buyer (unless cash)
-            if buyer_method_type != 'cash':
-                cursor.execute("UPDATE paymentMethods SET balance = balance - %s WHERE id=%s", (total_sum, payment_method_id))
-                
-            # Group distributions to Sellers safely
-            shop_payouts = {}
-            for item in items_payload:
-                cost = to_vnd(item['unitPrice']) * int(item['quantity'])
-                shop_payouts[item['shopId']] = shop_payouts.get(item['shopId'], 0) + cost
-                
-            for shop_id, payout in shop_payouts.items():
-                cursor.execute("SELECT sellerId FROM shops WHERE id=%s", (shop_id,))
-                seller_res = cursor.fetchone()
-                if seller_res:
-                    seller_id = seller_res['sellerId']
-                    # Look up seller's primary bank account to distribute to
-                    cursor.execute("SELECT id FROM paymentMethods WHERE userId=%s LIMIT 1", (seller_id,))
-                    seller_bank = cursor.fetchone()
-                    if seller_bank:
-                        cursor.execute("UPDATE paymentMethods SET balance = balance + %s WHERE id=%s", (payout, seller_bank['id']))
+            # 1. Verify Passphrase 6-digit PIN (có giới hạn số lần thử)
+            _verify_pin(conn, cursor, user_id, pass_phrase)
 
-            # B. Deplete Stock safely natively via DB computation 
-            for item in items_payload:
-                cursor.execute("UPDATE products SET inStock = inStock - %s WHERE id=%s", (item['quantity'], item['productId']))
+            # ---- Giao dịch tiền bắt đầu. Thứ tự khóa cố định: cartItems -> products -> paymentMethods,
+            # mỗi nhóm khóa theo ORDER BY id để hai giao dịch song song không khóa chéo (deadlock). ----
+
+            # 2a. Khóa các dòng giỏ thuộc CHÍNH người mua (chặn bấm thanh toán 2 lần cho cùng giỏ)
+            cursor.execute(f"""
+                SELECT ci.id AS cartItemId, ci.quantity, ci.cartId, ci.selectedVariants, ci.productId
+                FROM cartItems ci
+                WHERE ci.id IN ({_placeholders(len(cart_item_ids))})
+                  AND ci.cartId IN (SELECT id FROM carts WHERE userId=%s)
+                ORDER BY ci.id
+                FOR UPDATE
+            """, tuple(cart_item_ids) + (user_id,))
+            cart_items = cursor.fetchall()
+            if len(cart_items) != len(cart_item_ids):
+                raise ApiError("Failed to map some cart entities securely.", 'cart_mismatch', 400)
+
+            # 2b. Khóa sản phẩm và đọc giá/tồn kho MỚI NHẤT dưới khóa (giá tính tiền = giá đã khóa)
+            product_ids = sorted({ci['productId'] for ci in cart_items}, key=str)
+            cursor.execute(f"""
+                SELECT id AS productId, unitPrice, inStock, shopId, name
+                FROM products
+                WHERE id IN ({_placeholders(len(product_ids))}) AND isActive = TRUE
+                ORDER BY id
+                FOR UPDATE
+            """, tuple(product_ids))
+            products = {p['productId']: p for p in cursor.fetchall()}
+            if len(products) != len(product_ids):
+                raise ApiError("Some items are no longer available.", 'product_unavailable', 400)
+
+            shop_ids = sorted({p['shopId'] for p in products.values()}, key=str)
+            cursor.execute(f"SELECT id AS shopId, name AS shopName, sellerId FROM shops "
+                           f"WHERE id IN ({_placeholders(len(shop_ids))})", tuple(shop_ids))
+            shops = {s['shopId']: s for s in cursor.fetchall()}
+
+            # 2c. Tính tiền bằng số nguyên VND (không float)
+            total_sum = 0
+            needed = {}        # productId -> tổng số lượng cần (nhiều dòng giỏ có thể cùng sản phẩm)
+            shop_payouts = {}  # shopId -> VND
+            lines = []
+            for ci in cart_items:
+                p = products[ci['productId']]
+                qty = int(ci['quantity'])
+                cost = to_vnd(p['unitPrice']) * qty
+                total_sum += cost
+                needed[p['productId']] = needed.get(p['productId'], 0) + qty
+                shop_payouts[p['shopId']] = shop_payouts.get(p['shopId'], 0) + cost
+                lines.append((ci, p, qty))
+            for pid, qty in needed.items():
+                if products[pid]['inStock'] < qty:
+                    raise ApiError(f"Insufficient stock for Product #{pid} during checkout race!", 'insufficient_stock', 400)
+
+            # 3. Phương thức thanh toán của người mua
+            if not payment_method_id:
+                raise ApiError("Payment Method Required", 'payment_method_required', 400)
+            is_cod = payment_method_id == 'CASH_ON_DELIVERY'
+
+            seller_bank_ids = {}  # shopId -> paymentMethodId của người bán (nếu có)
+            for shop_id in shop_payouts:
+                shop = shops.get(shop_id)
+                if not shop:
+                    continue
+                cursor.execute("SELECT id FROM paymentMethods WHERE userId=%s ORDER BY id LIMIT 1", (shop['sellerId'],))
+                bank = cursor.fetchone()
+                if bank:
+                    seller_bank_ids[shop_id] = bank['id']
+
+            # Khóa tất cả phương thức thanh toán liên quan trong MỘT câu, theo thứ tự id
+            lock_ids = set(seller_bank_ids.values())
+            if not is_cod:
+                lock_ids.add(payment_method_id)
+            pm_rows = {}
+            if lock_ids:
+                lock_ids = sorted(lock_ids, key=str)
+                cursor.execute(f"SELECT id, userId, methodType, balance FROM paymentMethods "
+                               f"WHERE id IN ({_placeholders(len(lock_ids))}) ORDER BY id FOR UPDATE", tuple(lock_ids))
+                pm_rows = {r['id']: r for r in cursor.fetchall()}
+
+            buyer_method_type = 'cash'
+            charge_buyer = False
+            if not is_cod:
+                pm = pm_rows.get(payment_method_id)
+                if not pm or pm['userId'] != user_id:
+                    raise ApiError("Select payment method does not exist.", 'payment_method_not_found', 404)
+                buyer_method_type = pm['methodType']
+                if buyer_method_type != 'cash':
+                    charge_buyer = True
+                    buyer_balance = to_vnd(pm['balance'])
+                    if buyer_balance < total_sum:
+                        raise ApiError(f"Insufficient funds. You require {format_vnd(total_sum)} but your balance is only {format_vnd(buyer_balance)}!",
+                                       'insufficient_funds', 400)
+            order_payment_method_id = None if is_cod else payment_method_id  # COD: FK null, bỏ qua kiểm tra số dư
+
+            # --- Ghi dữ liệu: mọi UPDATE đều có điều kiện bảo vệ, kiểm rowcount ---
+
+            # A. Trừ tiền người mua (chỉ khi đủ số dư, cùng chủ)
+            if charge_buyer:
+                cursor.execute("UPDATE paymentMethods SET balance = balance - %s WHERE id=%s AND userId=%s AND balance >= %s",
+                               (total_sum, payment_method_id, user_id, total_sum))
+                if cursor.rowcount != 1:
+                    raise ApiError("Insufficient funds.", 'insufficient_funds', 400)
+
+            # Cộng tiền cho người bán
+            for shop_id, payout in shop_payouts.items():
+                bank_id = seller_bank_ids.get(shop_id)
+                if bank_id:
+                    cursor.execute("UPDATE paymentMethods SET balance = balance + %s WHERE id=%s", (payout, bank_id))
+
+            # B. Trừ tồn kho nguyên tử: UPDATE ... WHERE inStock >= qty
+            for pid, qty in needed.items():
+                cursor.execute("UPDATE products SET inStock = inStock - %s WHERE id=%s AND inStock >= %s", (qty, pid, qty))
+                if cursor.rowcount != 1:
+                    raise ApiError(f"Insufficient stock for Product #{pid} during checkout race!", 'insufficient_stock', 400)
 
             # C. Create Order + OrderLines
             order_id = str(uuid.uuid4())
             cursor.execute("INSERT INTO orders (id, userId, paymentMethodId, status, totalAmount) VALUES (%s, %s, %s, 'paid', %s)",
-                           (order_id, user_id, payment_method_id, total_sum))
-                           
-            for item in items_payload:
-                line_id = str(uuid.uuid4())
+                           (order_id, user_id, order_payment_method_id, total_sum))
+
+            for ci, p, qty in lines:
+                shop = shops.get(p['shopId'], {})
                 cursor.execute("INSERT INTO orderLines (id, orderId, productId, unitPrice, quantity, snapshotProductName, snapshotShopName, selectedVariants) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                               (line_id, order_id, item['productId'], item['unitPrice'], item['quantity'], item['name'], item['shopName'], item['selectedVariants']))
-                               
-            # D. Delete CartItems natively
-            cursor.execute(f"DELETE FROM cartItems WHERE id IN ({format_strings})", tuple(cart_item_ids))
+                               (str(uuid.uuid4()), order_id, p['productId'], p['unitPrice'], qty, p['name'], shop.get('shopName'), ci['selectedVariants']))
+
+            # D. Delete CartItems
+            cursor.execute(f"DELETE FROM cartItems WHERE id IN ({_placeholders(len(cart_item_ids))})", tuple(cart_item_ids))
 
             conn.commit()
-            return jsonify({"message": f"Successfully completed. Receipt generated!"}), 200
-            
+            return jsonify({"message": "Successfully completed. Receipt generated!"}), 200
+
+    except ApiError:
+        conn.rollback()
+        raise
     except InvalidMoney as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 400
-    except Exception as e:
+        raise ApiError(str(e), 'invalid_amount', 400)
+    except pymysql.err.OperationalError as e:
         conn.rollback()
-        return jsonify({"error": "Transaction Failed: " + str(e)}), 500
+        if e.args and e.args[0] in (ER_LOCK_DEADLOCK, ER_LOCK_WAIT_TIMEOUT):
+            raise ApiError("The store is busy. Please try again.", 'checkout_conflict', 409)
+        raise
+    except Exception:
+        conn.rollback()
+        raise  # -> handler chung: log chi tiết, client chỉ nhận 500 chung
     finally:
         conn.close()
+
 
 @payments_bp.route('/orders/<order_id>', methods=['PUT'])
 @require_auth
 def update_order_status(order_id):
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     new_status = data.get('status')
-    if new_status not in ['cancelled', 'received']:
+    if not isinstance(new_status, str) or new_status not in ORDER_TRANSITIONS:
         return jsonify({"error": "Invalid order status transformation."}), 400
-        
+
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute("UPDATE orders SET status=%s WHERE id=%s", (new_status, order_id))
+            # P0-03 (S-05): chỉ chủ đơn; đơn của người khác trả 404 như thể không tồn tại. Khóa dòng để kiểm trạng thái an toàn.
+            cursor.execute("SELECT id, status FROM orders WHERE id=%s AND userId=%s FOR UPDATE", (order_id, g.user_id))
+            order = cursor.fetchone()
+            if not order:
+                raise ApiError("Order not found.", 'not_found', 404)
+
+            # SRS 5.1: đơn Web3 chỉ được đổi trạng thái bởi hàm đồng bộ của Indexer
+            if is_web3_order(cursor, order_id):
+                raise ApiError("This order is managed by the escrow contract and cannot be changed here.",
+                               'WEB3_ORDER_MANAGED', 409)
+
+            if order['status'] not in ORDER_TRANSITIONS[new_status]:
+                raise ApiError(f"Cannot change an order from '{order['status']}' to '{new_status}'.", 'INVALID_STATE', 409)
+
+            cursor.execute("UPDATE orders SET status=%s WHERE id=%s AND userId=%s AND status=%s",
+                           (new_status, order_id, g.user_id, order['status']))
+            if cursor.rowcount != 1:
+                raise ApiError("Order was modified by another request. Please reload.", 'INVALID_STATE', 409)
             conn.commit()
             return jsonify({"message": f"Order status successfully changed to {new_status}!"}), 200
-    except Exception as e:
+    except ApiError:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        raise
     finally:
         conn.close()
+
 
 @payments_bp.route('/orders', methods=['GET'])
 @require_auth
@@ -223,7 +342,6 @@ def get_orders():
                         "status": line['status'],
                         "items": []
                     }
-                import json
                 try:
                     variants_json = json.loads(line['selectedVariants']) if line['selectedVariants'] else {}
                 except:

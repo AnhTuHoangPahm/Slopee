@@ -30,22 +30,28 @@ Nếu code hiện có lệch đặc tả, **báo cho người dùng** thay vì t
 
 ```
 backend/                Flask + MySQL (không phải package; chạy từ thư mục backend/)
-  app.py                tạo app, đăng ký blueprint, CLI `seed-admin`, JSON provider
-  config.py             DB_*, SECRET_KEY (bắt buộc), AUTH_TOKEN_TTL_SECONDS
+  app.py                tạo app, đăng ký blueprint + handler lỗi chung, CLI `seed-admin`/`migrate`, JSON provider
+  config.py             DB_*, SECRET_KEY (bắt buộc), AUTH_TOKEN_TTL_SECONDS, DEBUG (chỉ khi SLOPEE_ENV=development)
   auth_utils.py         token ký (itsdangerous) + decorator require_auth (P0-01)
   money.py              to_vnd / format_vnd — tiền VND số nguyên (P0-07)
+  errors.py             ApiError + handler lỗi chung gắn vào blueprint/app; client chỉ nhận lỗi chung, chi tiết vào log (P0-06)
+  validation.py         json_body(), get_str/get_int/get_enum, validate_url, get_url_list (P0-06)
+  throttle.py           khóa tạm sai mật khẩu/PIN, lưu bảng authAttempts (P0-05)
+  guards.py             is_web3_order() — đơn có dòng order_web3 (P0-03)
+  migrate.py            bộ chạy migration có số thứ tự + CLI; split_sql() (P0-04)
+  dbschema.py           hàm information_schema cho migration .py (FK, cột, index)
   json_provider.py      Decimal -> số (int nếu nguyên) khi jsonify
   admin_seed.py         seed_admin(conn, ...) dùng cho CLI
-  init_db.py            tạo DB từ schema.sql (KHÔNG còn tạo admin)
-  schema.sql            lược đồ gốc; 4 cột tiền là DECIMAL(15,0)
-  migrations/           0001_money_to_vnd.sql (chạy tay; P0-04 sẽ có runner)
+  init_db.py            tạo DB từ schema.sql (KHÔNG còn tạo admin); DB mới: đánh dấu migration đã áp dụng
+  schema.sql            lược đồ MỚI NHẤT cho DB tạo mới (đã gồm mọi migration); 4 cột tiền DECIMAL(15,0)
+  migrations/           0001 money_to_vnd.sql, 0002 product_fk_snapshots.py, 0003 reviews_dedupe.py, 0004 auth_attempts.sql
   routes/               auth, admin, carts, payments, products, reviews, shops
 frontend/               React 19 + Vite + React Router 7 (JavaScript, không TypeScript)
   src/api/http.js       phiên (sessionStorage), authFetch, getUser/setSession/clearSession
   src/api/*.js          các client REST (auth, carts, payments, shops, products, admin)
   src/utils/formatVND.js  hàm định dạng tiền DUY NHẤT
   src/pages, components, __tests__, tests/ (Playwright)
-test/                   pytest (conftest.py, unit_test/, integration_test/)
+test/                   pytest (conftest.py: FakeCursor/fake_db/AttemptsStore, unit_test/, integration_test/)
 .github/workflows/tests.yml   CI: pytest + MySQL service, vitest, build
 docs/                   tài liệu
   spec/                 đặc tả tách nhỏ (brd-*, srs-*, sdd-*.md + INDEX.md) — sinh bằng scripts/split_spec.py
@@ -74,7 +80,9 @@ python app.py                               # cổng 5000
 cd frontend && npm run dev | npx vitest run | npm run build | npm run lint | npm run test:e2e
 ```
 
-Biến môi trường: `SECRET_KEY` (bắt buộc trừ khi `SLOPEE_ENV` là `development`/`test`), `AUTH_TOKEN_TTL_SECONDS` (mặc định 3600), `DB_HOST/DB_USER/DB_PASSWORD/DB_NAME`.
+Biến môi trường: `SECRET_KEY` (bắt buộc trừ khi `SLOPEE_ENV` là `development`/`test`), `AUTH_TOKEN_TTL_SECONDS` (mặc định 3600), `DB_HOST/DB_USER/DB_PASSWORD/DB_NAME`, `AUTH_MAX_ATTEMPTS` (mặc định 5), `AUTH_LOCK_SECONDS` (mặc định 900). `debug` chỉ bật khi `SLOPEE_ENV=development`.
+
+Migration: DB mới → `python init_db.py` (đã gồm mọi migration). **DB cũ → `cd backend && python migrate.py`** (hoặc `flask --app app migrate`; `status` để xem). Thêm migration = tạo `migrations/NNNN_ten.sql|.py` (idempotent, không dùng route HTTP) **và** phản ánh vào `schema.sql`.
 
 ---
 
@@ -122,17 +130,16 @@ Biến môi trường: `SECRET_KEY` (bắt buộc trừ khi `SLOPEE_ENV` là `de
 | P0-02 khóa role/admin, seed admin CLI, bỏ cấp số dư | Đã code, chờ review | B |
 | P0-07 VND (`DECIMAL(15,0)`, `formatVND`) | Đã code, chờ review | B+C |
 | P0-08 cập nhật test + race test MySQL thật + CI | Đã code, chờ review | B+C |
-| **P0-03** kiểm tra quyền sở hữu tài nguyên, `WEB3_ORDER_MANAGED` | **Chưa làm** | A |
-| **P0-04** xóa `/api/shops/migrate`, runner `schema_migrations`, dọn schema `reviews/reviewImages` | **Chưa làm** | A |
-| **P0-05** `FOR UPDATE`, `UPDATE ... WHERE inStock >= qty`, khóa tạm sau 5 lần sai PIN/mật khẩu | **Chưa làm** | A |
-| **P0-06** tắt `debug=True`, lỗi chung cho client, validate body JSON | **Chưa làm** | A |
+| P0-03 kiểm tra quyền sở hữu tài nguyên, `WEB3_ORDER_MANAGED` | Đã code, chờ review | A |
+| P0-04 xóa `/api/shops/migrate`, runner `schema_migrations`, dọn schema `reviews/reviewImages` | Đã code, chờ review | A |
+| P0-05 `FOR UPDATE`, `UPDATE ... WHERE inStock >= qty`, khóa tạm sau 5 lần sai PIN/mật khẩu | Đã code, chờ review | A |
+| P0-06 tắt `debug=True`, lỗi chung cho client, validate body JSON | Đã code, chờ review | A |
 | Contract, Indexer, UC-00…UC-09, giao diện Web3 | Chưa bắt đầu | Tuần 1–10 |
 
-**Lỗ hổng còn mở (đừng giả định đã an toàn):**
-- Sửa/xóa sản phẩm, ảnh, biến thể; sửa/xóa cart item; `PUT /api/payments/orders/:id` mới chỉ yêu cầu đăng nhập (và role `seller` ở route shop), **chưa** kiểm tra chủ sở hữu → P0-03 (S-05, S-06, S-11).
-- `GET /api/shops/migrate` vẫn công khai → P0-04 (S-07).
-- Checkout chưa khóa dòng; chặn oversell hiện nhờ `CHECK (inStock >= 0)` (request thua trả 500) → P0-05 (S-08). Chưa giới hạn số lần thử → S-09.
-- `app.run(debug=True)`, nhiều route trả `str(e)` cho client → P0-06 (S-10, S-14).
+**Đã xử lý ở P0-03…06 (chờ review, test MySQL thật chờ CI):** chủ sở hữu cart item/đơn/sản phẩm/ảnh/biến thể (không phải chủ → 404); đơn Web3 bị từ chối bằng `409 WEB3_ORDER_MANAGED`; chuyển trạng thái đơn theo bảng hợp lệ; checkout khóa `FOR UPDATE` + `UPDATE` có điều kiện; khóa tạm 5 lần sai mật khẩu/PIN (`429`); route migrate đã bỏ; `debug` theo môi trường; lỗi chung, không còn `str(e)`; validate body.
+
+**Còn mở (đừng giả định đã an toàn):**
+- Hủy đơn `paid` **không hoàn tiền/tồn kho** (S-05); COD vẫn cộng số dư cho người bán; `orders.userId` FK `RESTRICT` (admin không xóa được user đã có đơn). Cần nhóm quyết hành vi — xem `PROGRESS.md` ghi chú Phase 0.
 - Token chứa `role` và **không** kiểm lại DB: đổi role/xóa user thì token cũ còn hiệu lực đến khi hết hạn.
 
 ---
@@ -147,7 +154,8 @@ Biến môi trường: `SECRET_KEY` (bắt buộc trừ khi `SLOPEE_ENV` là `de
 | Route theo người dùng | `/<userId>` | `/api/carts/`, `/api/payments/`, `/api/payments/orders`, `/api/auth/reviews/me`, `/api/shops/me`, `/api/shops/me/name` | không còn xem shop theo seller ID |
 | `add_product` | nhận `shopId` | shop suy ra từ token seller | |
 | Số dư mới | "số dư giả lập ban đầu đổi sang VND" (SDD 16.3 bước 8) | số dư mới = 0 (S-04) | checkout ngân hàng cũ cần nạp tiền thủ công; COD vẫn chạy |
-| Migration | `001_wallets.sql`…`015_shipper.sql` + `schema_migrations` | `migrations/0001_money_to_vnd.sql` chạy tay | đánh lại số khi P0-04 làm runner |
+| Migration | `001_wallets.sql`…`015_shipper.sql` + `schema_migrations` | runner `migrate.py` + `0001…0004` (4 chữ số) | migration Web3 nên đánh số từ `0005` để không trùng tiền tố; tên tệp là khóa trong `schema_migrations` |
+| Mã lỗi API cũ | `{code, message}` tiếng Việt | `{error, code}` tiếng Anh (`not_found`, `INVALID_STATE`, `WEB3_ORDER_MANAGED`, `too_many_attempts`, `internal_error`…) | API Web3 mới theo SRS; nhóm chốt ngôn ngữ thông báo |
 
 ---
 
@@ -159,8 +167,10 @@ Biến môi trường: `SECRET_KEY` (bắt buộc trừ khi `SLOPEE_ENV` là `de
 - **`test_*` cần MySQL thật** dùng fixture `mysql_db`/`db_conn` (tạo DB `slopee_test_<pid>` từ `schema.sql`, xóa sau khi xong, skip nếu không kết nối được). Cần user có quyền `CREATE DATABASE`.
 - **Mock con trỏ DB** chỉ dùng cho logic thuần. Mọi đường liên quan tiền, tồn kho, trạng thái đơn, phân quyền phải có test trên MySQL thật.
 - **CHECK constraint** chỉ được MySQL ≥ 8.0.16 thực thi; chưa chạy trên MariaDB/MySQL cũ.
-- **Tài khoản không có PIN** (vd. admin) làm `check_password_hash(None, ...)` ném `AttributeError` → lỗi 500 (S-08, sửa ở P0-05).
-- **`schema.sql`** khai báo trùng `reviews`/`reviewImages` (bản đầu thắng do `IF NOT EXISTS`); lỗi MySQL strict 1364 khi chèn ảnh đánh giá (S-13, sửa ở P0-04).
+- **Tài khoản không có PIN** (vd. admin) nay trả `401 pin_not_set` (P0-05). **`reviewImages.id`** là `VARCHAR(36)` không tự tăng: `reviews.py` phải tự cấp UUID (S-13).
+- **Test dùng `fake_db`/`FakeCursor`** (trả dữ liệu theo nội dung SQL) thay vì `side_effect` theo thứ tự; route thêm/bớt truy vấn không làm vỡ test. Lỗi chung và `ApiError` được gắn vào **từng blueprint** (`register_blueprint_errors`) nên app tối giản trong `conftest.py` cũng trả đúng; route mới phải gắn handler này.
+- **Khóa thanh toán** phải giữ thứ tự `cartItems → products → paymentMethods` (mỗi nhóm `ORDER BY id`); đổi thứ tự có thể gây deadlock. Bộ đếm sai PIN/mật khẩu `commit` riêng trước giao dịch tiền để không bị rollback.
+- **`schema.sql` là lược đồ mới nhất:** thêm migration mà quên cập nhật `schema.sql` thì DB mới (được đánh dấu "đã áp dụng") sẽ thiếu thay đổi. `schema.txt` là bản cũ không dùng.
 - Tên shop/sản phẩm/UI của Slopee viết bằng tiếng Anh; thông báo lỗi Web3 và tài liệu viết bằng **tiếng Việt**.
 
 ---
