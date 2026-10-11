@@ -143,6 +143,8 @@ def test_ensure_foreign_key_replaces_wrong_rule(fake_conn):
 
 def test_migrations_use_current_database_not_hardcoded_schema():
     for name in os.listdir(os.path.join(BACKEND, 'migrations')):
+        if not name.endswith(('.sql', '.py')):
+            continue
         src = open(os.path.join(BACKEND, 'migrations', name), encoding='utf-8').read()
         assert 'slopee_db' not in src, name
     assert 'slopee_db' not in open(os.path.join(BACKEND, 'dbschema.py'), encoding='utf-8').read()
