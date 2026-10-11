@@ -4,12 +4,14 @@ import os
 def create_connection():
     # Attempt to use standard local development credentials, or read from env.
     host = os.environ.get('DB_HOST', 'localhost')
+    port = int(os.environ.get('DB_PORT', 3306))
     user = os.environ.get('DB_USER', 'root')
     password = os.environ.get('DB_PASSWORD', '') # Default no password
     
     # Connect without a db initially to create it if it doesn't exist.
     conn = pymysql.connect(
         host=host,
+        port=port,
         user=user,
         password=password,
         cursorclass=pymysql.cursors.DictCursor
@@ -35,7 +37,7 @@ def init_database():
             
             # Run schema.sql from the identical directory
             schema_path = os.path.join(os.path.dirname(__file__), 'schema.sql')
-            with open(schema_path, 'r') as f:
+            with open(schema_path, 'r', encoding='utf8') as f:
                 sql_script = f.read()
             
             # Split schema statements
