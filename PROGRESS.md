@@ -61,22 +61,33 @@
 - **P0-04:** đã xóa `GET /api/shops/migrate`. Runner: `python migrate.py [up|status|mark-applied <tệp>]` hoặc `flask --app app migrate`; bảng `schema_migrations`, khóa `GET_LOCK`, hỗ trợ migration `.sql` và `.py`. Nội dung route cũ chuyển thành `0002_product_fk_snapshots.py` (cột snapshot, `cartItems` CASCADE, `orderLines.productId` NULL + SET NULL); `0003_reviews_dedupe.py` đưa DB cũ về `reviews` có `UNIQUE(userId, productId)`; `0004_auth_attempts.sql` tạo bảng đếm thử sai. `schema.sql` đã gộp khai báo `reviews`/`reviewImages` (giữ `reviewImages.id VARCHAR(36)`, backend sinh UUID) và phản ánh cả 4 migration; `init_db.py` đánh dấu chúng đã áp dụng cho DB **mới**. **DB cũ phải chạy `python migrate.py`** (bắt buộc: bảng `authAttempts` cần cho đăng nhập/thanh toán). `schema.txt` là bản cũ không còn dùng (nên xóa).
 - **P0-05:** checkout khóa theo thứ tự cố định `cartItems → products → paymentMethods` (`ORDER BY id FOR UPDATE`), trừ kho `UPDATE … WHERE inStock >= qty` và trừ tiền `… AND balance >= amount` đều kiểm `rowcount`; giá/tồn đọc dưới khóa; deadlock → `409 checkout_conflict`. PIN chưa đặt → `401 pin_not_set` (hết 500). Sai mật khẩu/PIN 5 lần liên tiếp → khóa 15 phút (`AUTH_MAX_ATTEMPTS`, `AUTH_LOCK_SECONDS`), `429 too_many_attempts` + `Retry-After`; đăng nhập, đổi mật khẩu và xin xóa tài khoản dùng chung một bộ đếm; username không tồn tại cũng bị đếm như thật. Bộ đếm lưu trong bảng `authAttempts`.
 - **P0-06:** `debug` chỉ bật khi `SLOPEE_ENV=development`; mọi blueprint và app có handler lỗi chung (`{"error","code":"internal_error"}`, chi tiết ghi log); không còn `str(e)`; `json_body()` từ chối body không phải object (`400 invalid_body`); kiểm kiểu/độ dài/khoảng giá trị cho các trường, URL ảnh chỉ nhận `http(s)`; `MAX_CONTENT_LENGTH` 1 MB. Đăng ký nay yêu cầu email hợp lệ và số điện thoại 9–10 chữ số.
-- **Còn mở sau P0-03…06 (cần nhóm quyết, chưa tự đổi hành vi):** (1) hủy đơn `paid` vẫn **không hoàn tiền/tồn kho** (S-05) — hoàn tiền mà không thu lại tiền người bán sẽ tạo tiền; (2) thanh toán COD vẫn **cộng số dư cho người bán** như cũ; (3) `orders.userId` FK `RESTRICT` nên admin không xóa được người dùng đã có đơn; (4) tên migration: hiện `0001…0004` còn SRS dự kiến `001_wallets.sql…015_shipper.sql` của B — nên đánh số từ `0005` trở đi để không trùng tiền tố; (5) các test MySQL mới (`test/integration_test/test_p0_mysql.py`) và SQL của migration `0002/0003` **chưa được chạy trên MySQL thật** — chờ CI.
+- **Quyết định nhóm sau P0-03…06 (đã áp dụng theo docs, `[~]` chờ review):**
+  1. **Hủy đơn `paid` (S-05)** nay hoàn kho + hoàn tiền người mua **và thu lại đúng khoản đã cộng cho người bán** (không tạo tiền). Migration `0005_order_line_settlement.py` thêm `orderLines.sellerPaymentMethodId` + `sellerCredit` (checkout ghi lại người bán nào được cộng bao nhiêu; đơn cũ được backfill). Người bán không đủ số dư → `409 refund_unavailable`, rollback toàn bộ, đơn vẫn `paid`. Đơn COD/`cash` chỉ hoàn kho. `PUT /api/payments/orders/:id` trả thêm `refunded` (VND). Giới hạn dữ liệu cũ (đã biết, chấp nhận ở mức đồ án): (a) dòng có `productId = NULL` (sản phẩm đã xóa) không suy ra được người bán nên migration không backfill, `sellerCredit = 0` và hủy đơn đó **hoàn tiền cho người mua mà không thu lại được từ người bán**; (b) các đơn COD cũ từng được cộng tiền cho người bán (lỗi cũ) **không bị sửa hồi tố**, số dư người bán đã sai trước đây giữ nguyên. DB demo nên tạo lại bằng `init_db.py` để tránh cả hai. Khóa theo thứ tự `products → paymentMethods` như checkout (không deadlock).
+  2. **COD và phương thức `cash`** không còn cộng số dư người bán: chỉ cộng khi người mua thực sự bị trừ tiền. Chỉ áp dụng cho đơn mới; đơn COD cũ không sửa hồi tố (xem giới hạn (b) ở quyết định 1).
+  3. **Giữ `orders.userId` ON DELETE `RESTRICT`** (SDD Q-06 cũng dùng RESTRICT cho `order_web3`; đơn và tiền ký quỹ là hồ sơ kế toán). `DELETE /api/admin/users/<id>` trả `409 user_has_orders` kèm thông báo rõ thay vì 500; giao diện admin hiển thị thông báo này.
+  4. **Đánh số migration:** migration Web3 bắt đầu **sau migration cũ cuối cùng**. Vì `0005` đã dùng cho quyết định 1, Web3 bắt đầu từ **`0006`**: SDD `001_wallets.sql … 015_shipper.sql` → `0006_wallets.sql … 0020_shipper.sql` (bù +5). Tên tệp là khóa trong `schema_migrations`, nên không đổi tên sau khi đã áp dụng.
+- **Thay đổi hành vi cho người dùng (P0-06):** đăng ký yêu cầu email hợp lệ và số điện thoại 9–10 chữ số. Thông báo lỗi API cũ giữ tiếng Anh; API Web3 mới theo SRS (`{code, message}` tiếng Việt) — nhóm chốt khi làm UC-00.
+- **Đã chạy trên MySQL 8.0 thật (2026-10-11):** toàn bộ test backend (329, gồm 15+ test MySQL của P0-03…06 và các test song song hủy đơn/checkout) pass 3 lần liên tiếp; DB cũ (schema trước P0-04) chạy `python migrate.py` cho ra schema (cột + khóa ngoại) trùng hệt `init_db.py`. Việc còn lại là CI GitHub xác nhận lại. `backend/schema.txt` không có trong gói này (nếu còn trong repo thì nên xóa).
 
 ---
 
 ## 4. BẢNG THEO DÕI CHI TIẾT THEO TUẦN (WEEKLY SPRINT TRACKER)
 
 ### TUẦN 1: Khởi động nền tảng, Smart Contract cơ sở, Chuẩn hóa VND
-- [ ] **[C] Thành viên A:** Cấu hình Foundry (`foundry.toml`, solc 0.8.20, `via_ir=true`, OpenZeppelin v5.0.2).
-- [ ] **[C] Thành viên A:** Cài đặt contract `MockUSD.sol` (6 decimals, hàm `mint` phục vụ test).
-- [ ] **[C] Thành viên A:** Cài đặt `SlopeeEscrowMaster.sol` phần nạp đơn: `depositEscrow` (kèm xác minh EIP-712 `Quote`), `confirmDelivery`, `earlyRelease`, `cancelIfUnfulfilled`.
-- [ ] **[B] Thành viên B:** Viết script khởi tạo môi trường một lệnh `./scripts/bootstrap.sh` (chạy Anvil `--block-time 2`, deploy, xuất JSON).
+> Quy ước: `[~]` = đã code, test xanh cục bộ, **chờ PR được thành viên khác duyệt** (giống Phase 0). Chưa tick `[x]` vì chưa qua review/CI.
+- [~] **[C] Thành viên A:** Cấu hình Foundry (`contracts/foundry.toml`, solc 0.8.20, `via_ir=true`, OpenZeppelin v5.0.2, forge-std v1.9.4). Cài thư viện bằng `scripts/install_contract_deps.sh` (không dùng `forge install` thẳng: một số bản Foundry bỏ qua tag và kéo OpenZeppelin 5.7, đòi solc ≥ 0.8.24).
+- [~] **[C] Thành viên A:** `contracts/src/MockUSD.sol` (6 decimals, `mint` cho môi trường thử).
+- [~] **[C] Thành viên A:** `contracts/src/SlopeeEscrowMaster.sol` phần nạp đơn: `depositEscrow` (xác minh EIP-712 `OrderQuote`, dùng chung `_acceptQuote`/`_collect` để tuần 2 chỉ việc thêm `depositEscrowBatch`), `confirmDelivery`, `earlyRelease`, `releaseAfterInspection`, `cancelIfUnfulfilled`. Struct/enum/sự kiện/hằng số/storage khai báo **đầy đủ ngay từ đầu** để ABI và bố cục storage không đổi ở tuần 2. Chưa có (tuần 2): tranh chấp, `arbitratorForceResolve`, `depositEscrowBatch`, `claimPending`, `setDefaultFeeBps`/`setFeeRecipient`.
+- [~] **[C] Thành viên A:** `contracts/script/Deploy.s.sol` (triển khai, mint MockUSD cho buyer thử, ghi `deployments/local.json`) và 46 test Foundry (`forge test`): T-01…T-07, T-14, T-23 và các phần đã làm được của T-08, T-16, T-20, T-22 (xem 5.1).
+- [~] **[B] Thành viên B:** `./scripts/bootstrap.sh` một lệnh: kiểm công cụ → cài thư viện contract → Anvil `--block-time 2` → `forge build` → triển khai → kiểm có mã trên chuỗi và `SHIPPER_ROLE` → ghi `deployments/local.json` → chép cho frontend → sinh `backend/.env.web3` (3 khóa vai trò khác nhau, khóa công khai của Anvil). Kèm `scripts/smoke_week1.sh`: chạy trên Anvil thật báo giá do **Python ký** → Buyer nạp → Shipper giao → Buyer nhận → kiểm số dư (đã chạy: Merchant +16.005.000, phí +495.000, escrow = 0). *Chưa làm trong bootstrap:* migration MySQL Web3 (tuần 2) và khởi động web/indexer/scheduler (tuần 3–5).
 - [~] **[B] Thành viên B:** Triển khai **P0-01** (Auth Token) và **P0-02** (Phân quyền Role & bảo vệ Admin). *(đã code, chờ review)*
 - [~] **[B + C]:** Triển khai **P0-07** (Chuyển schema và giao diện sang VND số nguyên). *(đã code, chờ review)*
-- [ ] **[F] Thành viên C:** Thiết lập Client API dùng chung (`lib/client.js`), Route Guard (`components/RequireRole.jsx`), hàm định dạng `formatVND`. *(một phần: `api/http.js` và `utils/formatVND.js` đã có; còn `RequireRole.jsx`; xác nhận tên file so với SDD `lib/client.js`/`lib/format.js`)*
-- [ ] **[F] Thành viên C:** Khung kết nối ví MetaMask (`hooks/useWallet.js`), đọc thông tin chain từ `deployments/local.json`.
-- [ ] **[Q] Cả nhóm:** Khóa file `shared/eip712/types.json` và tạo vector test chéo ngôn ngữ `shared/eip712/vectors.json`.
+- [~] **[F] Thành viên C:** Client API dùng chung `lib/client.js`, hàm định dạng `lib/format.js` (`formatVND`, `shortAddress`), Route Guard `components/RequireRole.jsx` (chưa đăng nhập → `/login`; sai role → thông báo; áp cho `/admin`, `/seller`, `/cart`, `/checkout`, `/orders`, `/settings`). **Đã chốt tên file theo SDD:** `lib/` là nơi chuẩn; `api/http.js` và `utils/formatVND.js` giữ lại chỉ như lớp re-export để không vỡ import/test cũ (một nguồn sự thật). Các `api/*.js` không còn hardcode `http://localhost:5000` (đọc `VITE_API_BASE`).
+- [~] **[F] Thành viên C:** Khung ví `hooks/useWallet.js` (`WalletProvider` + `useWallet`: kết nối EIP-1193/MetaMask, theo dõi `accountsChanged`/`chainChanged`, `switchToDeployedChain` có thêm mạng khi mã 4902, `getSigner()` ethers v6, mã 4001 = "Bạn đã hủy thao tác", không lưu gì vào localStorage) và `lib/chain.js` (đọc/kiểm `deployments/local.json`, chỉ chấp nhận chainId 31337). Chưa có UI kết nối (Navbar/`pages/Wallet.jsx` là UC-00, tuần 3) và chưa có ABI (đóng băng ở M1).
+- [~] **[Q] Cả nhóm:** Khóa `shared/eip712/types.json` và tạo `shared/eip712/vectors.json` (sinh bằng `scripts/gen_eip712_vectors.py`, có `--check` cho CI): 3 báo giá, 2 phán quyết (kèm chữ ký Trọng tài), 2 `docHash`. **Đã chạy luôn kiểm tra chéo ngôn ngữ** ở cả 3 nơi cho cùng domainSeparator/structHash/digest/người ký: Python (`test_eip712_vectors.py`), JS (`eip712Vectors.test.js`), Solidity (`Eip712Vectors.t.sol`, còn nạp thật báo giá do Python ký vào contract). *Còn thiếu:* vector cho thông điệp liên kết ví (SDD 8.3) — định dạng SIWE chốt ở UC-00 (tuần 3).
+
+**Cách chạy lại tuần 1:** `./scripts/bootstrap.sh && ./scripts/smoke_week1.sh` · `cd contracts && forge test` · `pytest test` · `cd frontend && npx vitest run`.
+**Lưu ý cho bên review:** (1) khóa trong `EscrowBase.t.sol`, `Deploy.s.sol`, `bootstrap.sh`, `gen_eip712_vectors.py` là **khóa thử công khai của Anvil** — bài quét E-05 (AC-09) phải cho phép danh sách này, nếu không sẽ báo nhầm; (2) `contracts/lib/` bị `.gitignore` (cài bằng `scripts/install_contract_deps.sh`); (3) `foundry.toml` dùng `solc_version = "0.8.20"` (Foundry tự tải); (4) địa chỉ contract trong vector (`0xe7f1…0512`, token `0x5FbD…0aa3`) khớp lần triển khai đầu trên Anvil sạch của deployer #0.
 
 ---
 
@@ -86,8 +97,8 @@
 - [ ] **[C] Thành viên A:** Cài đặt nạp gom nhiều shop: `depositEscrowBatch` (nguyên tử, tối đa 5 đơn, tái sử dụng `_acceptQuote` và `_collect`).
 - [ ] **[C] Thành viên A:** Cài đặt sổ chờ rút pull-payment (`pendingWithdrawals`, `claimPending`, sự kiện `PayoutDeferred`).
 - [ ] **[C] Thành viên A:** Viết bộ test Foundry T-01 đến T-34, chứng minh bất biến INV-01 đến INV-07. Đo gas nạp gom 5 shop (T-32).
-- [ ] **[B] Thành viên B:** Viết các migration CSDL MySQL Web3 (`001_wallets.sql` đến `015_shipper.sql`), bảng `order_web3` quan hệ 1-1 với `orders`.
-- [ ] **[Q] Thành viên B + C:** Chạy test chéo ngôn ngữ Python, JavaScript và Solidity khớp 100% digest EIP-712.
+- [ ] **[B] Thành viên B:** Viết các migration CSDL MySQL Web3 (SDD `001_wallets.sql` … `015_shipper.sql` → đánh số `0006_wallets.sql` … `0020_shipper.sql`, xem quyết định 4 ở Ghi chú Phase 0), bảng `order_web3` quan hệ 1-1 với `orders`.
+- [~] **[Q] Thành viên B + C:** Chạy test chéo ngôn ngữ Python, JavaScript và Solidity khớp 100% digest EIP-712. *(đã chạy sớm ở tuần 1 cho báo giá, phán quyết, docHash; tuần 2 chỉ còn bổ sung vector liên kết ví nếu chốt định dạng sớm)*
 - [ ] 🎯 **NGHIỆM THU CỘT MỐC M1:**
   - [ ] Độ phủ dòng lệnh contract đạt ≥ 90% (`forge coverage`).
   - [ ] Chạy Slither không còn cảnh báo mức High chưa giải thích.
@@ -185,32 +196,33 @@
 
 ## 5. MA TRẬN THEO DÕI KIỂM THỬ (TEST EXECUTION TRACKER)
 
-### 5.1. Smart Contract Test Suite (Foundry: `test/*.t.sol`)
+### 5.1. Smart Contract Test Suite (Foundry: `contracts/test/*.t.sol`)
+> `[~]` = đã viết và pass cục bộ bằng `forge test` (46 test, gồm 5 test vector chéo ngôn ngữ), chờ review/CI. `[x] PASS` chỉ đặt khi CI xanh trên nhánh chính.
 | Mã test | Mô tả ca kiểm thử | Kết quả mong đợi | BRD / SRS | Tình trạng |
 | :---: | :--- | :--- | :---: | :---: |
-| **T-01** | Nạp tiền với báo giá hợp lệ (ERC-20 và ETH) | Thành công, đơn `LOCKED` | BR-06 | `[ ] PASS` |
-| **T-02** | Báo giá quá hạn; sai caller; chữ ký sai; signer thiếu role | Revert | BR-06 | `[ ] PASS` |
-| **T-03** | Trùng `orderId`; ETH khác amount; nạp token gửi kèm ETH; thiếu allowance | Revert | BR-06 | `[ ] PASS` |
-| **T-04** | Merchant trùng Buyer; Trọng tài làm Buyer/Merchant; duration ngoài [1h, 30d] | Revert | BR-03, 04 | `[ ] PASS` |
-| **T-05** | `confirmDelivery` gọi bởi người không có role; gọi khi đơn chưa `LOCKED` | Revert | BR-03 | `[ ] PASS` |
-| **T-06** | `earlyRelease` gọi bởi Buyer; gọi bởi người khác | Thành công / Revert | BR-03 | `[ ] PASS` |
-| **T-07** | `releaseAfterInspection` tại đúng mốc biên và trước 1 giây | Thành công / Revert | BR-03 | `[ ] PASS` |
-| **T-08** | Chia phí theo `feeBps` (0, 300, 1000); Kiểm tra làm tròn; Đổi `defaultFeeBps` không ảnh hưởng đơn cũ | Đúng công thức | BR-02 | `[ ] PASS` |
+| **T-01** | Nạp tiền với báo giá hợp lệ (ERC-20 và ETH) | Thành công, đơn `LOCKED` | BR-06 | `[~] pass cục bộ (forge)` |
+| **T-02** | Báo giá quá hạn; sai caller; chữ ký sai; signer thiếu role | Revert | BR-06 | `[~] pass cục bộ (forge)` |
+| **T-03** | Trùng `orderId`; ETH khác amount; nạp token gửi kèm ETH; thiếu allowance | Revert | BR-06 | `[~] pass cục bộ (forge)` |
+| **T-04** | Merchant trùng Buyer; Trọng tài làm Buyer/Merchant; duration ngoài [1h, 30d] | Revert | BR-03, 04 | `[~] pass cục bộ (forge)` |
+| **T-05** | `confirmDelivery` gọi bởi người không có role; gọi khi đơn chưa `LOCKED` | Revert | BR-03 | `[~] pass cục bộ (forge)` |
+| **T-06** | `earlyRelease` gọi bởi Buyer; gọi bởi người khác | Thành công / Revert | BR-03 | `[~] pass cục bộ (forge)` |
+| **T-07** | `releaseAfterInspection` tại đúng mốc biên và trước 1 giây | Thành công / Revert | BR-03 | `[~] pass cục bộ (forge)` |
+| **T-08** | Chia phí theo `feeBps` (0, 300, 1000); Kiểm tra làm tròn; Đổi `defaultFeeBps` không ảnh hưởng đơn cũ | Đúng công thức | BR-02 | `[~] một phần: feeBps 0 và 300 (trần mặc định) + fuzz INV-03; mức 1000 cần setDefaultFeeBps (tuần 2)` |
 | **T-09** | `setDefaultFeeBps` > 1000; gọi bởi người không phải Admin | Revert | BR-02 | `[ ] PASS` |
 | **T-10** | `raiseDispute` trong hạn; sau hạn; gọi bởi người không phải Buyer | Thành công / Revert | BR-03 | `[ ] PASS` |
 | **T-11** | `resolveDispute` đủ 2/3 chữ ký (Arbitrator + Buyer; Arbitrator + Merchant) | Thành công, đúng payout | BR-04 | `[ ] PASS` |
 | **T-12** | 2 chữ ký cùng bên; 2 địa chỉ cùng vai Trọng tài; chữ ký người lạ; quá hạn deadline; sai nonce | Revert | BR-04 | `[ ] PASS` |
 | **T-13** | Nộp lại chữ ký đã dùng sau khi đơn đã đóng | Revert | BR-04 | `[ ] PASS` |
-| **T-14** | `cancelIfUnfulfilled` trước và sau 14 ngày; bởi Buyer, Admin, người ngoài | Revert / OK / Revert | BR-05 | `[ ] PASS` |
+| **T-14** | `cancelIfUnfulfilled` trước và sau 14 ngày; bởi Buyer, Admin, người ngoài | Revert / OK / Revert | BR-05 | `[~] pass cục bộ (forge)` |
 | **T-15** | `arbitratorForceResolve` trước/sau `disputeTimeout`; biên -1s revert, đúng mốc thành công | Revert / OK / Revert | BR-05 | `[ ] PASS` |
-| **T-16** | Ví nhận từ chối ETH: Chuyển vào `pendingWithdrawals`; `claimPending` rút thành công | Thành công, không kẹt | BR-05 | `[ ] PASS` |
+| **T-16** | Ví nhận từ chối ETH: Chuyển vào `pendingWithdrawals`; `claimPending` rút thành công | Thành công, không kẹt | BR-05 | `[~] một phần: ví từ chối ETH → ghi sổ chờ rút; claimPending (tuần 2)` |
 | **T-17** | Tấn công Reentrancy qua fallback ví nhận ETH và token độc hại | Bị ReentrancyGuard chặn | Bảo mật | `[ ] PASS` |
 | **T-18** | Invariant/Fuzz: Số dư contract = Tổng đơn mở + Tổng sổ chờ rút | Luôn đúng | G-01 | `[ ] PASS` |
 | **T-19** | Kiểm tra ma trận âm: Mọi cặp (state, method) không hợp lệ trong SRS mục 5 | Revert | Máy trạng thái | `[ ] PASS` |
-| **T-20** | Báo giá có `disputeTimeout` < 7 ngày hoặc > 90 ngày; biên đúng 7 và 90 ngày | Revert / OK | BR-10 | `[ ] PASS` |
+| **T-20** | Báo giá có `disputeTimeout` < 7 ngày hoặc > 90 ngày; biên đúng 7 và 90 ngày | Revert / OK | BR-10 | `[~] một phần: biên 7/90 ngày khi nạp; phần resolve/force (tuần 2)` |
 | **T-21** | Hai đơn có `disputeTimeout` khác nhau chạy song song: độc lập thời gian timeout | Thành công độc lập | BR-10 | `[ ] PASS` |
-| **T-22** | Báo giá có `feeBps > defaultFeeBps`; hạ trần thì báo giá cũ bị từ chối | Revert / OK | BR-02, 06 | `[ ] PASS` |
-| **T-23** | Báo giá có `q.buyer != msg.sender` | Revert | BR-06 | `[ ] PASS` |
+| **T-22** | Báo giá có `feeBps > defaultFeeBps`; hạ trần thì báo giá cũ bị từ chối | Revert / OK | BR-02, 06 | `[~] một phần: báo giá vượt trần bị từ chối; hạ trần cần setDefaultFeeBps (tuần 2)` |
+| **T-23** | Báo giá có `q.buyer != msg.sender` | Revert | BR-06 | `[~] pass cục bộ (forge)` |
 | **T-24** | `resolveDispute` với `deadline >= disputedAt + disputeTimeout` | Revert | BR-04, 05 | `[ ] PASS` |
 | **T-25** | Nạp gom 3 đơn 3 shop: 1 lần `transferFrom`, tăng số dư đúng tổng, 3 sự kiện `OrderCreated` | Thành công | BR-11 | `[ ] PASS` |
 | **T-26** | Lô nạp rỗng; lô > 5 đơn; lệch độ dài mảng quotes và sigs | Revert | BR-11 | `[ ] PASS` |
@@ -231,7 +243,7 @@
 | Mã test | Phạm vi kiểm thử | Tiêu chuẩn đánh giá | Tình trạng |
 | :---: | :--- | :--- | :---: |
 | **I-01** | Liên kết ví: Nonce dùng lại, nonce hết hạn, chữ ký sai, ví đã thuộc user khác | AC-01 / Trả đúng mã lỗi HTTP | `[ ] PASS` |
-| **I-02** | Báo giá: Quy đổi VND ➔ token chuẩn xác, hợp đồng chấp nhận chữ ký Python | AC-01, AC-02 | `[ ] PASS` |
+| **I-02** | Báo giá: Quy đổi VND ➔ token chuẩn xác, hợp đồng chấp nhận chữ ký Python | AC-01, AC-02 | `[~] một phần: chữ ký Python được contract chấp nhận (forge + smoke_week1.sh); quy đổi VND→token ở tuần 3` |
 | **I-03** | Indexer: Xử lý trùng tx_hash/log_index không ghi đôi, khởi động lại, phục hồi con trỏ | AC-08 / Tính Idempotent | `[ ] PASS` |
 | **I-04** | Nhóm hàng: Đơn nhiều nhóm lấy `max()`, đổi chính sách không ảnh hưởng đơn cũ | AC-12 | `[ ] PASS` |
 | **I-05** | Đồng bộ thời gian: `now_chain()` theo sát block Anvil; tua thời gian cấp quote mới chuẩn | AC-02 | `[ ] PASS` |
@@ -239,10 +251,10 @@
 | **I-07** | Giỏ 3 shop: Tạo đúng 3 đơn 1 group, tổng token khớp lệnh, Indexer xóa đúng giỏ hàng | AC-14 | `[ ] PASS` |
 | **A-01** | Mọi API yêu cầu token: Không token hoặc token hết hạn trả HTTP 401 | Mục 15 (P0-01) | `[~] pass cục bộ` |
 | **A-02** | Kiểm tra quyền Role: User/Seller gọi API Admin bị chặn HTTP 403; Shipper chỉ xem đơn gán | Mục 15 (P0-02) | `[~] pass cục bộ` |
-| **A-03** | Kiểm tra sở hữu dữ liệu: Xem đơn, giỏ, shop của người khác bị 403 hoặc 404 | Mục 15 (P0-03) | `[~] unit pass cục bộ; MySQL chờ CI` |
+| **A-03** | Kiểm tra sở hữu dữ liệu: Xem đơn, giỏ, shop của người khác bị 403 hoặc 404 | Mục 15 (P0-03) | `[~] pass cục bộ (unit + MySQL 8.0 thật)` |
 | **A-04** | Đăng ký tài khoản với role `admin` hoặc `shipper` bị từ chối | Mục 15 (P0-02) | `[~] pass cục bộ` |
-| **A-05** | Đua tranh đặt hàng (Race condition): Tồn kho không bao giờ bị âm | Mục 15 (P0-05) | `[~] unit pass cục bộ (FOR UPDATE + UPDATE có điều kiện); race MySQL chờ CI` |
-| **A-06** | Giới hạn brute-force: Nhập sai PIN hoặc Password quá 5 lần bị khóa tạm | Mục 15 (P0-05) | `[~] unit pass cục bộ; MySQL chờ CI` |
+| **A-05** | Đua tranh đặt hàng (Race condition): Tồn kho không bao giờ bị âm | Mục 15 (P0-05) | `[~] pass cục bộ (unit + race MySQL 8.0 thật, 3 lần liên tiếp)` |
+| **A-06** | Giới hạn brute-force: Nhập sai PIN hoặc Password quá 5 lần bị khóa tạm | Mục 15 (P0-05) | `[~] pass cục bộ (unit + MySQL 8.0 thật)` |
 | **A-07** | Endpoint `/api/shops/migrate` đã bị xóa bỏ; Không còn API cấp số dư vô hạn | Mục 15 (P0-04) | `[~] unit pass cục bộ` |
 
 ---
@@ -253,7 +265,7 @@
 | **F-01** | Hàm định dạng `formatVND`: Kiểm tra số nguyên, làm tròn, số 0, số cực lớn, không còn ký hiệu `$` | Chuẩn định dạng tiếng Việt | `[~] pass cục bộ` |
 | **F-02** | Reducer nạp tiền (`depositReducer`): Đủ allowance bỏ bước approve, từ chối ví (4001), hết hạn quote | Chuyển state chính xác | `[ ] PASS` |
 | **F-03** | Ánh xạ lỗi tiếng Việt: `BATCH_TOO_LARGE`, `FEE_CAP_CHANGED`, `Invalid batch size` | Hiển thị thông báo dễ hiểu | `[ ] PASS` |
-| **F-04** | Client API chung: Tự gắn `Authorization`, tự động xóa token và chuyển trang khi gặp 401 | Hoạt động thông suốt | `[ ] PASS` |
+| **F-04** | Client API chung: Tự gắn `Authorization`, tự động xóa token và chuyển trang khi gặp 401 | Hoạt động thông suốt | `[~] pass cục bộ (client.test.js; chỉ đăng xuất khi mã phiên, không phải mọi 401)` |
 | **F-05** | Hook `usePolling`: Dừng khi rời màn hình, dừng khi đơn tới trạng thái cuối | Không memory leak / spam | `[ ] PASS` |
 | **F-06** | Đồng hồ đếm ngược: Tính độ lệch dựa trên `server_time`, không lệch theo máy client | Đếm ngược chuẩn xác | `[ ] PASS` |
 

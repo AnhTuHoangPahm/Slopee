@@ -47,6 +47,7 @@
 | `migrations/0002_product_fk_snapshots.py` | Migration | `upgrade(cursor)` | (thay route `/migrate` cũ) cột snapshot + backfill; `cartItems.productId` CASCADE; `orderLines.productId` NULL + SET NULL |
 | `migrations/0003_reviews_dedupe.py` | Migration | `upgrade(cursor)` | DB cũ: `comment NOT NULL`, bỏ trùng, `UNIQUE(userId,productId)`, FK `userId` CASCADE |
 | `migrations/0004_auth_attempts.sql` | Migration | — | tạo `authAttempts` |
+| `migrations/0005_order_line_settlement.py` | Migration | — | thêm `orderLines.sellerPaymentMethodId` (FK SET NULL) + `sellerCredit`; backfill đơn cũ đã thanh toán không phải `cash`; idempotent. **Web3 bắt đầu từ `0006`** |
 | `.env.example` | Mẫu env | — | `SECRET_KEY`, `AUTH_TOKEN_TTL_SECONDS`, `SLOPEE_ENV`, `DB_*`, `AUTH_MAX_ATTEMPTS`, `AUTH_LOCK_SECONDS` |
 
 ### 1.2. Route (`backend/routes/`)
@@ -89,8 +90,8 @@ Mỗi file có `get_db_connection()` mở kết nối PyMySQL (trừ `products`,
 | --- | --- | :-: | --- | --- | --- |
 | `get_payment_methods` | `GET /` | U | — | `{methods[]}` | phương thức thanh toán của mình (kèm `balance` VND) |
 | `add_payment_method` | `POST /` | U | `methodType,providerName,accountNumber` | 201 / 400 | tạo phương thức (`methodType` ∈ `bank|credit_card|cash`, độ dài có giới hạn), **số dư khởi tạo 0** |
-| `execute_checkout` | `POST /checkout` | U | `cartItemIds[],paymentMethodId` (hoặc `"CASH_ON_DELIVERY"`), `passPhrase` | 200 `{message}` / 400 / 401 / 404 / 409 / 429 | `_verify_pin` (PIN chưa đặt → 401 `pin_not_set`; sai 5 lần → 429; bộ đếm commit riêng) → **transaction tiền**: khóa `cartItems` của mình → khóa `products` (`isActive`) → đọc `shops` → khóa `paymentMethods` (người mua + người bán, `ORDER BY id FOR UPDATE`) → kiểm tồn kho/số dư theo giá đã khóa → `UPDATE … balance >= x`, cộng ví người bán, `UPDATE products … inStock >= qty` (kiểm `rowcount`) → tạo **một** `orders` (`paid`) + `orderLines`, xóa `cartItems`. Deadlock → 409 `checkout_conflict` |
-| `update_order_status` | `PUT /orders/<order_id>` | U | `status ∈ {cancelled,received}` | 200 / 400 / 404 / 409 | đổi trạng thái đơn cũ: chỉ **chủ đơn** (khác → 404), khóa dòng; đơn có `order_web3` → 409 `WEB3_ORDER_MANAGED`; chỉ `paid\|shipped→received`, `pending\|paid→cancelled` (sai → 409 `INVALID_STATE`); UPDATE kèm điều kiện trạng thái cũ. ⚠ hủy đơn vẫn **không hoàn tiền/kho** |
+| `execute_checkout` | `POST /checkout` | U | `cartItemIds[],paymentMethodId` (hoặc `"CASH_ON_DELIVERY"`), `passPhrase` | 200 `{message}` / 400 / 401 / 404 / 409 / 429 | `_verify_pin` (PIN chưa đặt → 401 `pin_not_set`; sai 5 lần → 429; bộ đếm commit riêng) → **transaction tiền**: khóa `cartItems` của mình → khóa `products` (`isActive`) → đọc `shops` → khóa `paymentMethods` (người mua + người bán, `ORDER BY id FOR UPDATE`) → kiểm tồn kho/số dư theo giá đã khóa → `UPDATE … balance >= x`, cộng ví người bán, `UPDATE products … inStock >= qty` (kiểm `rowcount`) → tạo **một** `orders` (`paid`) + `orderLines`, xóa `cartItems`. Deadlock → 409 `checkout_conflict` Người bán chỉ được **cộng khi người mua thực sự bị trừ tiền** (COD/`cash` không cộng); mỗi `orderLines` ghi `sellerPaymentMethodId` + `sellerCredit` để hủy đơn thu lại đúng khoản đó |
+| `update_order_status` | `PUT /orders/<order_id>` | U | `status ∈ {cancelled,received}` | 200 `{message, refunded}` / 400 / 404 / 409 (`INVALID_STATE`, `WEB3_ORDER_MANAGED`, `refund_unavailable`) | đổi trạng thái đơn cũ: chỉ **chủ đơn** (khác → 404), khóa dòng; đơn có `order_web3` → 409 `WEB3_ORDER_MANAGED`; chỉ `paid\|shipped→received`, `pending\|paid→cancelled` (sai → 409 `INVALID_STATE`); UPDATE kèm điều kiện trạng thái cũ. **hủy đơn `paid`** (`_settle_cancelled_paid_order`): hoàn kho (bỏ qua sản phẩm đã xóa), hoàn tiền người mua (chỉ khi đã bị trừ, không phải `cash`) và **thu lại** từ `sellerPaymentMethodId` (`UPDATE … AND balance >= x`; không đủ → 409 `refund_unavailable`, rollback). Khóa `products → paymentMethods` như checkout. `pending→cancelled` và `received` không đụng tiền/kho |
 | `get_orders` | `GET /orders` | U | — | `{orders:[{orderId,totalAmount,created_at,status,items[]}]}` | đơn của mình, nhóm theo đơn (🔲 thêm cờ khiếu nại Web3) |
 
 #### `shops.py` — prefix `/api/shops`
@@ -112,7 +113,7 @@ Mỗi file có `get_db_connection()` mở kết nối PyMySQL (trừ `products`,
 | --- | --- | --- | --- | --- |
 | `get_stats` | `GET /stats` | — | `{users,shops,products}` | đếm tổng |
 | `get_users` | `GET /users` | — | danh sách user (kèm cờ yêu cầu xóa) | liệt kê tài khoản |
-| `delete_user` | `DELETE /users/<user_id>` | — | 200 / 403 / 404 | xóa user; cấm xóa chính mình và mọi admin |
+| `delete_user` | `DELETE /users/<user_id>` | — | 200 / 403 / 404 / 409 `user_has_orders` | xóa user; cấm xóa chính mình và mọi admin; user đã có đơn → 409 (giữ `orders.userId` RESTRICT, đơn là hồ sơ kế toán) |
 | `get_admin_categories` | `GET /categories` | — | `{categories}` | danh mục |
 | `create_category` | `POST /categories` | `name` | 201 | thêm danh mục |
 | `rename_category` | `PUT /categories/<int:cat_id>` | `name` | 200 | đổi tên |
@@ -138,7 +139,7 @@ Mỗi file có `get_db_connection()` mở kết nối PyMySQL (trừ `products`,
 | `reviews`, `reviewImages` | đánh giá (khai báo một lần, S-13) | `reviews`: `userId`, `productId`, `rating`, `comment NOT NULL`, `UNIQUE(userId,productId)`; `reviewImages`: `id` VARCHAR(36) do backend cấp, `reviewId`, `imageUrl` |
 | `carts`, `cartItems` | giỏ | `carts.status` `active|ordered`; `cartItems`: `cartId`, `productId` (FK CASCADE), `quantity`, `selectedVariants` |
 | `orders` | đơn | `id`, `userId`, `paymentMethodId`, `created_at`, `status`(`pending|paid|shipped|cancelled|received`), `totalAmount` DECIMAL(15,0) |
-| `orderLines` | dòng đơn | `orderId`, `productId` (NULL được, FK SET NULL), `selectedVariants`, `unitPrice`, `quantity`, `snapshotProductName`, `snapshotShopName` |
+| `orderLines` | dòng đơn | `orderId`, `productId` (NULL được, FK SET NULL), `selectedVariants`, `unitPrice`, `quantity`, `snapshotProductName`, `snapshotShopName`, `sellerPaymentMethodId` (FK SET NULL → `paymentMethods`), `sellerCredit` DECIMAL(15,0) (VND đã cộng cho người bán) |
 | `authAttempts` | đếm sai mật khẩu/PIN (P0-05) | PK `(scope, subject)`, `failedCount`, `lockedUntil` (epoch giây, BIGINT) |
 | `schema_migrations` | migration đã chạy (do `migrate.py` tạo, không nằm trong `schema.sql`) | `version` (tên tệp), `appliedAt` |
 
@@ -162,12 +163,12 @@ Mỗi file có `get_db_connection()` mở kết nối PyMySQL (trừ `products`,
 | `/play/tetris` | `pages/Tetris.jsx` | trò chơi Tetris (độc lập, không API) | — |
 | (mọi trang) | `components/Navbar.jsx` | thanh điều hướng, ô tìm kiếm (điều hướng `/?search=`), giỏ thu nhỏ, menu theo role | `fetchCartAPI` |
 
-Chưa có route guard theo role phía client (🔲 `RequireRole.jsx`); quyền thật do backend kiểm.
+Route guard ✅ `components/RequireRole.jsx` bọc `/admin` (admin), `/seller` (seller), `/cart`, `/checkout`, `/orders`, `/settings` (chỉ cần đăng nhập): chưa đăng nhập → `/login`; sai role → thông báo. Chỉ là tiện lợi giao diện; quyền thật do backend kiểm. `WalletProvider` (`hooks/useWallet.js`) bọc toàn app.
 
 ### 2.2. API client (`src/api/`)
 | File | Hàm | → Endpoint |
 | --- | --- | --- |
-| `http.js` | `API_ORIGIN`, `getToken()`, `getUser()`, `setSession(token,user)`, `updateStoredUser(user)`, `clearSession()`, `authFetch(url, opts)` | phiên ở `sessionStorage`; `authFetch` gắn Bearer, tự đăng xuất khi mã phiên hết hạn/sai |
+| `http.js` | (**chỉ re-export `lib/client.js`**) `API_ORIGIN`, `getToken()`, `getUser()`, `setSession(token,user)`, `updateStoredUser(user)`, `clearSession()`, `authFetch(url, opts)` | phiên ở `sessionStorage`; `authFetch` gắn Bearer, tự đăng xuất khi mã phiên hết hạn/sai |
 | `auth.js` | `loginAPI(username,password)`, `signupAPI(userData)` | `POST /api/auth/login`, `/signup` (không cần token) |
 | | `requestDeletionAPI(password)`, `updateProfileAPI(bio)`, `updateUsernameAPI(newUsername)`, `updatePasswordAPI(old,new)`, `fetchUserReviewsAPI()` | `/account/request-deletion`, `/profile`, `/username`, `/password`, `GET /reviews/me` |
 | `products.js` | `fetchProductsAPI(search='')`, `fetchCategoriesAPI()`, `fetchProductDetailsAPI(id)`, `fetchProductReviewsAPI(id,offset,limit)` | `GET /api/products...` (công khai) |
@@ -180,7 +181,14 @@ Chưa có route guard theo role phía client (🔲 `RequireRole.jsx`); quyền t
 ### 2.3. Tiện ích và test
 | File | Làm gì |
 | --- | --- |
-| `utils/formatVND.js` | `formatVND(value) → "1.234.567 ₫"` (duy nhất để hiển thị tiền) |
+| `lib/client.js` | **chuẩn**: `API_ORIGIN` (đọc `VITE_API_BASE`, mặc định `http://localhost:5000`), `getToken/getUser/setSession/updateStoredUser/clearSession`, `SESSION_ERROR_CODES`, `authFetch` |
+| `lib/format.js` | **chuẩn**: `formatVND(value) → "1.234.567 ₫"` (duy nhất để hiển thị tiền), `shortAddress(addr) → "0x9965…A4dc"` |
+| `utils/formatVND.js` | chỉ re-export `lib/format.js` |
+| `lib/chain.js` | `ANVIL_CHAIN_ID=31337`, `parseDeployment(raw)`, `loadDeployment()` (đọc `/deployments/local.json`), `DeploymentError`, `toChainIdHex`, `addChainParams(deployment)`, `sameAddress(a,b)` |
+| `lib/eip712.js` | `EIP712_TYPES` (từ `shared/eip712/types.json`), `buildDomain(deployment)`, `quoteDigest`, `disputeDigest`, `recoverQuoteSigner`, `recoverDisputeSigner`, `signDispute(signer, domain, msg)` |
+| `hooks/useWallet.js` | `WalletProvider({provider?, deployment?})`, `useWallet() → {status, account, chainId, isConnected, isCorrectChain, deployment, deploymentStatus, error, connect, disconnect, clearError, switchToDeployedChain, getSigner}`; hàm thuần `walletReducer`, `normalizeWalletError`, `getInjectedProvider`, `parseChainId`; mã lỗi `WALLET_ERROR` (4001 → `USER_REJECTED`) |
+| `components/RequireRole.jsx` | `<RequireRole roles?="admin"|[...]>` — route guard |
+| `__tests__/client.test.js`, `format.test.js`, `chain.test.js`, `RequireRole.test.jsx`, `useWallet.test.jsx`, `eip712Vectors.test.js` | F-04, tiện ích định dạng, `deployments/local.json`, route guard, ví (EIP-1193 giả), vector EIP-712 chéo ngôn ngữ |
 | `__tests__/setup.js` | mock `fetch`/môi trường cho Vitest |
 | `__tests__/Home.test.jsx`, `Navbar.test.jsx` | test trang Home và Navbar |
 | `__tests__/formatVND.test.js` | test định dạng tiền |
@@ -204,7 +212,9 @@ Chưa có route guard theo role phía client (🔲 `RequireRole.jsx`); quyền t
 | `unit_test/test_money.py` | `to_vnd`, `format_vnd`, JSON provider, schema `DECIMAL(15,0)` |
 | `integration_test/test_checkout_race_mysql.py` | **MySQL thật**: nhiều người mua tranh tồn kho, không bán lố, tiền khớp; số tiền lưu là int VND |
 | `integration_test/test_products_api.py` | **MySQL thật**: `GET /api/products/` trả danh sách hợp lệ |
-| `integration_test/test_p0_mysql.py` | **MySQL thật** (chưa chạy khi viết): sở hữu đơn, đơn Web3, bấm thanh toán 2 lần chỉ ra 1 đơn, thanh toán chéo không deadlock, khóa đăng nhập/PIN, ảnh đánh giá ở strict mode, runner + migration 0002/0003 idempotent, xóa sản phẩm giữ lịch sử đơn |
+| `unit_test/test_p0_decisions.py` | quyết định nhóm: COD/`cash` không cộng người bán, hủy đơn `paid` (hoàn kho + hoàn tiền + thu lại, bảo toàn tiền, người bán không đủ → 409, thứ tự khóa), xóa user có đơn → 409 |
+| `unit_test/test_eip712_vectors.py` | tuần 1: vector EIP-712 chéo ngôn ngữ phía Python (digest, người ký, chữ ký 65 byte low-s, `docHash`, `vectors.json` khớp script sinh) |
+| `integration_test/test_p0_mysql.py` | **MySQL thật** (đã chạy trên MySQL 8.0, gồm quyết định nhóm: hủy đơn hoàn tiền/hủy song song/COD/xóa user/migration `0005`): sở hữu đơn, đơn Web3, bấm thanh toán 2 lần chỉ ra 1 đơn, thanh toán chéo không deadlock, khóa đăng nhập/PIN, ảnh đánh giá ở strict mode, runner + migration 0002/0003 idempotent, xóa sản phẩm giữ lịch sử đơn |
 
 ---
 
@@ -247,6 +257,10 @@ Nguồn: SRS mục 4–7, 9–10; SDD mục 3–8, 10. Đặt dưới `backend/s
 | --- | --- |
 | `indexer/loop.py` | giữ `GET_LOCK('slopee_indexer')`; mỗi cửa sổ ≤ 500 block là một transaction: nạp log → `chain_events` (bỏ qua trùng `(tx_hash, log_index)`) → handler → cập nhật `indexer_cursor`; gắn `block_timestamp` mỗi log |
 | `indexer/handlers.py` | `on_order_created`, `on_order_delivered`, `on_order_disputed`, `on_order_completed`, `on_order_refunded`, `on_dispute_resolved`, `on_payout_deferred`, `on_pending_claimed`, … — mỗi handler chỉ áp dụng chuyển hợp lệ, sai thì đặt `anomaly_flag`; đồng bộ `orders.status` qua `sync_legacy_status`; `on_order_created` xóa `cartItems` |
+| `scripts/bootstrap.sh` ✅ | dựng Anvil + build + deploy + `deployments/local.json` + `backend/.env.web3` (`--no-anvil`, `--fresh`, `--force-env`) |
+| `scripts/smoke_week1.sh` ✅ | smoke test trên Anvil thật: báo giá Python ký → nạp → giao → nhận → kiểm số dư |
+| `scripts/install_contract_deps.sh` ✅ | cài forge-std v1.9.4 + OpenZeppelin v5.0.2 đúng tag |
+| `scripts/gen_eip712_vectors.py` ✅ | sinh `shared/eip712/vectors.json` (`--check` để CI so khớp) |
 | `scripts/replay.sh`, `scripts/reconcile.py` | replay từ block 0 (`--reset`), đối soát số dư |
 | `jobs/` | `QuoteExpirySweeper` (1 phút), `AutoRelease` (1 phút), `DeliveryTimeoutReminder` (1 giờ), `DisputeSigExpiry` (5 phút), `ReconcileSnapshot` (10 phút) |
 
@@ -269,7 +283,8 @@ Nguồn: SRS mục 4–7, 9–10; SDD mục 3–8, 10. Đặt dưới `backend/s
 ### 4.6. Bảng Web3 dự kiến
 `wallet_nonces`, `user_wallets`, `checkout_groups`, `order_web3` (1–1 với `orders`), `order_quotes`, `dispute_resolutions`, `dispute_signatures`, `chain_events`, `indexer_cursor`, `category_policies`, `category_policy_map`, `platform_settings`, `pending_balances`, `tx_outbox`, `onchain_id_seq`, `shipper_assignments`, `schema_migrations`.
 
-### 4.7. Smart contract `SlopeeEscrowMaster` (+ `MockUSD`)
+### 4.7. Smart contract `SlopeeEscrowMaster` (+ `MockUSD`) — tuần 1 ✅ (`contracts/`), phần còn lại 🔲 tuần 2
+> ✅ `depositEscrow`, `confirmDelivery`, `earlyRelease`, `releaseAfterInspection`, `cancelIfUnfulfilled` + `_acceptQuote/_collect/_verifyQuote/_refund/_executePayout/_payout` (ETH bị từ chối → `pendingWithdrawals`). Struct `Order`/`Quote`, enum, sự kiện, hằng số, storage đã đủ; 🔲 `raiseDispute`, `resolveDispute`, `arbitratorForceResolve`, `depositEscrowBatch`, `claimPending`, `setDefaultFeeBps`, `setFeeRecipient`. `MockUSD`: ERC-20 6 decimals, `mint` công khai (chỉ để thử). `script/Deploy.s.sol` ghi `deployments/local.json`.
 | Hàm | Ai gọi | Làm gì |
 | --- | --- | --- |
 | `depositEscrow(q, sig)` | Buyer | xác minh báo giá → thu tiền → đơn `LOCKED` (`OrderCreated`) |

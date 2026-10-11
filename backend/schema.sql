@@ -109,8 +109,11 @@ CREATE TABLE IF NOT EXISTS orderLines (
 	quantity int NOT NULL CHECK (quantity > 0),
     snapshotProductName varchar(255),
     snapshotShopName varchar(255),
+    sellerPaymentMethodId varchar(36) NULL,
+    sellerCredit decimal(15,0) NOT NULL DEFAULT 0 comment 'VND đã cộng cho người bán từ dòng này',
     FOREIGN KEY (orderId) REFERENCES orders (id) on delete cascade,
-    FOREIGN KEY (productId) REFERENCES products (id) on delete set null
+    FOREIGN KEY (productId) REFERENCES products (id) on delete set null,
+    CONSTRAINT fk_orderlines_seller_pm FOREIGN KEY (sellerPaymentMethodId) REFERENCES paymentMethods (id) on delete set null
 );
 
 CREATE TABLE IF NOT EXISTS reviews (

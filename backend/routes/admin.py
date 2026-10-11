@@ -74,7 +74,20 @@ def delete_user(user_id):
             if u['role'] == 'admin':
                 return jsonify({"error": "Admin accounts cannot be deleted via the API."}), 403
                 
-            cursor.execute("DELETE FROM users WHERE id=%s", (user_id,))
+            # Quyết định nhóm: giữ orders.userId ON DELETE RESTRICT (SDD Q-06 cũng dùng RESTRICT cho order_web3): đơn hàng
+            # và tiền ký quỹ là hồ sơ kế toán nên không xóa cứng người dùng đã có đơn. Báo rõ thay vì lỗi 500.
+            cursor.execute("SELECT 1 AS x FROM orders WHERE userId=%s LIMIT 1", (user_id,))
+            if cursor.fetchone():
+                return jsonify({"error": "This user has orders and cannot be deleted. Orders are kept for accounting.",
+                                "code": "user_has_orders"}), 409
+            try:
+                cursor.execute("DELETE FROM users WHERE id=%s", (user_id,))
+            except pymysql.err.IntegrityError as e:
+                conn.rollback()
+                if e.args and e.args[0] == 1451:  # FK RESTRICT khác (ví dụ order_web3 sau này)
+                    return jsonify({"error": "This user is referenced by other records and cannot be deleted.",
+                                    "code": "user_has_orders"}), 409
+                raise
             conn.commit()
             return jsonify({"message": "User permanently eradicated"}), 200
     finally:

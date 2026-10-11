@@ -1,6 +1,6 @@
-import { authFetch } from './http';
+import { API_ORIGIN, authFetch } from '../lib/client';
 
-const API_BASE = 'http://localhost:5000/api/auth';
+const API_BASE = `${API_ORIGIN}/api/auth`;
 
 export const loginAPI = async (username, password) => {
     const res = await fetch(`${API_BASE}/login`, {

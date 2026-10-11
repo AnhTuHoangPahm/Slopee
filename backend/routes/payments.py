@@ -228,11 +228,15 @@ def execute_checkout():
                 if cursor.rowcount != 1:
                     raise ApiError("Insufficient funds.", 'insufficient_funds', 400)
 
-            # Cộng tiền cho người bán
-            for shop_id, payout in shop_payouts.items():
-                bank_id = seller_bank_ids.get(shop_id)
-                if bank_id:
-                    cursor.execute("UPDATE paymentMethods SET balance = balance + %s WHERE id=%s", (payout, bank_id))
+            # Cộng tiền cho người bán CHỈ KHI người mua thực sự bị trừ tiền. COD và phương thức 'cash' không đi qua số dư
+            # hệ thống (tiền mặt trao tay), nếu vẫn cộng cho người bán thì tạo ra tiền từ hư không (quyết định nhóm, S-04/S-05).
+            credited_to = {}  # shopId -> paymentMethodId của người bán đã được cộng
+            if charge_buyer:
+                for shop_id, payout in shop_payouts.items():
+                    bank_id = seller_bank_ids.get(shop_id)
+                    if bank_id:
+                        cursor.execute("UPDATE paymentMethods SET balance = balance + %s WHERE id=%s", (payout, bank_id))
+                        credited_to[shop_id] = bank_id
 
             # B. Trừ tồn kho nguyên tử: UPDATE ... WHERE inStock >= qty
             for pid, qty in needed.items():
@@ -247,8 +251,10 @@ def execute_checkout():
 
             for ci, p, qty in lines:
                 shop = shops.get(p['shopId'], {})
-                cursor.execute("INSERT INTO orderLines (id, orderId, productId, unitPrice, quantity, snapshotProductName, snapshotShopName, selectedVariants) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                               (str(uuid.uuid4()), order_id, p['productId'], p['unitPrice'], qty, p['name'], shop.get('shopName'), ci['selectedVariants']))
+                seller_pm = credited_to.get(p['shopId'])  # để hủy đơn có thể thu lại đúng khoản đã cộng
+                cursor.execute("INSERT INTO orderLines (id, orderId, productId, unitPrice, quantity, snapshotProductName, snapshotShopName, selectedVariants, sellerPaymentMethodId, sellerCredit) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                               (str(uuid.uuid4()), order_id, p['productId'], p['unitPrice'], qty, p['name'], shop.get('shopName'), ci['selectedVariants'],
+                                seller_pm, (to_vnd(p['unitPrice']) * qty) if seller_pm else 0))
 
             # D. Delete CartItems
             cursor.execute(f"DELETE FROM cartItems WHERE id IN ({_placeholders(len(cart_item_ids))})", tuple(cart_item_ids))
@@ -272,6 +278,57 @@ def execute_checkout():
         raise  # -> handler chung: log chi tiết, client chỉ nhận 500 chung
     finally:
         conn.close()
+
+
+def _settle_cancelled_paid_order(cursor, order_id, buyer_id):
+    """Hủy đơn `paid` (S-05, quyết định nhóm): hoàn kho, hoàn tiền người mua và THU LẠI khoản đã cộng cho người bán.
+
+    Không bao giờ tạo ra tiền: người mua chỉ được hoàn khi trước đó bị trừ tiền (phương thức không phải 'cash'),
+    và khoản hoàn được thu lại từ đúng phương thức của người bán đã nhận (orderLines.sellerPaymentMethodId).
+    Thứ tự khóa giống checkout: products -> paymentMethods (mỗi nhóm ORDER BY id) để không deadlock.
+    Trả về số VND đã hoàn cho người mua.
+    """
+    cursor.execute("SELECT id, orderId, productId, quantity, sellerPaymentMethodId, sellerCredit FROM orderLines WHERE orderId=%s ORDER BY id",
+                   (order_id,))
+    lines = cursor.fetchall()
+
+    restock = {}
+    clawback = {}
+    for ln in lines:
+        if ln['productId']:  # sản phẩm đã bị xóa thì không còn kho để hoàn
+            restock[ln['productId']] = restock.get(ln['productId'], 0) + int(ln['quantity'])
+        credit = to_vnd(ln['sellerCredit'] or 0)
+        if credit > 0 and ln['sellerPaymentMethodId']:  # tài khoản người bán đã xóa -> không còn gì để thu lại
+            clawback[ln['sellerPaymentMethodId']] = clawback.get(ln['sellerPaymentMethodId'], 0) + credit
+
+    if restock:
+        pids = sorted(restock, key=str)
+        cursor.execute(f"SELECT id FROM products WHERE id IN ({_placeholders(len(pids))}) ORDER BY id FOR UPDATE", tuple(pids))
+        for pid in pids:
+            cursor.execute("UPDATE products SET inStock = inStock + %s WHERE id=%s", (restock[pid], pid))
+
+    cursor.execute("SELECT o.paymentMethodId, o.totalAmount, pm.methodType FROM orders o "
+                   "LEFT JOIN paymentMethods pm ON pm.id = o.paymentMethodId WHERE o.id=%s", (order_id,))
+    head = cursor.fetchone()
+    refund = 0
+    buyer_pm = None
+    if head and head['paymentMethodId'] and head['methodType'] and head['methodType'] != 'cash':
+        buyer_pm = head['paymentMethodId']
+        refund = to_vnd(head['totalAmount'])
+
+    lock_ids = sorted(set(clawback) | ({buyer_pm} if buyer_pm else set()), key=str)
+    if lock_ids:
+        cursor.execute(f"SELECT id FROM paymentMethods WHERE id IN ({_placeholders(len(lock_ids))}) ORDER BY id FOR UPDATE", tuple(lock_ids))
+
+    for pm_id in sorted(clawback, key=str):
+        cursor.execute("UPDATE paymentMethods SET balance = balance - %s WHERE id=%s AND balance >= %s",
+                       (clawback[pm_id], pm_id, clawback[pm_id]))
+        if cursor.rowcount != 1:
+            raise ApiError("The seller cannot cover this refund right now. Please contact support.", 'refund_unavailable', 409)
+
+    if refund:
+        cursor.execute("UPDATE paymentMethods SET balance = balance + %s WHERE id=%s AND userId=%s", (refund, buyer_pm, buyer_id))
+    return refund
 
 
 @payments_bp.route('/orders/<order_id>', methods=['PUT'])
@@ -303,8 +360,12 @@ def update_order_status(order_id):
                            (new_status, order_id, g.user_id, order['status']))
             if cursor.rowcount != 1:
                 raise ApiError("Order was modified by another request. Please reload.", 'INVALID_STATE', 409)
+
+            refunded = 0
+            if new_status == 'cancelled' and order['status'] == 'paid':
+                refunded = _settle_cancelled_paid_order(cursor, order_id, g.user_id)  # hoàn kho + hoàn tiền (S-05)
             conn.commit()
-            return jsonify({"message": f"Order status successfully changed to {new_status}!"}), 200
+            return jsonify({"message": f"Order status successfully changed to {new_status}!", "refunded": refunded}), 200
     except ApiError:
         conn.rollback()
         raise

@@ -24,6 +24,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: pip install -r backend/requirements.txt
+      - run: python scripts/gen_eip712_vectors.py --check   # vectors.json còn khớp script sinh
       - run: python -m pytest test -v   # gồm race condition trên MySQL service thật
 
   frontend:
@@ -36,3 +37,14 @@ jobs:
       - run: npm ci
       - run: npx vitest run
       - run: npm run build
+
+  contracts:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: contracts } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: { version: stable }
+      - run: ../scripts/install_contract_deps.sh   # forge-std v1.9.4 + OpenZeppelin v5.0.2 đúng tag
+      - run: forge build
+      - run: forge test -vv   # gồm Eip712Vectors.t.sol đọc ../shared/eip712/vectors.json

@@ -210,3 +210,14 @@ __marimo__/
 playwright-report
 test-results
 misc
+
+# --- Web3 (tuần 1) ---
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/
+deployments/local.json
+frontend/public/deployments/
+backend/.env.web3
+.anvil.pid
+.anvil.log

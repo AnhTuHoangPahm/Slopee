@@ -1,6 +1,6 @@
-import { authFetch } from './http';
+import { API_ORIGIN, authFetch } from '../lib/client';
 
-const API_BASE = 'http://localhost:5000/api/products';
+const API_BASE = `${API_ORIGIN}/api/products`;
 
 export const fetchProductsAPI = async (searchQuery = '') => {
     // Encodes the search term safely into the URL
@@ -29,7 +29,7 @@ export const fetchProductReviewsAPI = async (productId, offset=0, limit=5) => {
 };
 
 export const publishProductReviewAPI = async (productId, reviewData) => {
-    const res = await authFetch(`http://localhost:5000/api/reviews/${productId}`, {
+    const res = await authFetch(`${API_ORIGIN}/api/reviews/${productId}`, {
         method: 'POST',
         body: JSON.stringify(reviewData)
     });

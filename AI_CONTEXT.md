@@ -44,21 +44,33 @@ backend/                Flask + MySQL (không phải package; chạy từ thư m
   admin_seed.py         seed_admin(conn, ...) dùng cho CLI
   init_db.py            tạo DB từ schema.sql (KHÔNG còn tạo admin); DB mới: đánh dấu migration đã áp dụng
   schema.sql            lược đồ MỚI NHẤT cho DB tạo mới (đã gồm mọi migration); 4 cột tiền DECIMAL(15,0)
-  migrations/           0001 money_to_vnd.sql, 0002 product_fk_snapshots.py, 0003 reviews_dedupe.py, 0004 auth_attempts.sql
+  migrations/           0001 money_to_vnd.sql, 0002 product_fk_snapshots.py, 0003 reviews_dedupe.py, 0004 auth_attempts.sql,
+                        0005 order_line_settlement.py (hủy đơn paid hoàn tiền không tạo tiền). Web3 bắt đầu từ 0006
   routes/               auth, admin, carts, payments, products, reviews, shops
 frontend/               React 19 + Vite + React Router 7 (JavaScript, không TypeScript)
-  src/api/http.js       phiên (sessionStorage), authFetch, getUser/setSession/clearSession
+  src/lib/client.js     CHUẨN: phiên (sessionStorage), authFetch, getUser/setSession/clearSession, API_ORIGIN (VITE_API_BASE)
+  src/lib/format.js     CHUẨN: formatVND (hàm định dạng tiền DUY NHẤT), shortAddress
+  src/lib/chain.js      đọc/kiểm deployments/local.json (chainId 31337, địa chỉ contract), tham số wallet_addEthereumChain
+  src/lib/eip712.js     kiểu/digest/ký EIP-712 từ shared/eip712/types.json (ethers v6)
+  src/hooks/useWallet.js  WalletProvider + useWallet (EIP-1193/MetaMask); chưa có UI (UC-00 tuần 3)
+  src/components/RequireRole.jsx  route guard theo role (chỉ là tiện lợi UI; quyền thật ở backend)
+  src/api/http.js, src/utils/formatVND.js  CHỈ re-export lib/ để không vỡ import cũ; mã mới import từ lib/
   src/api/*.js          các client REST (auth, carts, payments, shops, products, admin)
-  src/utils/formatVND.js  hàm định dạng tiền DUY NHẤT
   src/pages, components, __tests__, tests/ (Playwright)
+contracts/              Foundry (solc 0.8.20, OpenZeppelin 5.0.2): src/{MockUSD,SlopeeEscrowMaster}.sol, script/Deploy.s.sol, test/*.t.sol
+                        lib/ cài bằng scripts/install_contract_deps.sh (bị .gitignore)
+shared/eip712/          types.json (kiểu EIP-712 DUY NHẤT, đã khóa) + vectors.json (sinh bằng scripts/gen_eip712_vectors.py)
+scripts/                bootstrap.sh (dựng Anvil + deploy một lệnh), smoke_week1.sh, install_contract_deps.sh, gen_eip712_vectors.py
+deployments/local.json  do bootstrap.sh sinh (bị .gitignore); frontend đọc bản chép ở frontend/public/deployments/
 test/                   pytest (conftest.py: FakeCursor/fake_db/AttemptsStore, unit_test/, integration_test/)
 .github/workflows/tests.yml   CI: pytest + MySQL service, vitest, build
 docs/                   tài liệu
-  spec/                 đặc tả tách nhỏ (brd-*, srs-*, sdd-*.md + INDEX.md) — sinh bằng scripts/split_spec.py
-scripts/split_spec.py   tách BRD/SRS (HTML) và SDD (Markdown) thành docs/spec/
+  split_spec/           đặc tả tách nhỏ BRD/SRS (brd-*, srs-*.md + INDEX.md). **Thực tế thư mục tên `split_spec/`, chưa có tệp `sdd-*.md`**:
+                        SDD nằm trong MỘT tệp `docs/SDD TDD - …md` (tra theo số mục ##). Bảng mục 9 dưới đây còn ghi `docs/spec/` và `sdd-*`
+                        theo kế hoạch cũ; `scripts/split_spec.py` chưa có trong repo.
 ```
 
-Cấu trúc **sắp tới** theo SDD (chưa tồn tại): `contracts/` (Foundry), `backend/slopee_web3/` (domain/application/ports/adapters), `shared/eip712/`, `scripts/bootstrap.sh`, `frontend/src/{lib,hooks}`.
+Cấu trúc **sắp tới** theo SDD (chưa tồn tại): `backend/slopee_web3/` (domain/application/ports/adapters), `frontend/src/{lib/errors.js, hooks/*}` còn lại, `pages/Wallet.jsx` và các trang Web3.
 
 ---
 
@@ -75,6 +87,12 @@ cd backend && cp .env.example .env         # điền SECRET_KEY ngẫu nhiên
 python init_db.py
 flask --app app seed-admin                  # tạo admin (mật khẩu >= 12 ký tự)
 python app.py                               # cổng 5000
+
+# Web3 (Foundry cần trong PATH; xem scripts/)
+./scripts/bootstrap.sh                      # Anvil --block-time 2 + deploy + deployments/local.json + backend/.env.web3
+./scripts/smoke_week1.sh                    # smoke test trên Anvil thật (cần Anvil sạch vừa bootstrap)
+(cd contracts && forge test)                # 46 test contract + vector EIP-712
+python scripts/gen_eip712_vectors.py --check   # vectors.json còn khớp script sinh?
 
 # Frontend
 cd frontend && npm run dev | npx vitest run | npm run build | npm run lint | npm run test:e2e
@@ -134,12 +152,16 @@ Migration: DB mới → `python init_db.py` (đã gồm mọi migration). **DB c
 | P0-04 xóa `/api/shops/migrate`, runner `schema_migrations`, dọn schema `reviews/reviewImages` | Đã code, chờ review | A |
 | P0-05 `FOR UPDATE`, `UPDATE ... WHERE inStock >= qty`, khóa tạm sau 5 lần sai PIN/mật khẩu | Đã code, chờ review | A |
 | P0-06 tắt `debug=True`, lỗi chung cho client, validate body JSON | Đã code, chờ review | A |
-| Contract, Indexer, UC-00…UC-09, giao diện Web3 | Chưa bắt đầu | Tuần 1–10 |
+| **Tuần 1**: Foundry + `MockUSD` + `SlopeeEscrowMaster` (nạp đơn/giao/giải ngân/hủy quá hạn), `bootstrap.sh`, `lib/client` + `RequireRole` + `useWallet`, `shared/eip712` (types + vectors, kiểm chéo Python/JS/Solidity) | Đã code, chờ review (46 test forge, 70 vitest, pytest xanh) | A+B+C |
+| Quyết định nhóm sau Phase 0: hủy đơn `paid` hoàn tiền, COD không cộng người bán, giữ FK `RESTRICT`, migration Web3 từ `0006` | Đã code, chờ review | A |
+| Contract tuần 2 (tranh chấp, nạp gom, `claimPending`, quản trị), Indexer, UC-00…UC-09, giao diện Web3 | Chưa bắt đầu | Tuần 2–10 |
 
 **Đã xử lý ở P0-03…06 (chờ review, test MySQL thật chờ CI):** chủ sở hữu cart item/đơn/sản phẩm/ảnh/biến thể (không phải chủ → 404); đơn Web3 bị từ chối bằng `409 WEB3_ORDER_MANAGED`; chuyển trạng thái đơn theo bảng hợp lệ; checkout khóa `FOR UPDATE` + `UPDATE` có điều kiện; khóa tạm 5 lần sai mật khẩu/PIN (`429`); route migrate đã bỏ; `debug` theo môi trường; lỗi chung, không còn `str(e)`; validate body.
 
+**Đã quyết và áp dụng (chờ review):** hủy đơn `paid` hoàn kho + hoàn tiền người mua và thu lại từ người bán (`409 refund_unavailable` nếu người bán không đủ số dư); COD/`cash` không cộng số dư người bán; `orders.userId` giữ `RESTRICT`, admin xóa user có đơn → `409 user_has_orders`. Chi tiết: `PROGRESS.md` ghi chú Phase 0. Đã chạy toàn bộ test backend trên MySQL 8.0 thật (329 pass).
+
 **Còn mở (đừng giả định đã an toàn):**
-- Hủy đơn `paid` **không hoàn tiền/tồn kho** (S-05); COD vẫn cộng số dư cho người bán; `orders.userId` FK `RESTRICT` (admin không xóa được user đã có đơn). Cần nhóm quyết hành vi — xem `PROGRESS.md` ghi chú Phase 0.
+- Dữ liệu legacy trước migration `0005`: đơn có `productId = NULL` không thu lại được tiền từ người bán khi hủy (người mua vẫn được hoàn, tức tiền có thể bị tạo ra); đơn COD cũ từng cộng tiền cho người bán và **không được sửa hồi tố**. Chỉ đúng với dữ liệu cũ; đơn tạo sau `0005` bảo toàn tiền. Đừng coi số dư legacy là đối soát được; DB demo nên tạo lại bằng `init_db.py`.
 - Token chứa `role` và **không** kiểm lại DB: đổi role/xóa user thì token cũ còn hiệu lực đến khi hết hạn.
 
 ---
@@ -150,11 +172,11 @@ Migration: DB mới → `python init_db.py` (đã gồm mọi migration). **DB c
 | --- | --- | --- | --- |
 | TTL token | ví dụ 8 giờ | mặc định `3600` s, đặt qua `AUTH_TOKEN_TTL_SECONDS` | đổi env nếu muốn 8h |
 | Decorator | `require_auth(roles=[...])`, `g.user` | `require_auth('seller')`, `g.user_id`/`g.role` | dùng API thực tế |
-| Frontend client | `lib/client.js`, `lib/format.js`, `hooks/` | `api/http.js`, `utils/formatVND.js` | cùng chức năng; chọn một nơi rồi thống nhất |
+| Frontend client | `lib/client.js`, `lib/format.js`, `hooks/` | `lib/` là bản chuẩn; `api/http.js`, `utils/formatVND.js` chỉ re-export | **Đã chốt** (tuần 1): một nguồn sự thật, không vỡ import/test cũ |
 | Route theo người dùng | `/<userId>` | `/api/carts/`, `/api/payments/`, `/api/payments/orders`, `/api/auth/reviews/me`, `/api/shops/me`, `/api/shops/me/name` | không còn xem shop theo seller ID |
 | `add_product` | nhận `shopId` | shop suy ra từ token seller | |
 | Số dư mới | "số dư giả lập ban đầu đổi sang VND" (SDD 16.3 bước 8) | số dư mới = 0 (S-04) | checkout ngân hàng cũ cần nạp tiền thủ công; COD vẫn chạy |
-| Migration | `001_wallets.sql`…`015_shipper.sql` + `schema_migrations` | runner `migrate.py` + `0001…0004` (4 chữ số) | migration Web3 nên đánh số từ `0005` để không trùng tiền tố; tên tệp là khóa trong `schema_migrations` |
+| Migration | `001_wallets.sql`…`015_shipper.sql` + `schema_migrations` | runner `migrate.py` + `0001…0005` (4 chữ số) | **Đã chốt:** Web3 đánh số từ `0006` (`001`→`0006` … `015`→`0020`); tên tệp là khóa trong `schema_migrations` |
 | Mã lỗi API cũ | `{code, message}` tiếng Việt | `{error, code}` tiếng Anh (`not_found`, `INVALID_STATE`, `WEB3_ORDER_MANAGED`, `too_many_attempts`, `internal_error`…) | API Web3 mới theo SRS; nhóm chốt ngôn ngữ thông báo |
 
 ---
@@ -171,6 +193,8 @@ Migration: DB mới → `python init_db.py` (đã gồm mọi migration). **DB c
 - **Test dùng `fake_db`/`FakeCursor`** (trả dữ liệu theo nội dung SQL) thay vì `side_effect` theo thứ tự; route thêm/bớt truy vấn không làm vỡ test. Lỗi chung và `ApiError` được gắn vào **từng blueprint** (`register_blueprint_errors`) nên app tối giản trong `conftest.py` cũng trả đúng; route mới phải gắn handler này.
 - **Khóa thanh toán** phải giữ thứ tự `cartItems → products → paymentMethods` (mỗi nhóm `ORDER BY id`); đổi thứ tự có thể gây deadlock. Bộ đếm sai PIN/mật khẩu `commit` riêng trước giao dịch tiền để không bị rollback.
 - **`schema.sql` là lược đồ mới nhất:** thêm migration mà quên cập nhật `schema.sql` thì DB mới (được đánh dấu "đã áp dụng") sẽ thiếu thay đổi. `schema.txt` là bản cũ không dùng.
+- **Foundry/Contract (tuần 1):** (1) `forge install ...@tag` có thể bỏ qua tag và kéo OpenZeppelin mới nhất (≥ 5.1 đòi solc ≥ 0.8.24) → luôn dùng `scripts/install_contract_deps.sh`. (2) solc 0.8.20 chưa cho `emit Contract.Event`: test khai báo lại sự kiện trong `EscrowBase.t.sol`. (3) `vm.prank` chỉ áp cho **lời gọi ngoài kế tiếp**: tính chữ ký (có gọi `escrow.QUOTE_TYPEHASH()`) **trước** `vm.prank`/`vm.expectRevert`. (4) `contracts/lib/` bị `.gitignore` (kể cả quy tắc `lib/` gốc). (5) Khóa trong test/script/bootstrap là khóa công khai của Anvil; bài quét khóa E-05 phải cho phép. (6) Sửa `types.json`/contract thì chạy lại `scripts/gen_eip712_vectors.py` và cả 3 bộ test.
+- **Tiền legacy:** người bán chỉ được cộng khi người mua thực sự bị trừ tiền (không COD/`cash`); mọi đường hủy/hoàn phải thu lại đúng khoản đó (`orderLines.sellerCredit`), tuyệt đối không tạo tiền. Test MySQL dùng `created_at` chỉ chính xác tới giây: đừng dựa `ORDER BY created_at` để tìm "đơn vừa tạo" trong vòng lặp.
 - Tên shop/sản phẩm/UI của Slopee viết bằng tiếng Anh; thông báo lỗi Web3 và tài liệu viết bằng **tiếng Việt**.
 
 ---

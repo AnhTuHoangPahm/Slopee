@@ -68,7 +68,7 @@ def test_admin_cannot_delete_admin_or_self(client, mocker, make_auth_headers):
     assert client.delete('/api/admin/users/admin-1', headers=h).status_code == 403
     cur.fetchone.return_value = {'role': 'admin'}
     assert client.delete('/api/admin/users/admin-2', headers=h).status_code == 403
-    cur.fetchone.return_value = {'role': 'user'}
+    cur.fetchone.side_effect = [{'role': 'user'}, None]   # có user, và user không có đơn nào
     assert client.delete('/api/admin/users/u-9', headers=h).status_code == 200
 
 

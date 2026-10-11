@@ -59,6 +59,27 @@ Wrong password / PIN is limited to `AUTH_MAX_ATTEMPTS` (default 5) tries, then l
 Use your favourite browser to access the page.  
  > Enjoy your stay
 
+## Web3 (escrow demo, local only)
+
+Requires [Foundry](https://book.getfoundry.sh/getting-started/installation) (`foundryup`), Python 3.12 and Node 22. Everything runs on a local Anvil chain (chainId 31337) with test keys; there is no real money.
+
+```bash
+./scripts/bootstrap.sh        # Anvil (--block-time 2) + deploy MockUSD/SlopeeEscrowMaster + deployments/local.json + backend/.env.web3
+./scripts/smoke_week1.sh      # optional: Python-signed quote -> deposit -> deliver -> release on the real chain
+(cd contracts && forge test)  # contract tests (incl. cross-language EIP-712 vectors)
+```
+
+- `scripts/bootstrap.sh --fresh` restarts Anvil from a clean chain; `--no-anvil` uses a node that is already running. Contract libraries are installed by `scripts/install_contract_deps.sh` (pinned tags, `contracts/lib/` is git-ignored).
+- Frontend reads the chain info from `deployments/local.json` (bootstrap copies it to `frontend/public/deployments/`). Optional env: `VITE_API_BASE` (default `http://localhost:5000`), `VITE_RPC_URL` (default `http://127.0.0.1:8545`).
+- EIP-712 types live in `shared/eip712/types.json`; `python scripts/gen_eip712_vectors.py` regenerates `vectors.json` (`--check` verifies it).
+- Web3 database migrations (later weeks) are numbered after the legacy ones, starting at `0006`.
+
+## Orders, refunds and payments (legacy flow)
+
+- Cancelling a `paid` order restores stock and refunds the buyer, and takes the same amount back from the seller who was credited. If the seller no longer has enough balance the cancel is rejected (`409 refund_unavailable`) and nothing changes.
+- Cash on delivery and `cash` payment methods never credit the seller's balance (only a real charge to the buyer does).
+- Users that already have orders cannot be deleted (`409 user_has_orders`); orders are kept for accounting.
+
 ## Features
 - Basic e-commerce features: **Product Listing, Cart, Checkout, Order Management, User Authentication**, etc.
 - Basic management features: **Product Management, Order Management, User Account Management**, etc.

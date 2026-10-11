@@ -26,8 +26,9 @@
 | | Vitest, Testing Library, jsdom | ^4.1, ^16, ^24 | test đơn vị |
 | | Playwright | ^1.59 | E2E (Firefox) |
 | | ESLint 9 | ^9.39 | `npm run lint` |
-| Frontend 🔲 | ethers.js v6 | — | **thư viện runtime duy nhất được thêm** (SDD 9.1); không thêm TanStack Query/TypeScript |
-| Contract 🔲 | Solidity 0.8.20, OpenZeppelin v5.0.2, Foundry (`via_ir`) | — | `contracts/`, Anvil chainId 31337 |
+| Frontend ✅ | ethers.js v6 | ^6.13.5 | **thư viện runtime duy nhất được thêm** (SDD 9.1); không thêm TanStack Query/TypeScript |
+| Contract ✅ (tuần 1) | Solidity 0.8.20, OpenZeppelin v5.0.2, forge-std v1.9.4, Foundry (`via_ir`) | — | `contracts/`, Anvil chainId 31337 |
+| Backend (test) | eth-account | ≥ 0.13 | ký/kiểm EIP-712 trong test chéo ngôn ngữ (sau này dùng cho `ChainPort`) |
 | CI ✅ | GitHub Actions | — | pytest + dịch vụ MySQL, vitest, build |
 
 Quy tắc thư viện: dùng thư viện chuẩn/đã liệt kê; muốn thêm dependency mới phải có lý do và ghi vào bảng này. Phiên bản được khóa (`==`) ở `requirements.txt`.
@@ -95,7 +96,9 @@ App.jsx (Routes)
        └─ api/*.js      mỗi hàm = 1 endpoint, trả Response hoặc JSON thô
             └─ api/http.js   authFetch (gắn Bearer, xử lý hết phiên), getUser/setSession/clearSession
   └─ components/Navbar.jsx   thanh điều hướng + giỏ hàng thu nhỏ
-  └─ utils/formatVND.js      định dạng tiền duy nhất
+  └─ components/RequireRole.jsx  route guard (UI); WalletProvider (hooks/useWallet.js) bọc toàn app
+  └─ lib/client.js, lib/format.js  CHUẨN (api/http.js, utils/formatVND.js chỉ re-export)
+  └─ lib/chain.js (deployments/local.json) · lib/eip712.js (shared/eip712/types.json)
 ```
 
 Frontend 🔲 theo SDD thêm: `lib/` (client, chain, eip712, errors, format), `hooks/` (useWallet, useEscrow, usePolling, useOrderStatus, useSignDispute, useServerClock, useAuth), `components/` (RequireRole, TxStepper, CountdownTimer, StatusBadge, AddressTag, AmountView), `mocks/` (fetch mock theo hợp đồng API, tuần 1–3). Máy trạng thái nạp tiền là **hàm thuần** `depositReducer(state, event)`; trang chỉ gọi reducer và thực hiện hiệu ứng.
@@ -144,8 +147,11 @@ Dùng `now_system()` cho nonce ví, phiên, rate limit; dùng `now_chain()` cho 
 - `authFetch(url, opts)`: tự thêm `Content-Type: application/json` khi có body và `Authorization: Bearer`; khi nhận 401 với `code ∈ {auth_required, token_expired, token_invalid}` → `clearSession()` và chuyển `/login`. **Không** đăng xuất khi 401 vì sai mật khẩu/PIN.
 - Endpoint công khai (products, login, signup) dùng `fetch` thường.
 
-### 3.7. Smart contract 🔲 (`SlopeeEscrowMaster`, SRS mục 10)
+### 3.7. Smart contract 🔲 (`SlopeeEscrowMaster`, SRS mục 10) — tuần 1 ✅ (nạp đơn, giao, giải ngân, hủy quá hạn); tuần 2 🔲 (tranh chấp, nạp gom, claimPending, quản trị)
 - Vào: lời gọi hàm + chữ ký EIP-712 (báo giá do sàn ký; phán quyết 2/3). Ra: sự kiện (`OrderCreated`, `OrderDelivered`, `OrderCompleted`, `OrderRefunded`, `OrderDisputed`, `DisputeResolved`, `ArbitratorForceResolved`, `PayoutDeferred`, `PendingClaimed`, `FeeUpdated`, `FeeRecipientUpdated`).
+- Đã có: `depositEscrow`, `confirmDelivery`, `earlyRelease`, `releaseAfterInspection`, `cancelIfUnfulfilled`; struct/enum/sự kiện/storage đã đầy đủ (ABI không đổi ở tuần 2). Phí chốt trong báo giá (`feeBps` ≤ `defaultFeeBps`); ETH bị từ chối → `pendingWithdrawals` (không kẹt đơn).
+- EIP-712: kiểu duy nhất ở `shared/eip712/types.json`; `vectors.json` được Python, JS, Solidity cùng kiểm (digest + người ký).
+- Triển khai: `scripts/bootstrap.sh` → `deployments/local.json` (backend/indexer/frontend cùng đọc).
 - Chỉ có contract + Indexer quyết định trạng thái đơn Web3; API không có endpoint ghi trạng thái từ client.
 
 ---
@@ -218,7 +224,8 @@ Hàm `camelCase`, sự kiện/struct `PascalCase`, hằng `UPPER_SNAKE` (`QUOTE_
 | `AUTH_MAX_ATTEMPTS` | 5 | `throttle` |
 | `AUTH_LOCK_SECONDS` | 900 | `throttle` |
 | `DB_HOST/DB_USER/DB_PASSWORD/DB_NAME` | `localhost` / `root` (riêng `routes/auth.py`: `slopee`) / `` / `slopee_db` | mọi nơi mở kết nối |
-| 🔲 `RPC_URL`, `CHAIN_ID`, `ESCROW_ADDRESS`, `MOCKUSD_ADDRESS`, `QUOTE_SIGNER_KEY`, `ARBITRATOR_KEY`, `SHIPPER_KEY`, `POLL_SECONDS`, `CONFIRMATIONS`, `REORG_DEPTH` | — | Web3 |
+| `RPC_URL`, `CHAIN_ID`, `ESCROW_ADDRESS`, `MOCKUSD_ADDRESS`, `QUOTE_SIGNER_KEY`, `ARBITRATOR_KEY`, `SHIPPER_KEY`, `POLL_SECONDS`, `CONFIRMATIONS`, `REORG_DEPTH`, `INDEXER_START_BLOCK` | `bootstrap.sh` sinh `backend/.env.web3` (gitignore) | Web3 (backend đọc từ tuần 3) |
+| `VITE_API_BASE`, `VITE_RPC_URL` (frontend) | `http://localhost:5000`, `http://127.0.0.1:8545` | `lib/client.js`, `lib/chain.js` |
 | 🔲 `platform_settings` (DB) | tỷ giá, `PLATFORM_FEE_BPS` (300), `QUOTE_TTL_SECONDS`, `DISPUTE_SIG_TTL_SECONDS` | Admin đổi không cần restart |
 
 Khóa vận hành chỉ đọc một lần lúc khởi động vào `EnvKeySigner`; `.env` không commit.
@@ -231,13 +238,13 @@ Khóa vận hành chỉ đọc một lần lúc khởi động vào `EnvKeySigne
 | Route/tiền/tồn kho/phân quyền | pytest + **MySQL thật** | fixture `mysql_db` (DB `slopee_test_<pid>` từ `schema.sql`), `db_conn`; tự skip nếu không kết nối được |
 | Frontend | Vitest + Testing Library | mock `fetch` trong `src/__tests__/setup.js` |
 | E2E | Playwright (Firefox) | 🔲 ví EIP-1193 giả bằng khóa Anvil, nạp qua `addInitScript` |
-| Contract 🔲 | Foundry | `forge test`, fuzz/invariant, `forge coverage ≥ 90%`, Slither |
-| Chéo ngôn ngữ 🔲 | `shared/eip712/vectors.json` | Python, JS, Solidity cùng ra một digest |
+| Contract ✅ (tuần 1) | Foundry | `forge test` (46 test, có fuzz INV-03); 🔲 invariant, `forge coverage ≥ 90%`, Slither ở M1 |
+| Chéo ngôn ngữ ✅ | `shared/eip712/vectors.json` | Python (`test_eip712_vectors.py`), JS (`eip712Vectors.test.js`), Solidity (`Eip712Vectors.t.sol`) cùng ra một digest; `smoke_week1.sh` chạy thật trên Anvil |
 
 ## 9. Nợ kỹ thuật và mâu thuẫn đã biết
 - `get_db_connection()` bị **lặp** ở `admin`, `auth`, `carts`, `payments`, `shops` (còn `products` và `reviews` import từ `routes.auth`); mặc định `DB_USER` không đồng nhất (`slopee` ở `auth.py`, `root` ở nơi khác) → luôn đặt `DB_USER` rõ ràng. Khi refactor, gom về một module `db.py`.
 - Hai đường import: code chạy với `backend/` trên `sys.path` (`from routes.auth import ...`), test dùng `backend.routes.*`; hai module này là hai object khác nhau (xem `AI_CONTEXT.md` mục 7).
-- Hủy đơn `paid` chưa hoàn tiền/tồn kho (S-05); COD vẫn cộng số dư người bán; `orders.userId` FK `RESTRICT`. Cần nhóm quyết hành vi.
-- Test MySQL mới của P0-03…06 (`integration_test/test_p0_mysql.py`) và migration `0002`/`0003` chưa được chạy trên MySQL thật khi viết.
-- SDD ghi `lib/client.js`/`lib/format.js`; code là `api/http.js`/`utils/formatVND.js`.
-- `backend/schema.txt` là bản schema cũ (DECIMAL(11,2), khai báo trùng) không còn được dùng — nên xóa.
+- Hủy đơn `paid` nay hoàn kho + hoàn tiền + thu lại từ người bán (`0005`); dữ liệu cũ có `productId = NULL` không thu lại được. Hồ sơ cũ do COD từng cộng tiền cho người bán không được sửa hồi tố.
+- `orders.userId` giữ `RESTRICT`: người dùng đã có đơn không xóa cứng được (409 `user_has_orders`).
+- Một số đường import/`get_db_connection` lặp lại như đã nêu; `backend/schema.txt` (nếu còn trong repo) là bản cũ, nên xóa.
+- `docs/spec/` và `sdd-*.md` chưa tồn tại (thực tế `docs/split_spec/` chỉ có BRD/SRS); SDD là một tệp.

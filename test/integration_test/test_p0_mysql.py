@@ -220,3 +220,196 @@ def test_deleting_product_keeps_order_history(app, db_conn):
     cur.execute("SELECT productId, snapshotProductName FROM orderLines WHERE orderId=%s", (oid,))
     row = cur.fetchone()
     assert row['productId'] is None and row['snapshotProductName'] == 'P'
+
+
+# ================================================================== Quyết định nhóm sau Phase 0 (MySQL thật)
+def _balance(cur, pm):
+    cur.execute("SELECT balance FROM paymentMethods WHERE id=%s", (pm,))
+    return int(cur.fetchone()['balance'])
+
+
+def _stock(cur, prod):
+    cur.execute("SELECT inStock FROM products WHERE id=%s", (prod,))
+    return cur.fetchone()['inStock']
+
+
+def _checkout(app, buyer, pm, item):
+    return app.test_client().post('/api/checkout/checkout', headers=_h(buyer),
+                                  json={"paymentMethodId": pm, "passPhrase": PIN, "cartItemIds": [item]})
+
+
+def _cancel_order(app, buyer, order_id):
+    return app.test_client().put(f'/api/checkout/orders/{order_id}', headers=_h(buyer), json={"status": "cancelled"})
+
+
+def _latest_order(cur, buyer, status=None):
+    # created_at chỉ chính xác tới giây: khi cần "đơn vừa tạo" trong vòng lặp thì lọc theo status
+    cur.execute("SELECT id, status FROM orders WHERE userId=%s AND (%s IS NULL OR status=%s) ORDER BY created_at DESC LIMIT 1",
+                (buyer, status, status))
+    return cur.fetchone()
+
+
+def test_cancel_paid_bank_order_refunds_restocks_and_conserves_money(app, db_conn):
+    cur = db_conn.cursor()
+    seller, buyer = _user(cur, 'seller', pin=None), _user(cur)
+    seller_pm, buyer_pm = _bank(cur, seller, 0), _bank(cur, buyer, 1_000_000)
+    prod = _shop_product(cur, seller, stock=5, price=100_000)
+    item = _cart_item(cur, buyer, prod, qty=2)
+
+    assert _checkout(app, buyer, buyer_pm, item).status_code == 200
+    assert (_balance(cur, buyer_pm), _balance(cur, seller_pm), _stock(cur, prod)) == (800_000, 200_000, 3)
+
+    order = _latest_order(cur, buyer)
+    r = _cancel_order(app, buyer, order['id'])
+    assert r.status_code == 200 and r.get_json()['refunded'] == 200_000
+    assert (_balance(cur, buyer_pm), _balance(cur, seller_pm), _stock(cur, prod)) == (1_000_000, 0, 5)   # đúng như chưa mua
+    assert _latest_order(cur, buyer)['status'] == 'cancelled'
+    # Hủy lần hai: không hoàn thêm
+    assert _cancel_order(app, buyer, order['id']).status_code == 409
+    assert (_balance(cur, buyer_pm), _balance(cur, seller_pm), _stock(cur, prod)) == (1_000_000, 0, 5)
+
+
+def test_cancel_is_rejected_when_seller_already_spent_the_money(app, db_conn):
+    cur = db_conn.cursor()
+    seller, buyer = _user(cur, 'seller', pin=None), _user(cur)
+    seller_pm, buyer_pm = _bank(cur, seller, 0), _bank(cur, buyer, 1_000_000)
+    prod = _shop_product(cur, seller, stock=5, price=100_000)
+    item = _cart_item(cur, buyer, prod, qty=1)
+    assert _checkout(app, buyer, buyer_pm, item).status_code == 200
+    cur.execute("UPDATE paymentMethods SET balance = 0 WHERE id=%s", (seller_pm,))   # người bán đã tiêu hết
+
+    order = _latest_order(cur, buyer)
+    r = _cancel_order(app, buyer, order['id'])
+    assert r.status_code == 409 and r.get_json()['code'] == 'refund_unavailable'
+    # Rollback trọn vẹn: đơn vẫn paid, tiền và kho không đổi (không có tiền được tạo ra)
+    assert _latest_order(cur, buyer)['status'] == 'paid'
+    assert (_balance(cur, buyer_pm), _balance(cur, seller_pm), _stock(cur, prod)) == (900_000, 0, 4)
+
+
+def test_cod_checkout_creates_no_money_and_cancel_only_restocks(app, db_conn):
+    cur = db_conn.cursor()
+    seller, buyer = _user(cur, 'seller', pin=None), _user(cur)
+    seller_pm = _bank(cur, seller, 0)
+    prod = _shop_product(cur, seller, stock=5, price=100_000)
+    item = _cart_item(cur, buyer, prod, qty=2)
+
+    assert _checkout(app, buyer, 'CASH_ON_DELIVERY', item).status_code == 200
+    assert _balance(cur, seller_pm) == 0 and _stock(cur, prod) == 3          # COD không cộng tiền cho người bán
+
+    order = _latest_order(cur, buyer)
+    r = _cancel_order(app, buyer, order['id'])
+    assert r.status_code == 200 and r.get_json()['refunded'] == 0
+    assert _balance(cur, seller_pm) == 0 and _stock(cur, prod) == 5
+
+
+def test_cash_type_method_checkout_creates_no_money(app, db_conn):
+    cur = db_conn.cursor()
+    seller, buyer = _user(cur, 'seller', pin=None), _user(cur)
+    seller_pm = _bank(cur, seller, 0)
+    cash_pm = str(uuid.uuid4())
+    cur.execute("INSERT INTO paymentMethods (id, userId, methodType, providerName, accountNumber, balance) VALUES (%s,%s,'cash','C','1',0)",
+                (cash_pm, buyer))
+    item = _cart_item(cur, buyer, _shop_product(cur, seller, price=100_000), qty=1)
+    assert _checkout(app, buyer, cash_pm, item).status_code == 200
+    assert _balance(cur, seller_pm) == 0
+
+
+def test_two_concurrent_cancels_refund_exactly_once(app, db_conn):
+    cur = db_conn.cursor()
+    seller, buyer = _user(cur, 'seller', pin=None), _user(cur)
+    seller_pm, buyer_pm = _bank(cur, seller, 0), _bank(cur, buyer, 1_000_000)
+    prod = _shop_product(cur, seller, stock=5, price=100_000)
+    item = _cart_item(cur, buyer, prod, qty=1)
+    assert _checkout(app, buyer, buyer_pm, item).status_code == 200
+    oid = _latest_order(cur, buyer)['id']
+
+    statuses, barrier = [None, None], threading.Barrier(2)
+
+    def go(i):
+        barrier.wait()
+        statuses[i] = _cancel_order(app, buyer, oid).status_code
+    ts = [threading.Thread(target=go, args=(i,)) for i in range(2)]
+    [t.start() for t in ts]
+    [t.join(timeout=60) for t in ts]
+    assert sorted(statuses) == [200, 409], statuses
+    assert (_balance(cur, buyer_pm), _balance(cur, seller_pm), _stock(cur, prod)) == (1_000_000, 0, 5)
+
+
+def test_concurrent_cancel_and_checkout_do_not_deadlock(app, db_conn):
+    """Hủy đơn (products -> paymentMethods) và checkout (cartItems -> products -> paymentMethods) cùng thứ tự khóa."""
+    cur = db_conn.cursor()
+    seller, buyer, other = _user(cur, 'seller', pin=None), _user(cur), _user(cur)
+    _bank(cur, seller, 0)
+    buyer_pm, other_pm = _bank(cur, buyer, 5_000_000), _bank(cur, other, 5_000_000)
+    prod = _shop_product(cur, seller, stock=50, price=100_000)
+    for _ in range(4):
+        item = _cart_item(cur, buyer, prod, qty=1)
+        assert _checkout(app, buyer, buyer_pm, item).status_code == 200
+        oid = _latest_order(cur, buyer, 'paid')['id']
+        item2 = _cart_item(cur, other, prod, qty=1)
+        res, barrier = {}, threading.Barrier(2)
+
+        def cancel():
+            barrier.wait()
+            res['cancel'] = _cancel_order(app, buyer, oid).status_code
+
+        def buy():
+            barrier.wait()
+            res['buy'] = _checkout(app, other, other_pm, item2).status_code
+        ts = [threading.Thread(target=cancel), threading.Thread(target=buy)]
+        [t.start() for t in ts]
+        [t.join(timeout=60) for t in ts]
+        assert res == {'cancel': 200, 'buy': 200}, res
+
+
+def test_admin_delete_user_with_orders_is_409_and_without_orders_is_200(app, db_conn):
+    cur = db_conn.cursor()
+    admin, with_orders, no_orders = _user(cur, 'admin', pin=None), _user(cur), _user(cur)
+    _order(cur, with_orders, 'paid')
+    c = app.test_client()
+    r = c.delete(f'/api/admin/users/{with_orders}', headers=_h(admin, 'admin'))
+    assert r.status_code == 409 and r.get_json()['code'] == 'user_has_orders'
+    cur.execute("SELECT COUNT(*) AS c FROM users WHERE id=%s", (with_orders,))
+    assert cur.fetchone()['c'] == 1                                            # FK RESTRICT được giữ, user còn nguyên
+    assert c.delete(f'/api/admin/users/{no_orders}', headers=_h(admin, 'admin')).status_code == 200
+
+
+def test_orders_user_fk_is_still_restrict(mysql_db, db_conn):
+    cur = db_conn.cursor()
+    assert [f['delete_rule'] for f in dbschema.foreign_keys(cur, 'orders', 'userId', 'users')] == ['RESTRICT']
+
+
+def test_migration_0005_backfills_legacy_orders_and_is_idempotent(mysql_db, db_conn):
+    import importlib.util
+    import os
+    cur = db_conn.cursor()
+    seller, buyer = _user(cur, 'seller', pin=None), _user(cur)
+    seller_pm, buyer_pm = _bank(cur, seller, 0), _bank(cur, buyer, 0)
+    prod = _shop_product(cur, seller, price=100_000)
+    # Dữ liệu CŨ: đơn đã thanh toán bằng bank (seller đã được cộng), đơn COD (buyer không bị trừ)
+    bank_order, cod_order = _order(cur, buyer, 'paid'), _order(cur, buyer, 'paid')
+    cur.execute("UPDATE orders SET paymentMethodId=%s WHERE id=%s", (buyer_pm, bank_order))
+    for oid in (bank_order, cod_order):
+        cur.execute("INSERT INTO orderLines (id, orderId, productId, unitPrice, quantity) VALUES (%s,%s,%s,100000,3)",
+                    (str(uuid.uuid4()), oid, prod))
+    # Đưa schema về trạng thái trước migration 0005
+    for fk in dbschema.foreign_keys(cur, 'orderLines', 'sellerPaymentMethodId', 'paymentMethods'):
+        cur.execute(f"ALTER TABLE orderLines DROP FOREIGN KEY `{fk['name']}`")
+    cur.execute("ALTER TABLE orderLines DROP COLUMN sellerPaymentMethodId, DROP COLUMN sellerCredit")
+
+    path = os.path.join(os.path.dirname(migrate.__file__), 'migrations', '0005_order_line_settlement.py')
+    spec = importlib.util.spec_from_file_location('m0005', path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    mod.upgrade(cur)
+
+    cur.execute("SELECT orderId, sellerPaymentMethodId, sellerCredit FROM orderLines WHERE orderId IN (%s,%s)", (bank_order, cod_order))
+    rows = {r['orderId']: r for r in cur.fetchall()}
+    assert (rows[bank_order]['sellerPaymentMethodId'], int(rows[bank_order]['sellerCredit'])) == (seller_pm, 300_000)
+    assert (rows[cod_order]['sellerPaymentMethodId'], int(rows[cod_order]['sellerCredit'])) == (None, 0)
+
+    cur.execute("UPDATE orderLines SET sellerCredit = 7 WHERE orderId=%s", (bank_order,))
+    mod.upgrade(cur)                                                            # chạy lại: không ghi đè, không lỗi
+    cur.execute("SELECT sellerCredit FROM orderLines WHERE orderId=%s", (bank_order,))
+    assert int(cur.fetchone()['sellerCredit']) == 7
+    assert len(dbschema.foreign_keys(cur, 'orderLines', 'sellerPaymentMethodId', 'paymentMethods')) == 1
