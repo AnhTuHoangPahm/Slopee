@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { fetchCartAPI, updateCartItemAPI, removeCartItemAPI } from '../api/carts';
 import '../assets/cart.css';
+import { getUser } from '../api/http';
+import { formatVND } from '../utils/formatVND';
 
 export default function Cart() {
     const navigate = useNavigate();
-    const user = JSON.parse(localStorage.getItem('user'));
+    const user = getUser();
 
     const [items, setItems] = useState([]);
     const [selectedItems, setSelectedItems] = useState(new Set());
@@ -23,7 +25,7 @@ export default function Cart() {
     const loadCart = async () => {
         if (!user) return;
         try {
-            const data = await fetchCartAPI(user.id);
+            const data = await fetchCartAPI();
             setItems(data.items || []);
         } catch (err) {
             console.error(err);
@@ -161,7 +163,7 @@ export default function Cart() {
                                     )}
                                 </div>
                             </div>
-                            <div style={{ textAlign: 'center' }}>${it.unitPrice}</div>
+                            <div style={{ textAlign: 'center' }}>{formatVND(it.unitPrice)}</div>
                             <div style={{ display: 'flex', justifyContent: 'center' }}>
                                 <div className="cart-qty-controls">
                                     <button className="cart-qty-btn" onClick={() => handleUpdateQty(it, it.quantity - 1)}>-</button>
@@ -175,7 +177,7 @@ export default function Cart() {
                                 </div>
                                 {it.quantity >= it.inStock && <div style={{ color: 'red', fontSize: '10px', marginLeft: '5px', marginTop: '10px' }}>Max Limit</div>}
                             </div>
-                            <div style={{ color: '#ee4d2d', textAlign: 'center', fontWeight: 'bold' }}>${(it.unitPrice * it.quantity).toFixed(2)}</div>
+                            <div style={{ color: '#ee4d2d', textAlign: 'center', fontWeight: 'bold' }}>{formatVND(it.unitPrice * it.quantity)}</div>
                             <div style={{ textAlign: 'center' }}>
                                 <button onClick={() => handleDelete(it.cartItemId)} style={{ background: 'transparent', border: 'none', color: '#333', cursor: 'pointer', padding: '5px' }}>Delete</button>
                             </div>
@@ -198,7 +200,7 @@ export default function Cart() {
                         </div>
                         <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
                             <div>
-                                Selected Gross ({selectedItems.size} items): <span style={{ color: '#ee4d2d', fontSize: '24px', fontWeight: '500', marginLeft: '10px' }}>${calculateTotal().toFixed(2)}</span>
+                                Selected Gross ({selectedItems.size} items): <span style={{ color: '#ee4d2d', fontSize: '24px', fontWeight: '500', marginLeft: '10px' }}>{formatVND(calculateTotal())}</span>
                             </div>
                             <button
                                 className="cart-checkout-btn"

@@ -1,85 +1,38 @@
-name: Slopee Test Suite
-
-on:
-  push:
-    branches:
-      - main
-      - development/*
-      - feature/*
-  pull_request:
-    branches:
-      - main
+name: tests
+on: [push, pull_request]
 
 jobs:
-  backend-tests:
-    name: Backend Pytest
+  backend:
     runs-on: ubuntu-latest
-    
-    # Optional: If your integration tests need a real MySQL database to run,
-    # you can spin one up instantly inside GitHub Actions!
     services:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: slopee_test_db
-        ports:
-          - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
-
+          MYSQL_ROOT_PASSWORD: root_pw
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot_pw"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      SLOPEE_ENV: test
+      SECRET_KEY: ci-secret-key
+      DB_HOST: 127.0.0.1
+      DB_USER: root
+      DB_PASSWORD: root_pw
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -r backend/requirements.txt
+      - run: python -m pytest test -v   # gồm race condition trên MySQL service thật
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install Backend Dependencies
-        run: |
-          cd backend
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Initialize Database
-        env:
-          DB_HOST: 127.0.0.1
-          DB_USER: root
-          DB_PASSWORD: root
-          DB_NAME: slopee_test_db
-        run: |
-          cd backend
-          python init_db.py
-
-      - name: Run Pytest
-        env:
-          DB_HOST: 127.0.0.1
-          DB_USER: root
-          DB_PASSWORD: root
-          DB_NAME: slopee_test_db
-        run: |
-          pytest test/ -v
-
-  frontend-tests:
-    name: Frontend Vitest
+  frontend:
     runs-on: ubuntu-latest
-
+    defaults: { run: { working-directory: frontend } }
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-
-      - name: Install Frontend Dependencies
-        run: |
-          cd frontend
-          npm install
-
-      - name: Run Vitest
-        run: |
-          cd frontend
-          npm run test -- --run
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - run: npx vitest run
+      - run: npm run build

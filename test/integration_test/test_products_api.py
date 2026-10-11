@@ -1,6 +1,9 @@
 import pytest
 
-def test_fetch_products_integration(client):
+pytestmark = pytest.mark.mysql
+
+
+def test_fetch_products_integration(client, mysql_db):
     """
     INTEGRATION TEST
     This test DOES NOT use 'mocker'. It tests the full integration between:

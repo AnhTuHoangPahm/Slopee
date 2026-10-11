@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { fetchOrdersAPI, updateOrderStatusAPI } from '../api/payments';
 import Navbar from '../components/Navbar';
+import { getUser } from '../api/http';
+import { formatVND } from '../utils/formatVND';
 
 export default function MyOrders({ hideNavbar = false }) {
-    const user = JSON.parse(localStorage.getItem('user'));
+    const user = getUser();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         if (user) {
-            fetchOrdersAPI(user.id)
+            fetchOrdersAPI()
                 .then(data => setOrders(data.orders))
                 .catch(console.error)
                 .finally(() => setLoading(false));
@@ -23,7 +25,7 @@ export default function MyOrders({ hideNavbar = false }) {
         try {
             await updateOrderStatusAPI(orderId, status);
             // Refresh
-            const data = await fetchOrdersAPI(user.id);
+            const data = await fetchOrdersAPI();
             setOrders(data.orders);
         } catch (err) {
             alert(err.message);
@@ -74,11 +76,11 @@ export default function MyOrders({ hideNavbar = false }) {
                                             )}
                                         </div>
                                     </div>
-                                    <div style={{ color: '#ee4d2d', fontWeight: '500' }}>${(it.unitPrice * it.quantity).toFixed(2)}</div>
+                                    <div style={{ color: '#ee4d2d', fontWeight: '500' }}>{formatVND(it.unitPrice * it.quantity)}</div>
                                 </div>
                             ))}
                             <div style={{ textAlign: 'right', borderTop: '1px solid #eee', paddingTop: '15px', marginTop: '10px' }}>
-                                Settled Payment Amount: <strong style={{ color: '#ee4d2d', fontSize: '24px', marginLeft: '10px' }}>${o.totalAmount}</strong>
+                                Settled Payment Amount: <strong style={{ color: '#ee4d2d', fontSize: '24px', marginLeft: '10px' }}>{formatVND(o.totalAmount)}</strong>
                             </div>
                         </div>
                     ))

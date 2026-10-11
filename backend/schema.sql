@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS paymentMethods (
     methodType enum ('bank', 'credit_card', 'cash') NOT NULL,
     providerName varchar(100) comment 'e.g. Bank A, Bank B, Visa',
     accountNumber varchar(50),
-    balance decimal(11,2) default 0 comment 'Fake balance for transactions',
+    balance decimal(15,0) NOT NULL default 0 comment 'Số dư (VND)',
     foreign key (userId) references users (id) on delete cascade
 );
 
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS products (
     name varchar(255) NOT NULL,       
     description text,                 
     inStock int NOT NULL check (inStock >= 0),
-    unitPrice DECIMAL(11, 2) NOT NULL check (unitPrice >=0),
+    unitPrice DECIMAL(15, 0) NOT NULL check (unitPrice >=0),
     isActive boolean default true comment 'is product still for sale?',
 	foreign key (categoryId) references categories (id),
     foreign key (shopId) references shops (id) on delete cascade
@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS orders (
     paymentMethodId varchar(36),      
 	created_at timestamp NOT NULL DEFAULT current_timestamp,
     status enum('pending', 'paid', 'shipped', 'cancelled', 'received') NOT NULL default 'pending',
-    totalAmount decimal(11, 2) NOT NULL default 0,
+    totalAmount decimal(15, 0) NOT NULL default 0,
     foreign key (userId) references users(id) on delete restrict,
     foreign key (paymentMethodId) references paymentMethods(id) on delete set null
 );
@@ -123,7 +123,7 @@ CREATE TABLE IF NOT EXISTS orderLines (
 	orderId varchar(36),
 	productId varchar(15) NOT NULL,
     selectedVariants text,            
-    unitPrice decimal(11, 2) NOT NULL,
+    unitPrice decimal(15, 0) NOT NULL,
 	quantity int NOT NULL CHECK (quantity > 0),
     snapshotProductName varchar(255),
     snapshotShopName varchar(255),

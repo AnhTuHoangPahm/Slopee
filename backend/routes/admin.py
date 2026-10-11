@@ -1,8 +1,18 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 import pymysql
 import os
 
+from auth_utils import authenticate_request
+
 admin_bp = Blueprint('admin', __name__)
+
+
+@admin_bp.before_request
+def _require_admin():
+    """Khóa toàn bộ admin_bp: chỉ token hợp lệ có role 'admin' mới đi tiếp (S-02)."""
+    if request.method == 'OPTIONS':  # preflight CORS không mang Authorization
+        return None
+    return authenticate_request(roles=('admin',))
 
 def get_db_connection():
     return pymysql.connect(
@@ -52,11 +62,15 @@ def delete_user(user_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # Prevent deleting the master admin
-            cursor.execute("SELECT email FROM users WHERE id=%s", (user_id,))
+            if user_id == g.user_id:
+                return jsonify({"error": "You cannot delete your own admin account."}), 403
+            # Không cho xóa bất kỳ tài khoản admin nào qua API
+            cursor.execute("SELECT role FROM users WHERE id=%s", (user_id,))
             u = cursor.fetchone()
-            if u and u['email'] == '0':
-                return jsonify({"error": "Cannot delete the Master System Admin!"}), 403
+            if not u:
+                return jsonify({"error": "User not found"}), 404
+            if u['role'] == 'admin':
+                return jsonify({"error": "Admin accounts cannot be deleted via the API."}), 403
                 
             cursor.execute("DELETE FROM users WHERE id=%s", (user_id,))
             conn.commit()
@@ -86,7 +100,7 @@ def get_admin_categories():
 
 @admin_bp.route('/categories', methods=['POST'])
 def create_category():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     name = data.get('name')
     if not name:
         return jsonify({"error": "Category name required"}), 400
@@ -104,7 +118,7 @@ def create_category():
 
 @admin_bp.route('/categories/<int:cat_id>', methods=['PUT'])
 def rename_category(cat_id):
-    data = request.json
+    data = request.get_json(silent=True) or {}
     name = data.get('name')
     if not name:
         return jsonify({"error": "Category name required"}), 400

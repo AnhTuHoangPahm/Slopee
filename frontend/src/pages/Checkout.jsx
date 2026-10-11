@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { fetchPaymentMethodsAPI, addPaymentMethodAPI, checkoutAPI } from '../api/payments';
+import { getUser } from '../api/http';
+import { formatVND } from '../utils/formatVND';
 
 export default function Checkout() {
     const location = useLocation();
     const navigate = useNavigate();
-    const user = JSON.parse(localStorage.getItem('user'));
+    const user = getUser();
 
     // Items passed directly from Cart via Router state extraction securely
     const checkoutItems = location.state?.items || [];
@@ -30,7 +32,7 @@ export default function Checkout() {
 
     const loadMethods = async () => {
         try {
-            const data = await fetchPaymentMethodsAPI(user.id);
+            const data = await fetchPaymentMethodsAPI();
             setMethods(data.methods);
             if (data.methods.length > 0 && !selectedMethodId) setSelectedMethodId(data.methods[0].id);
         } catch (err) { console.error(err); }
@@ -40,7 +42,6 @@ export default function Checkout() {
         e.preventDefault();
         try {
             await addPaymentMethodAPI({
-                userId: user.id,
                 methodType: 'bank',
                 providerName: newMethodName,
                 accountNumber: 'xxxx-' + Math.floor(1000 + Math.random() * 9000)
@@ -48,7 +49,7 @@ export default function Checkout() {
             setShowAddForm(false);
             setNewMethodName('');
             loadMethods();
-            alert("Bank Account successfully linked! You have $10,000 in your account.");
+            alert("Bank Account successfully linked!");
         } catch (err) { alert(err.message); }
     };
 
@@ -60,7 +61,6 @@ export default function Checkout() {
         try {
             const ids = checkoutItems.map(i => i.cartItemId);
             await checkoutAPI({
-                userId: user.id,
                 paymentMethodId: selectedMethodId,
                 passPhrase: passPhrase,
                 cartItemIds: ids
@@ -96,12 +96,12 @@ export default function Checkout() {
                                 )}
                             </div>
                             <div style={{ color: '#ee4d2d', fontWeight: '500' }}>
-                                ${(it.unitPrice * it.quantity).toFixed(2)}
+                                {formatVND(it.unitPrice * it.quantity)}
                             </div>
                         </div>
                     ))}
                     <div style={{ textAlign: 'right', marginTop: '20px', fontSize: '18px' }}>
-                        Gross Cost Assessment: <span style={{ color: '#ee4d2d', fontWeight: 'bold' }}>${totalSum.toFixed(2)}</span>
+                        Gross Cost Assessment: <span style={{ color: '#ee4d2d', fontWeight: 'bold' }}>{formatVND(totalSum)}</span>
                     </div>
                 </div>
 
@@ -129,7 +129,7 @@ export default function Checkout() {
                                 <div>
                                     <div style={{ fontWeight: '500', fontSize: '15px' }}>{m.providerName} (...{m.accountNumber.slice(-4)})</div>
                                     <div style={{ fontSize: '12px', color: m.balance >= totalSum ? '#4caf50' : '#d32f2f', marginTop: '2px' }}>
-                                        Balance: ${m.balance} {m.balance < totalSum && "(Insufficient Funds!)"}
+                                        Balance: {formatVND(m.balance)} {m.balance < totalSum && "(Insufficient Funds!)"}
                                     </div>
                                 </div>
                             </label>

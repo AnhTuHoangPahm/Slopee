@@ -8,3 +8,4 @@ python-dotenv==1.0.1
 mysql-connector-python==9.6.0
 pytest==8.1.1
 pytest-mock==3.14.0
+itsdangerous==2.2.0
