@@ -30,7 +30,7 @@
 
 | Mốc | Thời hạn | Mục tiêu bàn giao có thể kiểm chứng | Trạng thái | Ngày hoàn thành | Người nghiệm thu |
 | :---: | :---: | :--- | :---: | :---: | :---: |
-| **M1** | Cuối Tuần 2 | Smart Contract hoàn chỉnh, test suite Foundry xanh 100%, coverage ≥ 90%, export ABI chuẩn | `[ ] CHƯA ĐẠT` | YYYY-MM-DD | A (Dev), B (Review) |
+| **M1** | Cuối Tuần 2 | Smart Contract hoàn chỉnh, test suite Foundry xanh 100%, coverage ≥ 90%, export ABI chuẩn | `[~] ĐẠT CỤC BỘ, chờ review/CI` | YYYY-MM-DD | A (Dev), B (Review) |
 | **M2** | Cuối Tuần 4 | Lát cắt E2E thô: Liên kết ví ➔ Báo giá ➔ Ký quỹ gom ➔ Indexer ➔ UI hiện `LOCKED` | `[ ] CHƯA ĐẠT` | YYYY-MM-DD | Cả nhóm |
 | **M3** | Cuối Tuần 7 | Đủ 4 vai trò (Buyer, Merchant, Shipper, Admin), luồng tranh chấp 2/3 chữ ký EIP-712 & timeout | `[ ] CHƯA ĐẠT` | YYYY-MM-DD | Cả nhóm |
 | **M4** | Cuối Tuần 8 | Đóng băng tính năng; Toàn bộ bài test tích hợp và E2E xanh; Rà soát checklist an ninh | `[ ] CHƯA ĐẠT` | YYYY-MM-DD | Cả nhóm |
@@ -43,17 +43,17 @@
 
 | Mã việc | Mô tả kỹ thuật | Khắc phục lỗi | Phụ trách | Tình trạng | PR / Commit |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| **P0-01** | Lớp xác thực token ký (`itsdangerous`, `SECRET_KEY` từ env, `AUTH_TOKEN_TTL_SECONDS`), decorator `require_auth`, loại bỏ `userId` từ body/URL, lưu token tại `sessionStorage` | S-01, S-12 | **B** | `[~] Đã code, chờ review` | `#PR-` |
-| **P0-02** | Đăng ký chỉ cho phép role `user` / `seller`; Khóa `admin_bp`; Bỏ route cấp số dư giả lập vô hạn; Seed tài khoản admin bằng CLI | S-02, S-03, S-04, S-10 | **B** | `[~] Đã code, chờ review` | `#PR-` |
+| **P0-01** | Lớp xác thực token ký (`itsdangerous`, `SECRET_KEY` từ env, `AUTH_TOKEN_TTL_SECONDS`), decorator `require_auth`, loại bỏ `userId` từ body/URL, lưu token tại `sessionStorage` | S-01, S-12 | **B** | `[x] Hoàn thành (PR Tuần 1 đã chốt)` | `#PR-` |
+| **P0-02** | Đăng ký chỉ cho phép role `user` / `seller`; Khóa `admin_bp`; Bỏ route cấp số dư giả lập vô hạn; Seed tài khoản admin bằng CLI | S-02, S-03, S-04, S-10 | **B** | `[x] Hoàn thành (PR Tuần 1 đã chốt)` | `#PR-` |
 | **P0-03** | Kiểm tra quyền sở hữu tài nguyên (đơn hàng, giỏ hàng, shop, sản phẩm, payment method); Chặn ghi đè `orders.status` đối với đơn Web3 (`WEB3_ORDER_MANAGED`) | S-05, S-06, S-11 | **A** | `[~] Đã code, chờ review` | `#PR-` |
 | **P0-04** | Xóa bỏ endpoint `GET /api/shops/migrate`; Viết runner migration tự động đánh số qua bảng `schema_migrations`; Dọn schema trùng `reviews` / `reviewImages` (sửa lỗi MySQL strict 1364) | S-07, S-13 | **A** | `[~] Đã code, chờ review` | `#PR-` |
 | **P0-05** | Thanh toán an toàn: Lock dòng bằng `SELECT ... FOR UPDATE`, `UPDATE ... WHERE inStock >= qty`; Xóa bỏ tính tiền bằng `float`; Khóa tạm tài khoản sau 5 lần sai mã PIN/mật khẩu | S-08, S-09 | **A** | `[~] Đã code, chờ review` | `#PR-` |
 | **P0-06** | Tắt `debug=True` trên production; Chuẩn hóa trả về lỗi chung cho client, chi tiết ghi log máy chủ; Validate schema body JSON | S-10, S-14 | **A** | `[~] Đã code, chờ review` | `#PR-` |
-| **P0-07** | Chuyển toàn bộ Slopee sang VND: 4 cột tiền đổi sang `DECIMAL(15,0)`; Đổi frontend dùng chung `formatVND` (`Intl.NumberFormat('vi-VN')`), xóa sạch biểu tượng `$` | Q-09, DD-12 | **B + C** | `[~] Đã code, chờ review` | `#PR-` |
+| **P0-07** | Chuyển toàn bộ Slopee sang VND: 4 cột tiền đổi sang `DECIMAL(15,0)`; Đổi frontend dùng chung `formatVND` (`Intl.NumberFormat('vi-VN')`), xóa sạch biểu tượng `$` | Q-09, DD-12 | **B + C** | `[x] Hoàn thành (PR Tuần 1 đã chốt)` | `#PR-` |
 | **P0-08** | Cập nhật bộ test cũ: Sửa test checkout, cart, auth theo token phiên và VND; Chuyển test race condition sang chạy trên MySQL service thật | SRS 12.3 | **B + C** | `[~] Đã code, chờ review` | `#PR-` |
 
 **Ghi chú Phase 0 (cập nhật gần nhất):**
-- `[~]` = đã code và test xanh cục bộ, **chờ PR được thành viên khác duyệt**; điền cột PR/Commit khi mở PR.
+- `[~]` = đã code và test xanh cục bộ, **chờ PR được thành viên khác duyệt**; điền cột PR/Commit khi mở PR. `[x]` = đã duyệt và chốt PR. **P0-01, P0-02, P0-07** thuộc Tuần 1 và đã `[x]` khi PR Tuần 1 chốt (cột PR/Commit còn `#PR-`: điền số PR thật). P0-03…P0-06 và P0-08 thuộc Tuần 3 nên vẫn `[~]`.
 - **P0-01/02:** token mặc định hết hạn sau 3600 s (đặt `AUTH_TOKEN_TTL_SECONDS`; SDD 16.3 gợi ý 8 giờ → nhóm chốt giá trị). Token mang `role` và không kiểm lại DB. Route theo người dùng đã đổi sang `/me` hoặc bỏ tham số (xem `AI_CONTEXT.md` mục 6). Số dư phương thức thanh toán mới = 0.
 - **P0-07:** `migrations/0001_money_to_vnd.sql` mới chạy tay và chỉ làm tròn dữ liệu USD cũ (SDD 16.3 bước 8 yêu cầu nhân với `FX_VND_PER_TOKEN`); DB demo nên tạo lại bằng `init_db.py`. File này đã nằm trong runner của P0-04 (xem ghi chú P0-04).
 - **P0-08:** test race condition checkout đã chạy trên MySQL thật (`test/integration_test/test_checkout_race_mysql.py`) và CI có MySQL service (`.github/workflows/tests.yml`). Yêu cầu "không bán lố, tiền khớp" vẫn đúng; sau P0-05 request thua cuộc trả 400 (không còn 500 do `CHECK`).
@@ -74,17 +74,17 @@
 ## 4. BẢNG THEO DÕI CHI TIẾT THEO TUẦN (WEEKLY SPRINT TRACKER)
 
 ### TUẦN 1: Khởi động nền tảng, Smart Contract cơ sở, Chuẩn hóa VND
-> Quy ước: `[~]` = đã code, test xanh cục bộ, **chờ PR được thành viên khác duyệt** (giống Phase 0). Chưa tick `[x]` vì chưa qua review/CI.
-- [~] **[C] Thành viên A:** Cấu hình Foundry (`contracts/foundry.toml`, solc 0.8.20, `via_ir=true`, OpenZeppelin v5.0.2, forge-std v1.9.4). Cài thư viện bằng `scripts/install_contract_deps.sh` (không dùng `forge install` thẳng: một số bản Foundry bỏ qua tag và kéo OpenZeppelin 5.7, đòi solc ≥ 0.8.24).
-- [~] **[C] Thành viên A:** `contracts/src/MockUSD.sol` (6 decimals, `mint` cho môi trường thử).
-- [~] **[C] Thành viên A:** `contracts/src/SlopeeEscrowMaster.sol` phần nạp đơn: `depositEscrow` (xác minh EIP-712 `OrderQuote`, dùng chung `_acceptQuote`/`_collect` để tuần 2 chỉ việc thêm `depositEscrowBatch`), `confirmDelivery`, `earlyRelease`, `releaseAfterInspection`, `cancelIfUnfulfilled`. Struct/enum/sự kiện/hằng số/storage khai báo **đầy đủ ngay từ đầu** để ABI và bố cục storage không đổi ở tuần 2. Chưa có (tuần 2): tranh chấp, `arbitratorForceResolve`, `depositEscrowBatch`, `claimPending`, `setDefaultFeeBps`/`setFeeRecipient`.
-- [~] **[C] Thành viên A:** `contracts/script/Deploy.s.sol` (triển khai, mint MockUSD cho buyer thử, ghi `deployments/local.json`) và 46 test Foundry (`forge test`): T-01…T-07, T-14, T-23 và các phần đã làm được của T-08, T-16, T-20, T-22 (xem 5.1).
-- [~] **[B] Thành viên B:** `./scripts/bootstrap.sh` một lệnh: kiểm công cụ → cài thư viện contract → Anvil `--block-time 2` → `forge build` → triển khai → kiểm có mã trên chuỗi và `SHIPPER_ROLE` → ghi `deployments/local.json` → chép cho frontend → sinh `backend/.env.web3` (3 khóa vai trò khác nhau, khóa công khai của Anvil). Kèm `scripts/smoke_week1.sh`: chạy trên Anvil thật báo giá do **Python ký** → Buyer nạp → Shipper giao → Buyer nhận → kiểm số dư (đã chạy: Merchant +16.005.000, phí +495.000, escrow = 0). *Chưa làm trong bootstrap:* migration MySQL Web3 (tuần 2) và khởi động web/indexer/scheduler (tuần 3–5).
-- [~] **[B] Thành viên B:** Triển khai **P0-01** (Auth Token) và **P0-02** (Phân quyền Role & bảo vệ Admin). *(đã code, chờ review)*
-- [~] **[B + C]:** Triển khai **P0-07** (Chuyển schema và giao diện sang VND số nguyên). *(đã code, chờ review)*
-- [~] **[F] Thành viên C:** Client API dùng chung `lib/client.js`, hàm định dạng `lib/format.js` (`formatVND`, `shortAddress`), Route Guard `components/RequireRole.jsx` (chưa đăng nhập → `/login`; sai role → thông báo; áp cho `/admin`, `/seller`, `/cart`, `/checkout`, `/orders`, `/settings`). **Đã chốt tên file theo SDD:** `lib/` là nơi chuẩn; `api/http.js` và `utils/formatVND.js` giữ lại chỉ như lớp re-export để không vỡ import/test cũ (một nguồn sự thật). Các `api/*.js` không còn hardcode `http://localhost:5000` (đọc `VITE_API_BASE`).
-- [~] **[F] Thành viên C:** Khung ví `hooks/useWallet.js` (`WalletProvider` + `useWallet`: kết nối EIP-1193/MetaMask, theo dõi `accountsChanged`/`chainChanged`, `switchToDeployedChain` có thêm mạng khi mã 4902, `getSigner()` ethers v6, mã 4001 = "Bạn đã hủy thao tác", không lưu gì vào localStorage) và `lib/chain.js` (đọc/kiểm `deployments/local.json`, chỉ chấp nhận chainId 31337). Chưa có UI kết nối (Navbar/`pages/Wallet.jsx` là UC-00, tuần 3) và chưa có ABI (đóng băng ở M1).
-- [~] **[Q] Cả nhóm:** Khóa `shared/eip712/types.json` và tạo `shared/eip712/vectors.json` (sinh bằng `scripts/gen_eip712_vectors.py`, có `--check` cho CI): 3 báo giá, 2 phán quyết (kèm chữ ký Trọng tài), 2 `docHash`. **Đã chạy luôn kiểm tra chéo ngôn ngữ** ở cả 3 nơi cho cùng domainSeparator/structHash/digest/người ký: Python (`test_eip712_vectors.py`), JS (`eip712Vectors.test.js`), Solidity (`Eip712Vectors.t.sol`, còn nạp thật báo giá do Python ký vào contract). *Còn thiếu:* vector cho thông điệp liên kết ví (SDD 8.3) — định dạng SIWE chốt ở UC-00 (tuần 3).
+> Quy ước: `[~]` = đã code, test xanh cục bộ, chờ PR được duyệt; `[x]` = đã duyệt và chốt PR. **Tuần 1 đã chốt PR nên toàn bộ mục bên dưới là `[x]`.** (Trạng thái `[x] PASS` của bảng test mục 5 vẫn chỉ đặt khi CI xanh trên nhánh chính.)
+- [x] **[C] Thành viên A:** Cấu hình Foundry (`contracts/foundry.toml`, solc 0.8.20, `via_ir=true`, OpenZeppelin v5.0.2, forge-std v1.9.4). Cài thư viện bằng `scripts/install_contract_deps.sh` (không dùng `forge install` thẳng: một số bản Foundry bỏ qua tag và kéo OpenZeppelin 5.7, đòi solc ≥ 0.8.24).
+- [x] **[C] Thành viên A:** `contracts/src/MockUSD.sol` (6 decimals, `mint` cho môi trường thử).
+- [x] **[C] Thành viên A:** `contracts/src/SlopeeEscrowMaster.sol` phần nạp đơn: `depositEscrow` (xác minh EIP-712 `OrderQuote`, dùng chung `_acceptQuote`/`_collect` để tuần 2 chỉ việc thêm `depositEscrowBatch`), `confirmDelivery`, `earlyRelease`, `releaseAfterInspection`, `cancelIfUnfulfilled`. Struct/enum/sự kiện/hằng số/storage khai báo **đầy đủ ngay từ đầu** để ABI và bố cục storage không đổi ở tuần 2. Chưa có (tuần 2): tranh chấp, `arbitratorForceResolve`, `depositEscrowBatch`, `claimPending`, `setDefaultFeeBps`/`setFeeRecipient`.
+- [x] **[C] Thành viên A:** `contracts/script/Deploy.s.sol` (triển khai, mint MockUSD cho buyer thử, ghi `deployments/local.json`) và 46 test Foundry (`forge test`): T-01…T-07, T-14, T-23 và các phần đã làm được của T-08, T-16, T-20, T-22 (xem 5.1).
+- [x] **[B] Thành viên B:** `./scripts/bootstrap.sh` một lệnh: kiểm công cụ → cài thư viện contract → Anvil `--block-time 2` → `forge build` → triển khai → kiểm có mã trên chuỗi và `SHIPPER_ROLE` → ghi `deployments/local.json` → chép cho frontend → sinh `backend/.env.web3` (3 khóa vai trò khác nhau, khóa công khai của Anvil). Kèm `scripts/smoke_week1.sh`: chạy trên Anvil thật báo giá do **Python ký** → Buyer nạp → Shipper giao → Buyer nhận → kiểm số dư (đã chạy: Merchant +16.005.000, phí +495.000, escrow = 0). *Chưa làm trong bootstrap:* migration MySQL Web3 (tuần 2) và khởi động web/indexer/scheduler (tuần 3–5).
+- [x] **[B] Thành viên B:** Triển khai **P0-01** (Auth Token) và **P0-02** (Phân quyền Role & bảo vệ Admin). *(đã code, chờ review)*
+- [x] **[B + C]:** Triển khai **P0-07** (Chuyển schema và giao diện sang VND số nguyên). *(đã code, chờ review)*
+- [x] **[F] Thành viên C:** Client API dùng chung `lib/client.js`, hàm định dạng `lib/format.js` (`formatVND`, `shortAddress`), Route Guard `components/RequireRole.jsx` (chưa đăng nhập → `/login`; sai role → thông báo; áp cho `/admin`, `/seller`, `/cart`, `/checkout`, `/orders`, `/settings`). **Đã chốt tên file theo SDD:** `lib/` là nơi chuẩn; `api/http.js` và `utils/formatVND.js` giữ lại chỉ như lớp re-export để không vỡ import/test cũ (một nguồn sự thật). Các `api/*.js` không còn hardcode `http://localhost:5000` (đọc `VITE_API_BASE`).
+- [x] **[F] Thành viên C:** Khung ví `hooks/useWallet.js` (`WalletProvider` + `useWallet`: kết nối EIP-1193/MetaMask, theo dõi `accountsChanged`/`chainChanged`, `switchToDeployedChain` có thêm mạng khi mã 4902, `getSigner()` ethers v6, mã 4001 = "Bạn đã hủy thao tác", không lưu gì vào localStorage) và `lib/chain.js` (đọc/kiểm `deployments/local.json`, chỉ chấp nhận chainId 31337). Chưa có UI kết nối (Navbar/`pages/Wallet.jsx` là UC-00, tuần 3) và chưa có ABI (đóng băng ở M1).
+- [x] **[Q] Cả nhóm:** Khóa `shared/eip712/types.json` và tạo `shared/eip712/vectors.json` (sinh bằng `scripts/gen_eip712_vectors.py`, có `--check` cho CI): 3 báo giá, 2 phán quyết (kèm chữ ký Trọng tài), 2 `docHash`. **Đã chạy luôn kiểm tra chéo ngôn ngữ** ở cả 3 nơi cho cùng domainSeparator/structHash/digest/người ký: Python (`test_eip712_vectors.py`), JS (`eip712Vectors.test.js`), Solidity (`Eip712Vectors.t.sol`, còn nạp thật báo giá do Python ký vào contract). *Còn thiếu:* vector cho thông điệp liên kết ví (SDD 8.3) — định dạng SIWE chốt ở UC-00 (tuần 3).
 
 **Cách chạy lại tuần 1:** `./scripts/bootstrap.sh && ./scripts/smoke_week1.sh` · `cd contracts && forge test` · `pytest test` · `cd frontend && npx vitest run`.
 **Lưu ý cho bên review:** (1) khóa trong `EscrowBase.t.sol`, `Deploy.s.sol`, `bootstrap.sh`, `gen_eip712_vectors.py` là **khóa thử công khai của Anvil** — bài quét E-05 (AC-09) phải cho phép danh sách này, nếu không sẽ báo nhầm; (2) `contracts/lib/` bị `.gitignore` (cài bằng `scripts/install_contract_deps.sh`); (3) `foundry.toml` dùng `solc_version = "0.8.20"` (Foundry tự tải); (4) địa chỉ contract trong vector (`0xe7f1…0512`, token `0x5FbD…0aa3`) khớp lần triển khai đầu trên Anvil sạch của deployer #0.
@@ -92,17 +92,30 @@
 ---
 
 ### TUẦN 2: Hoàn thiện Smart Contract, Nạp gom & Đạt Cột mốc M1
-- [ ] **[C] Thành viên A:** Cài đặt logic tranh chấp: `raiseDispute`, `resolveDispute` (2/3 chữ ký EIP-712, kiểm tra `deadline < disputedAt + disputeTimeout`).
-- [ ] **[C] Thành viên A:** Cài đặt cơ chế thoát hiểm timeout: `arbitratorForceResolve` (chỉ chạy khi `now >= disputedAt + disputeTimeout`).
-- [ ] **[C] Thành viên A:** Cài đặt nạp gom nhiều shop: `depositEscrowBatch` (nguyên tử, tối đa 5 đơn, tái sử dụng `_acceptQuote` và `_collect`).
-- [ ] **[C] Thành viên A:** Cài đặt sổ chờ rút pull-payment (`pendingWithdrawals`, `claimPending`, sự kiện `PayoutDeferred`).
-- [ ] **[C] Thành viên A:** Viết bộ test Foundry T-01 đến T-34, chứng minh bất biến INV-01 đến INV-07. Đo gas nạp gom 5 shop (T-32).
-- [ ] **[B] Thành viên B:** Viết các migration CSDL MySQL Web3 (SDD `001_wallets.sql` … `015_shipper.sql` → đánh số `0006_wallets.sql` … `0020_shipper.sql`, xem quyết định 4 ở Ghi chú Phase 0), bảng `order_web3` quan hệ 1-1 với `orders`.
-- [~] **[Q] Thành viên B + C:** Chạy test chéo ngôn ngữ Python, JavaScript và Solidity khớp 100% digest EIP-712. *(đã chạy sớm ở tuần 1 cho báo giá, phán quyết, docHash; tuần 2 chỉ còn bổ sung vector liên kết ví nếu chốt định dạng sớm)*
-- [ ] 🎯 **NGHIỆM THU CỘT MỐC M1:**
-  - [ ] Độ phủ dòng lệnh contract đạt ≥ 90% (`forge coverage`).
-  - [ ] Chạy Slither không còn cảnh báo mức High chưa giải thích.
-  - [ ] Đóng băng ABI `SlopeeEscrowMaster.json`, xuất sang backend và frontend.
+> Quy ước `[~]` như Tuần 1: đã code, test xanh cục bộ, **chờ PR được duyệt**. Chưa `[x]` vì chưa qua review/CI.
+- [~] **[C] Thành viên A:** Cài đặt logic tranh chấp: `raiseDispute` (chỉ Buyer, `DELIVERED → DISPUTED`, `now < deliveredAt + inspectionDuration`), `resolveDispute` (2 chữ ký EIP-712 của 2 bên khác nhau trong Buyer/Merchant/Trọng tài; ai cũng nộp được; `deadline < disputedAt + disputeTimeout`; nonce theo đơn).
+- [~] **[C] Thành viên A:** Cơ chế thoát hiểm timeout: `arbitratorForceResolve` (`ARBITRATOR_ROLE`, chỉ khi `now >= disputedAt + disputeTimeout`). Hai đường `resolveDispute` và thoát hiểm **không bao giờ cùng hợp lệ** (R-02): đã test cả hai phía của mốc (T-15, T-24).
+- [~] **[C] Thành viên A:** Nạp gom nhiều shop: `depositEscrowBatch` (nguyên tử, tối đa 5 đơn, một token, thu tiền đúng một lần; dùng chung `_acceptQuote`/`_collect` với `depositEscrow` nên không có đường nạp nào yếu hơn). Ghi đơn `LOCKED` ngay trong vòng lặp nên `orderId` trùng trong cùng lô bị từ chối (`Order exists`) thay vì bị thu tiền hai lần.
+- [~] **[C] Thành viên A:** Sổ chờ rút pull-payment: `claimPending` (xóa số dư trước khi chuyển, `nonReentrant`), `PayoutDeferred`/`PendingClaimed`; thêm `setDefaultFeeBps` (trần ≤ 1.000 BPS) và `setFeeRecipient` (Admin). Struct/enum/sự kiện/storage giữ nguyên Tuần 1 — chỉ **thêm** hàm.
+- [~] **[C] Thành viên A:** Bộ test Foundry **139 test** (`forge test`): T-01…T-34 đủ + invariant INV-01…INV-07 (8 invariant, handler gọi ngẫu nhiên cả nạp đơn lẻ và nạp gom, 128 run × 100 lời gọi). **Gas nạp gom 5 shop (T-32): 1.229.409 (token), 1.099.331 (ETH)** — dưới mục tiêu 3.000.000. Phân bổ: `Eip712Vectors` 5, `Week1` 41, `Week2` 59, `Batch` 24, `Matrix` 2 (45 cặp âm), `Invariant` 8.
+- [~] **[B] Thành viên B:** 15 migration MySQL Web3 `0006`…`0020` (SDD `001_wallets`…`015_shipper`; tên thật: `0006_wallets.py`, `0007_checkout_groups.py`, `0008_order_web3.py`, `0009_order_quotes.py`, `0010_dispute_resolutions.py`, `0011_dispute_signatures.sql`, `0012_chain_events.sql`, `0013_indexer_cursor.sql`, `0014_platform_settings.sql`, `0015_category_policies.sql`, `0016_category_policy_map.sql`, `0017_tx_outbox.sql`, `0018_onchain_id_seq.sql`, `0019_pending_balances.sql`, `0020_shipper.py`), bảng `order_web3` quan hệ 1-1 với `orders`. Migration có khóa ngoại tới bảng Slopee là `.py` và **phòng vệ** (SDD Q-06): đọc kiểu/charset/collation của cột cha, dừng nếu bảng cha không phải InnoDB. `schema.sql` đã phản ánh đủ (16 bảng Web3 + `users.role` có `shipper`). **31 test mới** (6 tĩnh + 25 trên MySQL 8.0 thật); toàn bộ pytest **360 pass, 0 skip**.
+- [~] **[Q] Thành viên B + C:** Chạy test chéo ngôn ngữ Python, JavaScript và Solidity khớp 100% digest EIP-712. *(đã chạy sớm ở tuần 1 cho báo giá, phán quyết, docHash; vẫn xanh sau thay đổi tuần 2; còn bổ sung vector liên kết ví nếu chốt định dạng sớm)*
+- [~] 🎯 **NGHIỆM THU CỘT MỐC M1:** *(đạt cục bộ; chờ A(Dev)/B(Review) duyệt và CI xanh để chuyển `[x]`)*
+  - [~] Độ phủ dòng lệnh contract đạt ≥ 90% (`forge coverage --ir-minimum`): **100% (153/153 dòng của `src/`)**; 100% hàm. Lưu ý: số liệu *nhánh* Foundry báo 33% (30/90) vì nó đếm từng `require`/modifier là nhánh; tiêu chí M1 là dòng lệnh.
+  - [~] Chạy Slither không còn cảnh báo mức High chưa giải thích: **0 High, 0 Medium chưa giải thích**. Một High (`reentrancy-balance` ở `_collect`) và 2 Medium (`incorrect-equality`) là false positive có chủ đích, đã ghi lý do ngay tại mã bằng `slither-disable` (đọc chênh lệch số dư để loại token phí-khi-chuyển; mọi đường gọi đều `nonReentrant`, chứng minh bằng T-17). Còn 9 cảnh báo Low (8 `timestamp` do spec bắt buộc dùng `block.timestamp`, 1 `reentrancy-benign` ở `_payout`: ghi sổ chờ rút sau `call` giới hạn 30.000 gas, có `nonReentrant`).
+  - [~] Đóng băng ABI `SlopeeEscrowMaster.json` (37 hàm, 15 sự kiện) + `MockUSD.json`: xuất bằng `scripts/export_abi.sh` sang `shared/abi/` (nguồn duy nhất cho backend) và `frontend/src/lib/abi/`; `--check` chạy trong CI để ABI không lệch khỏi contract. *(Chưa nối vào `lib/chain.js`: việc của Thành viên C ở Tuần 3–4.)*
+
+**Cách chạy lại tuần 2:** `(cd contracts && forge test)` (invariant ~1–1,5 phút) · `(cd contracts && forge coverage --ir-minimum --report summary --no-match-coverage "(test|script)")` · `(cd contracts && slither . --exclude-informational)` · `./scripts/export_abi.sh --check` · `pytest test` (cần MySQL 8.0 ≥ 8.0.16 cho phần migration) · `./scripts/bootstrap.sh && ./scripts/smoke_week1.sh` (đã chạy: contract tuần 2 triển khai và smoke tuần 1 `SMOKE OK`).
+
+**Ghi chú & quyết định Tuần 2 (cần nhóm xem khi review):**
+1. **Gieo dữ liệu trong migration thay vì `bootstrap.sh`** (lệch nhẹ so với SRS/SDD 7.6): `bootstrap.sh` chưa chạm MySQL và nhóm `GENERAL` là bắt buộc (danh mục chưa ánh xạ dùng GENERAL). Dùng `INSERT IGNORE` nên chạy lại không đè giá trị Admin đã sửa (có test). Giá trị 4 nhóm chính sách là **giá trị đề xuất của SRS, nhóm chốt lại trước Tuần 3**.
+2. **Chỉ gieo khóa có mặc định trong đặc tả:** `PLATFORM_FEE_BPS=300`, `QUOTE_TTL_SECONDS=900`. **`FX_VND_PER_TOKEN` và `DISPUTE_SIG_TTL_SECONDS` chưa có mặc định trong đặc tả nên chưa gieo** — nhóm chốt giá trị trước khi làm UC-01/UC-06 (backend nên báo lỗi rõ khi thiếu khóa).
+3. **Ba chỗ sửa test Tuần 1/Phase 0 (hành vi kiểm không yếu đi):** (a) `test_p0_mysql::test_order_with_order_web3_row_is_rejected` trước đây tự tạo bảng `order_web3` tối thiểu, nay chèn dòng vào bảng thật; (b) `test_p0_04::test_schema_statements_are_all_creates_and_splittable` nới để cho phép thêm đúng `INSERT IGNORE INTO` (gieo mặc định); (c) `SlopeeEscrowWeek1::test_T05…` đọc `vm.getBlockTimestamp()` thay `block.timestamp` vì `forge coverage --ir-minimum` làm `block.timestamp` cũ sau `vm.warp` (test xanh ở chế độ thường, đỏ ở chế độ coverage).
+4. **Handler invariant bản đầu gần như vô nghĩa:** đo thực tế cho thấy mỗi run chỉ có ~4 lần nạp, 0 tranh chấp, 0 nạp gom nên invariant xanh chẳng chứng minh gì. Đã chỉnh handler (đa số lời gọi hợp lệ, thêm `progress`/`openDispute`) và đo lại: mỗi run đều chạm nạp gom, giải ngân, hoàn tiền, khiếu nại, phân xử bằng chữ ký, thoát hiểm, hoãn ETH và rút khoản chờ. Mốc này nên được review kỹ.
+5. **Nhánh ERC-20 của `claimPending` không thể đến được qua đường đi thật** (`_payout` chỉ hoãn ETH; ERC-20 revert nếu chuyển lỗi). Test T-16 dựng số dư chờ rút ERC-20 bằng `vm.store` để chứng minh nhánh đúng. Nếu muốn gọn có thể bỏ nhánh này ở lần sửa contract kế tiếp (sau M1 mọi thay đổi contract cần cả nhóm đồng ý).
+6. **Test migration phát hiện một điểm tinh tế:** cột tham chiếu bảng Web3 *mới* (`order_web3.checkout_group_id` → `checkout_groups.group_id`) khớp cột cha mới chứ không khớp collation của bảng Slopee cũ; quy tắc đúng là "khớp cột cha", và test collation `utf8mb4_unicode_ci` xác nhận migration phòng vệ xử lý được trường hợp DB cũ lệch collation (DDL ngây thơ lỗi errno 3780).
+7. **Chưa kiểm chứng:** CI GitHub Actions thật (mới chạy từng lệnh cục bộ, gồm cả cổng coverage/ABI/Slither mới thêm vào `tests.yml`); frontend (Vitest) không đổi nên không chạy lại. Môi trường đo: Foundry 1.3.0, solc 0.8.20, MySQL 8.0.46, Slither 0.11.6.
+
 
 ---
 
@@ -197,7 +210,7 @@
 ## 5. MA TRẬN THEO DÕI KIỂM THỬ (TEST EXECUTION TRACKER)
 
 ### 5.1. Smart Contract Test Suite (Foundry: `contracts/test/*.t.sol`)
-> `[~]` = đã viết và pass cục bộ bằng `forge test` (46 test, gồm 5 test vector chéo ngôn ngữ), chờ review/CI. `[x] PASS` chỉ đặt khi CI xanh trên nhánh chính.
+> `[~]` = đã viết và pass cục bộ bằng `forge test` (**139 test**, gồm 5 test vector chéo ngôn ngữ và 8 invariant), chờ review/CI. `[x] PASS` chỉ đặt khi CI xanh trên nhánh chính. T-01…T-07, T-14, T-23 (Tuần 1) cũng giữ `[~]` theo đúng quy tắc này dù PR Tuần 1 đã chốt.
 | Mã test | Mô tả ca kiểm thử | Kết quả mong đợi | BRD / SRS | Tình trạng |
 | :---: | :--- | :--- | :---: | :---: |
 | **T-01** | Nạp tiền với báo giá hợp lệ (ERC-20 và ETH) | Thành công, đơn `LOCKED` | BR-06 | `[~] pass cục bộ (forge)` |
@@ -207,38 +220,39 @@
 | **T-05** | `confirmDelivery` gọi bởi người không có role; gọi khi đơn chưa `LOCKED` | Revert | BR-03 | `[~] pass cục bộ (forge)` |
 | **T-06** | `earlyRelease` gọi bởi Buyer; gọi bởi người khác | Thành công / Revert | BR-03 | `[~] pass cục bộ (forge)` |
 | **T-07** | `releaseAfterInspection` tại đúng mốc biên và trước 1 giây | Thành công / Revert | BR-03 | `[~] pass cục bộ (forge)` |
-| **T-08** | Chia phí theo `feeBps` (0, 300, 1000); Kiểm tra làm tròn; Đổi `defaultFeeBps` không ảnh hưởng đơn cũ | Đúng công thức | BR-02 | `[~] một phần: feeBps 0 và 300 (trần mặc định) + fuzz INV-03; mức 1000 cần setDefaultFeeBps (tuần 2)` |
-| **T-09** | `setDefaultFeeBps` > 1000; gọi bởi người không phải Admin | Revert | BR-02 | `[ ] PASS` |
-| **T-10** | `raiseDispute` trong hạn; sau hạn; gọi bởi người không phải Buyer | Thành công / Revert | BR-03 | `[ ] PASS` |
-| **T-11** | `resolveDispute` đủ 2/3 chữ ký (Arbitrator + Buyer; Arbitrator + Merchant) | Thành công, đúng payout | BR-04 | `[ ] PASS` |
-| **T-12** | 2 chữ ký cùng bên; 2 địa chỉ cùng vai Trọng tài; chữ ký người lạ; quá hạn deadline; sai nonce | Revert | BR-04 | `[ ] PASS` |
-| **T-13** | Nộp lại chữ ký đã dùng sau khi đơn đã đóng | Revert | BR-04 | `[ ] PASS` |
+| **T-08** | Chia phí theo `feeBps` (0, 300, 1000); Kiểm tra làm tròn; Đổi `defaultFeeBps` không ảnh hưởng đơn cũ | Đúng công thức | BR-02 | `[~] pass cục bộ (forge): feeBps 0/300/1000, làm tròn xuống, đổi trần không ảnh hưởng đơn cũ` |
+| **T-09** | `setDefaultFeeBps` > 1000; gọi bởi người không phải Admin | Revert | BR-02 | `[~] pass cục bộ (forge)` |
+| **T-10** | `raiseDispute` trong hạn; sau hạn; gọi bởi người không phải Buyer | Thành công / Revert | BR-03 | `[~] pass cục bộ (forge): gồm biên đúng mốc hết hạn và trừ 1 giây` |
+| **T-11** | `resolveDispute` đủ 2/3 chữ ký (Arbitrator + Buyer; Arbitrator + Merchant) | Thành công, đúng payout | BR-04 | `[~] pass cục bộ (forge): Trọng tài+Buyer, Trọng tài+Merchant, Buyer+Merchant` |
+| **T-12** | 2 chữ ký cùng bên; 2 địa chỉ cùng vai Trọng tài; chữ ký người lạ; quá hạn deadline; sai nonce | Revert | BR-04 | `[~] pass cục bộ (forge): gồm 2 Trọng tài khác địa chỉ, sai nonce/amount/payee/deadline, chữ ký malleable` |
+| **T-13** | Nộp lại chữ ký đã dùng sau khi đơn đã đóng | Revert | BR-04 | `[~] pass cục bộ (forge)` |
 | **T-14** | `cancelIfUnfulfilled` trước và sau 14 ngày; bởi Buyer, Admin, người ngoài | Revert / OK / Revert | BR-05 | `[~] pass cục bộ (forge)` |
-| **T-15** | `arbitratorForceResolve` trước/sau `disputeTimeout`; biên -1s revert, đúng mốc thành công | Revert / OK / Revert | BR-05 | `[ ] PASS` |
-| **T-16** | Ví nhận từ chối ETH: Chuyển vào `pendingWithdrawals`; `claimPending` rút thành công | Thành công, không kẹt | BR-05 | `[~] một phần: ví từ chối ETH → ghi sổ chờ rút; claimPending (tuần 2)` |
-| **T-17** | Tấn công Reentrancy qua fallback ví nhận ETH và token độc hại | Bị ReentrancyGuard chặn | Bảo mật | `[ ] PASS` |
-| **T-18** | Invariant/Fuzz: Số dư contract = Tổng đơn mở + Tổng sổ chờ rút | Luôn đúng | G-01 | `[ ] PASS` |
-| **T-19** | Kiểm tra ma trận âm: Mọi cặp (state, method) không hợp lệ trong SRS mục 5 | Revert | Máy trạng thái | `[ ] PASS` |
-| **T-20** | Báo giá có `disputeTimeout` < 7 ngày hoặc > 90 ngày; biên đúng 7 và 90 ngày | Revert / OK | BR-10 | `[~] một phần: biên 7/90 ngày khi nạp; phần resolve/force (tuần 2)` |
-| **T-21** | Hai đơn có `disputeTimeout` khác nhau chạy song song: độc lập thời gian timeout | Thành công độc lập | BR-10 | `[ ] PASS` |
-| **T-22** | Báo giá có `feeBps > defaultFeeBps`; hạ trần thì báo giá cũ bị từ chối | Revert / OK | BR-02, 06 | `[~] một phần: báo giá vượt trần bị từ chối; hạ trần cần setDefaultFeeBps (tuần 2)` |
+| **T-15** | `arbitratorForceResolve` trước/sau `disputeTimeout`; biên -1s revert, đúng mốc thành công | Revert / OK / Revert | BR-05 | `[~] pass cục bộ (forge): timeout 7/30/90 ngày, hai phía của mốc (R-02)` |
+| **T-16** | Ví nhận từ chối ETH: Chuyển vào `pendingWithdrawals`; `claimPending` rút thành công | Thành công, không kẹt | BR-05 | `[~] pass cục bộ (forge): ví từ chối ETH (Merchant/người nhận phí/Buyer), claimPending, rút lại bị chặn` |
+| **T-17** | Tấn công Reentrancy qua fallback ví nhận ETH và token độc hại | Bị ReentrancyGuard chặn | Bảo mật | `[~] pass cục bộ (forge): ví tái nhập qua claimPending; token độc hại khi nạp, giải ngân, phân xử` |
+| **T-18** | Invariant/Fuzz: Số dư contract = Tổng đơn mở + Tổng sổ chờ rút | Luôn đúng | G-01 | `[~] pass cục bộ (forge invariant, 128 run × 100 lời gọi, ETH và token)` |
+| **T-19** | Kiểm tra ma trận âm: Mọi cặp (state, method) không hợp lệ trong SRS mục 5 | Revert | Máy trạng thái | `[~] pass cục bộ (forge): 45 cặp âm, đúng lý do revert, không đổi trạng thái` |
+| **T-20** | Báo giá có `disputeTimeout` < 7 ngày hoặc > 90 ngày; biên đúng 7 và 90 ngày | Revert / OK | BR-10 | `[~] pass cục bộ (forge)` |
+| **T-21** | Hai đơn có `disputeTimeout` khác nhau chạy song song: độc lập thời gian timeout | Thành công độc lập | BR-10 | `[~] pass cục bộ (forge)` |
+| **T-22** | Báo giá có `feeBps > defaultFeeBps`; hạ trần thì báo giá cũ bị từ chối | Revert / OK | BR-02, 06 | `[~] pass cục bộ (forge): hạ trần ⇒ báo giá cũ bị từ chối, báo giá mới được` |
 | **T-23** | Báo giá có `q.buyer != msg.sender` | Revert | BR-06 | `[~] pass cục bộ (forge)` |
-| **T-24** | `resolveDispute` với `deadline >= disputedAt + disputeTimeout` | Revert | BR-04, 05 | `[ ] PASS` |
-| **T-25** | Nạp gom 3 đơn 3 shop: 1 lần `transferFrom`, tăng số dư đúng tổng, 3 sự kiện `OrderCreated` | Thành công | BR-11 | `[ ] PASS` |
-| **T-26** | Lô nạp rỗng; lô > 5 đơn; lệch độ dài mảng quotes và sigs | Revert | BR-11 | `[ ] PASS` |
-| **T-27** | Trùng `orderId` ngay trong một mảng lô nạp | Revert, số dư không đổi | BR-11, G-01 | `[ ] PASS` |
-| **T-28** | Một báo giá trong lô lỗi (quá hạn, sai chữ ký, vượt trần phí) | Toàn bộ lô Revert | BR-11 | `[ ] PASS` |
-| **T-29** | Lô nạp trộn nhiều loại token; nạp ETH sai tổng `msg.value` | Revert | BR-11 | `[ ] PASS` |
-| **T-30** | Mọi điều kiện đơn lẻ áp dụng chuẩn xác cho từng phần tử của lô | Revert nếu vi phạm | BR-06, 11 | `[ ] PASS` |
-| **T-31** | Sau khi nạp gom: Đơn A early release, đơn B dispute hoàn tiền, đơn C tự giải ngân | Độc lập hoàn toàn | BR-11 | `[ ] PASS` |
-| **T-32** | Đo gas nạp lô 5 đơn (mục tiêu < 3.000.000 gas) | Đạt ngưỡng gas | BR-11 | `[ ] PASS` |
-| **T-33** | Fuzz invariant: Gọi ngẫu nhiên cả nạp đơn và nạp gom | INV-01..07 luôn đúng | G-01 | `[ ] PASS` |
-| **T-34** | So sánh nạp đơn lẻ và nạp lô 1 phần tử: Trạng thái và event giống hệt nhau | Khớp 100% | BR-11 | `[ ] PASS` |
+| **T-24** | `resolveDispute` với `deadline >= disputedAt + disputeTimeout` | Revert | BR-04, 05 | `[~] pass cục bộ (forge): deadline = mốc, > mốc, vô hạn đều revert; mốc − 1 thành công` |
+| **T-25** | Nạp gom 3 đơn 3 shop: 1 lần `transferFrom`, tăng số dư đúng tổng, 3 sự kiện `OrderCreated` | Thành công | BR-11 | `[~] pass cục bộ (forge): đúng 1 transferFrom với đúng tổng; cả ETH` |
+| **T-26** | Lô nạp rỗng; lô > 5 đơn; lệch độ dài mảng quotes và sigs | Revert | BR-11 | `[~] pass cục bộ (forge)` |
+| **T-27** | Trùng `orderId` ngay trong một mảng lô nạp | Revert, số dư không đổi | BR-11, G-01 | `[~] pass cục bộ (forge)` |
+| **T-28** | Một báo giá trong lô lỗi (quá hạn, sai chữ ký, vượt trần phí) | Toàn bộ lô Revert | BR-11 | `[~] pass cục bộ (forge): 4 loại lỗi × 3 vị trí trong lô` |
+| **T-29** | Lô nạp trộn nhiều loại token; nạp ETH sai tổng `msg.value` | Revert | BR-11 | `[~] pass cục bộ (forge)` |
+| **T-30** | Mọi điều kiện đơn lẻ áp dụng chuẩn xác cho từng phần tử của lô | Revert nếu vi phạm | BR-06, 11 | `[~] pass cục bộ (forge): 8 loại vi phạm trên phần tử giữa lô` |
+| **T-31** | Sau khi nạp gom: Đơn A early release, đơn B dispute hoàn tiền, đơn C tự giải ngân | Độc lập hoàn toàn | BR-11 | `[~] pass cục bộ (forge)` |
+| **T-32** | Đo gas nạp lô 5 đơn (mục tiêu < 3.000.000 gas) | Đạt ngưỡng gas | BR-11 | `[~] pass cục bộ: 1.229.409 gas (token), 1.099.331 gas (ETH)` |
+| **T-33** | Fuzz invariant: Gọi ngẫu nhiên cả nạp đơn và nạp gom | INV-01..07 luôn đúng | G-01 | `[~] pass cục bộ (forge invariant: INV-01…07, nạp đơn lẻ và nạp gom)` |
+| **T-34** | So sánh nạp đơn lẻ và nạp lô 1 phần tử: Trạng thái và event giống hệt nhau | Khớp 100% | BR-11 | `[~] pass cục bộ (forge): so sánh trạng thái đơn, số dư và từng log` |
 
 ---
 
 ### 5.2. Integration, System & Backend API Test Suite
 > `[~]` = test đã viết và pass cục bộ, chờ CI/PR; `[x] PASS` chỉ đặt sau khi CI xanh trên nhánh chính.
+> Ngoài ma trận bên dưới, Tuần 2 thêm **31 test migration Web3** (`test/unit_test/test_web3_migrations_static.py` 6 test; `test/integration_test/test_web3_migrations.py` 25 test trên MySQL 8.0 thật): DB mới == DB nâng cấp, idempotent, collation lệch, MyISAM bị chặn, CHECK/UNIQUE/FK/ENUM. Toàn bộ pytest: **360 pass, 0 skip** (có MySQL).
 
 | Mã test | Phạm vi kiểm thử | Tiêu chuẩn đánh giá | Tình trạng |
 | :---: | :--- | :--- | :---: |

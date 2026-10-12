@@ -47,4 +47,19 @@ jobs:
         with: { version: stable }
       - run: ../scripts/install_contract_deps.sh   # forge-std v1.9.4 + OpenZeppelin v5.0.2 đúng tag
       - run: forge build
-      - run: forge test -vv   # gồm Eip712Vectors.t.sol đọc ../shared/eip712/vectors.json
+      - run: forge test -vv   # gồm Eip712Vectors.t.sol đọc ../shared/eip712/vectors.json và invariant INV-01..07 (~1,5 phút)
+      - run: ../scripts/export_abi.sh --check   # ABI đã commit (shared/abi, frontend/src/lib/abi) còn khớp contract (đóng băng M1)
+      - name: Coverage gate (M1, AC-11) >= 90% dòng của src/
+        run: |
+          forge coverage --ir-minimum --report summary --no-match-coverage "(test|script)" | tee /tmp/cov.txt
+          python3 - <<'PY'
+          import re, sys
+          m = re.search(r'\|\s*Total\s*\|\s*([\d.]+)%', open('/tmp/cov.txt').read())
+          pct = float(m.group(1)) if m else 0.0
+          print(f"Line coverage src/: {pct}%")
+          sys.exit(0 if pct >= 90 else 1)
+          PY
+      - name: Slither (không High/Medium)
+        run: |
+          pip install slither-analyzer
+          slither . --exclude-informational --fail-medium

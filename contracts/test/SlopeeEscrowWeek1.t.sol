@@ -292,13 +292,14 @@ contract SlopeeEscrowWeek1Test is EscrowBase {
     function test_T05_confirmDelivery_setsDeliveredAndEmits() public {
         SlopeeEscrowMaster.Quote memory q = _depositToken(AMOUNT, FEE_BPS);
         vm.warp(block.timestamp + 1 days);
+        uint256 nowTs = vm.getBlockTimestamp(); // đọc từ cheatcode: ổn định cả khi chạy `forge coverage --ir-minimum`
         vm.expectEmit(true, false, false, true, address(escrow));
-        emit OrderDelivered(q.orderId, block.timestamp);
+        emit OrderDelivered(q.orderId, nowTs);
         vm.prank(shipper);
         escrow.confirmDelivery(q.orderId);
         assertEq(uint8(_state(q.orderId)), uint8(SlopeeEscrowMaster.OrderState.DELIVERED));
         (,,,,, uint256 deliveredAt,,,,,,) = escrow.orders(q.orderId);
-        assertEq(deliveredAt, block.timestamp);
+        assertEq(deliveredAt, nowTs);
     }
 
     // ------------------------------------------------------------------ T-06

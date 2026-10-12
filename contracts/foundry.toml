@@ -17,3 +17,8 @@ fs_permissions = [{ access = "read-write", path = "../deployments" }, { access =
 
 [fuzz]
 runs = 256
+
+[invariant]
+runs = 128
+depth = 100
+fail_on_revert = false

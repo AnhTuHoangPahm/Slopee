@@ -42,12 +42,14 @@
 | `json_provider.py` | JSON | `SlopeeJSONProvider` | `Decimal` → `int` (nếu nguyên) / `float` |
 | `admin_seed.py` | Seed admin | `seed_admin(conn, username, password, name, email, phone)` → `user_id` | Validate (username > 3 ký tự, mật khẩu ≥ 12), kiểm trùng, chèn `users` + `credentials` (role `admin`); ném `ValueError` |
 | `init_db.py` | Khởi tạo DB | `create_connection()`, `init_database()` | Tạo DB, chạy `schema.sql` (tách bằng `migrate.split_sql`); DB mới → `mark_applied` mọi migration; DB cũ → nhắc chạy `migrate.py`; **không** tạo admin |
-| `schema.sql` | Lược đồ mới nhất | — | 14 bảng gốc + `authAttempts` (mục 1.4); 4 cột tiền `DECIMAL(15,0)`; `reviews`/`reviewImages` khai báo một lần |
+| `schema.sql` | Lược đồ mới nhất | — | 14 bảng gốc + `authAttempts` (mục 1.4); 4 cột tiền `DECIMAL(15,0)`; `reviews`/`reviewImages` khai báo một lần; `users.role` có `shipper`; sau dấu mốc `WEB3 ESCROW` là 16 bảng Web3 + gieo `PLATFORM_FEE_BPS=300`, `QUOTE_TTL_SECONDS=900`, 4 nhóm `category_policies` |
 | `migrations/0001_money_to_vnd.sql` | Migration | — | `MODIFY` 4 cột tiền sang `DECIMAL(15,0)` |
 | `migrations/0002_product_fk_snapshots.py` | Migration | `upgrade(cursor)` | (thay route `/migrate` cũ) cột snapshot + backfill; `cartItems.productId` CASCADE; `orderLines.productId` NULL + SET NULL |
 | `migrations/0003_reviews_dedupe.py` | Migration | `upgrade(cursor)` | DB cũ: `comment NOT NULL`, bỏ trùng, `UNIQUE(userId,productId)`, FK `userId` CASCADE |
 | `migrations/0004_auth_attempts.sql` | Migration | — | tạo `authAttempts` |
 | `migrations/0005_order_line_settlement.py` | Migration | — | thêm `orderLines.sellerPaymentMethodId` (FK SET NULL) + `sellerCredit`; backfill đơn cũ đã thanh toán không phải `cash`; idempotent. **Web3 bắt đầu từ `0006`** |
+| `migrations/0006`–`0020` | Migration Web3 (tuần 2) | — | `0006_wallets.py` (user_wallets, wallet_nonces), `0007_checkout_groups.py`, `0008_order_web3.py` (phòng vệ charset/collation/InnoDB, FK `RESTRICT`), `0009_order_quotes.py`, `0010_dispute_resolutions.py`, `0011_dispute_signatures.sql`, `0012_chain_events.sql`, `0013_indexer_cursor.sql`, `0014_platform_settings.sql` (+gieo 2 khóa), `0015_category_policies.sql` (+gieo 4 nhóm), `0016_category_policy_map.sql`, `0017_tx_outbox.sql`, `0018_onchain_id_seq.sql` (bắt đầu 100001), `0019_pending_balances.sql`, `0020_shipper.py` (ENUM `shipper` + `shipper_assignments`) |
+| `dbschema.py` (bổ sung) | Introspection | `require_innodb`, `column_like`, `table_exists`, `SchemaError` | giúp migration FK khớp kiểu/charset/collation cột cha |
 | `.env.example` | Mẫu env | — | `SECRET_KEY`, `AUTH_TOKEN_TTL_SECONDS`, `SLOPEE_ENV`, `DB_*`, `AUTH_MAX_ATTEMPTS`, `AUTH_LOCK_SECONDS` |
 
 ### 1.2. Route (`backend/routes/`)
@@ -206,6 +208,8 @@ Route guard ✅ `components/RequireRole.jsx` bọc `/admin` (admin), `/seller` (
 | `unit_test/auth_test.py` | đăng nhập (trả token), đăng ký (validate) |
 | `unit_test/test_cart.py`, `test_products.py`, `test_checkout.py` | giỏ, sản phẩm (kiểm giá VND), checkout (tổng nguyên VND, thiếu tiền, COD) — mock DB (`checkout_helpers.py` dựng dữ liệu giả dùng chung) |
 | `unit_test/test_p0_03_ownership.py` | A-03: đơn/giỏ/sản phẩm/ảnh/biến thể của người khác → 404 và không ghi gì; chuyển trạng thái đơn; `WEB3_ORDER_MANAGED`; hồ sơ/username chỉ theo token |
+| `unit_test/test_web3_migrations_static.py` | Migration Web3 tĩnh (không cần MySQL): đúng 0006–0020 liên tục, mọi bảng có trong `schema.sql`, chỉ CREATE/INSERT IGNORE, không DROP/DELETE, FK tiền ký quỹ `RESTRICT` |
+| `integration_test/test_web3_migrations.py` | MySQL thật: DB mới == DB nâng cấp (parity information_schema), idempotent (không đè giá trị Admin), collation lệch (`unicode_ci`), MyISAM bị chặn, CHECK/UNIQUE/FK/ENUM của từng bảng |
 | `unit_test/test_p0_04_migrations.py` | A-07: route migrate biến mất; `split_sql`; runner (thứ tự, bỏ qua đã chạy, lỗi không ghi nhận, khóa); `dbschema`; `schema.sql` không khai báo trùng; ảnh đánh giá có UUID |
 | `unit_test/test_p0_05_payment_security.py` | A-05/A-06: thứ tự khóa `FOR UPDATE`, `UPDATE` có điều kiện + `rowcount`, deadlock → 409, PIN chưa đặt → 401, khóa 5 lần (PIN, đăng nhập, đổi mật khẩu, xin xóa), mở khóa khi hết hạn |
 | `unit_test/test_p0_06_hardening.py` | lỗi chung không lộ chi tiết (+ có log), JSON body sai → 400, validate từng trường/URL ảnh/query, `debug` chỉ ở development |
@@ -283,8 +287,8 @@ Nguồn: SRS mục 4–7, 9–10; SDD mục 3–8, 10. Đặt dưới `backend/s
 ### 4.6. Bảng Web3 dự kiến
 `wallet_nonces`, `user_wallets`, `checkout_groups`, `order_web3` (1–1 với `orders`), `order_quotes`, `dispute_resolutions`, `dispute_signatures`, `chain_events`, `indexer_cursor`, `category_policies`, `category_policy_map`, `platform_settings`, `pending_balances`, `tx_outbox`, `onchain_id_seq`, `shipper_assignments`, `schema_migrations`.
 
-### 4.7. Smart contract `SlopeeEscrowMaster` (+ `MockUSD`) — tuần 1 ✅ (`contracts/`), phần còn lại 🔲 tuần 2
-> ✅ `depositEscrow`, `confirmDelivery`, `earlyRelease`, `releaseAfterInspection`, `cancelIfUnfulfilled` + `_acceptQuote/_collect/_verifyQuote/_refund/_executePayout/_payout` (ETH bị từ chối → `pendingWithdrawals`). Struct `Order`/`Quote`, enum, sự kiện, hằng số, storage đã đủ; 🔲 `raiseDispute`, `resolveDispute`, `arbitratorForceResolve`, `depositEscrowBatch`, `claimPending`, `setDefaultFeeBps`, `setFeeRecipient`. `MockUSD`: ERC-20 6 decimals, `mint` công khai (chỉ để thử). `script/Deploy.s.sol` ghi `deployments/local.json`.
+### 4.7. Smart contract `SlopeeEscrowMaster` (+ `MockUSD`) — tuần 1 ✅ và tuần 2 ✅ (`contracts/`)
+> ✅ `depositEscrow`, `confirmDelivery`, `earlyRelease`, `releaseAfterInspection`, `cancelIfUnfulfilled` + `_acceptQuote/_collect/_verifyQuote/_refund/_executePayout/_payout` (ETH bị từ chối → `pendingWithdrawals`). Struct `Order`/`Quote`, enum, sự kiện, hằng số, storage đã đủ từ tuần 1; ✅ tuần 2 thêm `raiseDispute`, `resolveDispute`, `arbitratorForceResolve`, `depositEscrowBatch`, `claimPending`, `setDefaultFeeBps`, `setFeeRecipient` (+ `_settle`, `_partyOf`). Test: `EscrowBase.t.sol` (helper), `SlopeeEscrowWeek1/Week2.t.sol`, `SlopeeEscrowBatch.t.sol` (T-25…T-34), `SlopeeEscrowMatrix.t.sol` (T-19), `SlopeeEscrowInvariant.t.sol` (T-18/T-33, handler), `TestActors.sol` (ví từ chối ETH, ví tái nhập, token độc hại/thu phí). ABI: `shared/abi/*.json` (+ bản chép `frontend/src/lib/abi/`). `MockUSD`: ERC-20 6 decimals, `mint` công khai (chỉ để thử). `script/Deploy.s.sol` ghi `deployments/local.json`.
 | Hàm | Ai gọi | Làm gì |
 | --- | --- | --- |
 | `depositEscrow(q, sig)` | Buyer | xác minh báo giá → thu tiền → đơn `LOCKED` (`OrderCreated`) |

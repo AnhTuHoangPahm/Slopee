@@ -77,16 +77,26 @@ def test_order_update_ownership_and_transitions(app, db_conn):
 
 
 def test_order_with_order_web3_row_is_rejected(app, db_conn):
+    """Dùng bảng `order_web3` THẬT (migration 0008) thay vì bảng tối thiểu tự tạo như trước tuần 2."""
     cur = db_conn.cursor()
     owner = _user(cur)
+    merchant = _user(cur, 'seller', pin=None)
     oid = _order(cur, owner, 'paid')
-    cur.execute("CREATE TABLE IF NOT EXISTS order_web3 (order_id varchar(36) PRIMARY KEY)")  # bảng tối thiểu để thử
+    group = str(uuid.uuid4())
+    cur.execute("INSERT INTO checkout_groups (group_id, buyer_user_id, token_address, total_amount_raw, order_count) "
+                "VALUES (%s,%s,NULL,'1000000',1)", (group, owner))
     try:
-        cur.execute("INSERT INTO order_web3 (order_id) VALUES (%s)", (oid,))
+        cur.execute("INSERT INTO order_web3 (order_id, onchain_order_id, buyer_user_id, merchant_user_id, shop_id, "
+                    "checkout_group_id, buyer_wallet, merchant_wallet, amount_raw, price_vnd, fx_vnd_per_token, "
+                    "fee_bps, inspection_duration, dispute_timeout, doc_hash, status) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'1000000',100000,25000.0000,300,259200,2592000,%s,'LOCKED')",
+                    (oid, 900000 + int(oid[:6], 16) % 99999, owner, merchant, str(uuid.uuid4()), group,
+                     '0x' + 'a' * 40, '0x' + 'b' * 40, '0x' + 'c' * 64))
         r = app.test_client().put(f'/api/checkout/orders/{oid}', headers=_h(owner), json={"status": "received"})
         assert r.status_code == 409 and r.get_json()['code'] == 'WEB3_ORDER_MANAGED'
     finally:
-        cur.execute("DROP TABLE IF EXISTS order_web3")
+        cur.execute("DELETE FROM order_web3 WHERE order_id=%s", (oid,))
+        cur.execute("DELETE FROM checkout_groups WHERE group_id=%s", (group,))
 
 
 # ------------------------------------------------------------------ P0-05: khóa dòng

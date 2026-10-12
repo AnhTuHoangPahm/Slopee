@@ -162,7 +162,8 @@ def test_each_table_declared_exactly_once(table):
 
 def test_schema_statements_are_all_creates_and_splittable():
     stmts = migrate.split_sql(_schema())
-    assert len(stmts) >= 15 and all(s.startswith('CREATE TABLE') for s in stmts)
+    # Tuần 2: ngoài CREATE TABLE chỉ cho phép đúng các câu gieo idempotent `INSERT IGNORE INTO` (cấu hình mặc định, nhóm chính sách)
+    assert len(stmts) >= 15 and all(s.startswith(('CREATE TABLE', 'INSERT IGNORE INTO')) for s in stmts)
 
 
 def test_reviews_keeps_unique_review_per_user_product():

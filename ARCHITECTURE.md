@@ -147,9 +147,9 @@ Dùng `now_system()` cho nonce ví, phiên, rate limit; dùng `now_chain()` cho 
 - `authFetch(url, opts)`: tự thêm `Content-Type: application/json` khi có body và `Authorization: Bearer`; khi nhận 401 với `code ∈ {auth_required, token_expired, token_invalid}` → `clearSession()` và chuyển `/login`. **Không** đăng xuất khi 401 vì sai mật khẩu/PIN.
 - Endpoint công khai (products, login, signup) dùng `fetch` thường.
 
-### 3.7. Smart contract 🔲 (`SlopeeEscrowMaster`, SRS mục 10) — tuần 1 ✅ (nạp đơn, giao, giải ngân, hủy quá hạn); tuần 2 🔲 (tranh chấp, nạp gom, claimPending, quản trị)
+### 3.7. Smart contract ✅ (`SlopeeEscrowMaster`, SRS mục 10) — tuần 1 ✅ (nạp đơn, giao, giải ngân, hủy quá hạn); tuần 2 ✅ (tranh chấp 2/3 chữ ký, thoát hiểm, nạp gom, claimPending, quản trị); ABI đóng băng ở M1 (`shared/abi/`)
 - Vào: lời gọi hàm + chữ ký EIP-712 (báo giá do sàn ký; phán quyết 2/3). Ra: sự kiện (`OrderCreated`, `OrderDelivered`, `OrderCompleted`, `OrderRefunded`, `OrderDisputed`, `DisputeResolved`, `ArbitratorForceResolved`, `PayoutDeferred`, `PendingClaimed`, `FeeUpdated`, `FeeRecipientUpdated`).
-- Đã có: `depositEscrow`, `confirmDelivery`, `earlyRelease`, `releaseAfterInspection`, `cancelIfUnfulfilled`; struct/enum/sự kiện/storage đã đầy đủ (ABI không đổi ở tuần 2). Phí chốt trong báo giá (`feeBps` ≤ `defaultFeeBps`); ETH bị từ chối → `pendingWithdrawals` (không kẹt đơn).
+- Đã có đủ 12 hàm nghiệp vụ: `depositEscrow`, `depositEscrowBatch`, `confirmDelivery`, `earlyRelease`, `releaseAfterInspection`, `cancelIfUnfulfilled`, `raiseDispute`, `resolveDispute`, `arbitratorForceResolve`, `claimPending`, `setDefaultFeeBps`, `setFeeRecipient`; tuần 2 chỉ THÊM hàm, struct/enum/sự kiện/storage giữ nguyên tuần 1. ABI xuất bằng `scripts/export_abi.sh` (`--check` cho CI). Phí chốt trong báo giá (`feeBps` ≤ `defaultFeeBps`); ETH bị từ chối → `pendingWithdrawals` (không kẹt đơn).
 - EIP-712: kiểu duy nhất ở `shared/eip712/types.json`; `vectors.json` được Python, JS, Solidity cùng kiểm (digest + người ký).
 - Triển khai: `scripts/bootstrap.sh` → `deployments/local.json` (backend/indexer/frontend cùng đọc).
 - Chỉ có contract + Indexer quyết định trạng thái đơn Web3; API không có endpoint ghi trạng thái từ client.
@@ -179,7 +179,7 @@ Dùng `now_system()` cho nonce ví, phiên, rate limit; dùng `now_chain()` cho 
 - Bảng/cột Slopee gốc: `camelCase` (`userId`, `cartItems`, `unitPrice`), khóa chính `VARCHAR(36)` UUID (riêng `products.id` là `VARCHAR(15)`, `categories.id` là INT).
 - Bảng/cột Web3 🔲: `snake_case` (`order_web3`, `checkout_groups`, `onchain_order_id`, `amount_raw`).
 - Tiền: `DECIMAL(15,0)` (VND) cho 4 cột Slopee; `VARCHAR(78)` cho số lượng token on-chain; mốc thời gian on-chain `BIGINT UNSIGNED` (giây UTC).
-- Migration ✅ (P0-04): `migrations/NNNN_tên.sql|.py` chạy bằng `python migrate.py` (không có route HTTP), tên tệp ghi vào `schema_migrations`, khóa `GET_LOCK`, **idempotent** (DDL MySQL tự commit nên không rollback được). Hiện có `0001`–`0004`. `schema.sql` luôn là lược đồ mới nhất cho DB tạo mới và `init_db.py` đánh dấu các migration hiện có là đã áp dụng; thêm migration phải đồng thời cập nhật `schema.sql`. Migration Web3 (`001_wallets`…`015_shipper` trong SRS) nên đánh số từ `0005` để không trùng tiền tố. Bảng hạ tầng: `schema_migrations`, `authAttempts`.
+- Migration ✅ (P0-04): `migrations/NNNN_tên.sql|.py` chạy bằng `python migrate.py` (không có route HTTP), tên tệp ghi vào `schema_migrations`, khóa `GET_LOCK`, **idempotent** (DDL MySQL tự commit nên không rollback được). Hiện có `0001`–`0020`: `0001`–`0005` là Slopee cũ, `0006`–`0020` là Web3 (SRS `001_wallets`…`015_shipper`, bù +5; tuần 2). Migration có khóa ngoại tới bảng Slopee là `.py` đọc kiểu/charset/collation cột cha qua `dbschema.column_like` và dừng nếu bảng cha không phải InnoDB (SDD Q-06). `schema.sql` luôn là lược đồ mới nhất cho DB tạo mới và `init_db.py` đánh dấu các migration hiện có là đã áp dụng; thêm migration phải đồng thời cập nhật `schema.sql` (test `test_web3_migrations.py` so khớp hai đường). Bảng hạ tầng: `schema_migrations`, `authAttempts`.
 
 ### JavaScript / React
 | Đối tượng | Quy ước | Ví dụ |
@@ -238,7 +238,7 @@ Khóa vận hành chỉ đọc một lần lúc khởi động vào `EnvKeySigne
 | Route/tiền/tồn kho/phân quyền | pytest + **MySQL thật** | fixture `mysql_db` (DB `slopee_test_<pid>` từ `schema.sql`), `db_conn`; tự skip nếu không kết nối được |
 | Frontend | Vitest + Testing Library | mock `fetch` trong `src/__tests__/setup.js` |
 | E2E | Playwright (Firefox) | 🔲 ví EIP-1193 giả bằng khóa Anvil, nạp qua `addInitScript` |
-| Contract ✅ (tuần 1) | Foundry | `forge test` (46 test, có fuzz INV-03); 🔲 invariant, `forge coverage ≥ 90%`, Slither ở M1 |
+| Contract ✅ (tuần 1–2) | Foundry | `forge test` (139 test: unit, ma trận âm T-19, reentrancy, nạp gom, fuzz, invariant INV-01…07 với handler gọi cả nạp đơn lẻ và nạp gom); `forge coverage --ir-minimum` 100% dòng `src/`; Slither không còn High/Medium |
 | Chéo ngôn ngữ ✅ | `shared/eip712/vectors.json` | Python (`test_eip712_vectors.py`), JS (`eip712Vectors.test.js`), Solidity (`Eip712Vectors.t.sol`) cùng ra một digest; `smoke_week1.sh` chạy thật trên Anvil |
 
 ## 9. Nợ kỹ thuật và mâu thuẫn đã biết

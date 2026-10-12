@@ -43,9 +43,9 @@ backend/                Flask + MySQL (không phải package; chạy từ thư m
   json_provider.py      Decimal -> số (int nếu nguyên) khi jsonify
   admin_seed.py         seed_admin(conn, ...) dùng cho CLI
   init_db.py            tạo DB từ schema.sql (KHÔNG còn tạo admin); DB mới: đánh dấu migration đã áp dụng
-  schema.sql            lược đồ MỚI NHẤT cho DB tạo mới (đã gồm mọi migration); 4 cột tiền DECIMAL(15,0)
+  schema.sql            lược đồ MỚI NHẤT cho DB tạo mới (đã gồm mọi migration, kể cả 16 bảng Web3 sau dấu mốc `WEB3 ESCROW`); 4 cột tiền DECIMAL(15,0)
   migrations/           0001 money_to_vnd.sql, 0002 product_fk_snapshots.py, 0003 reviews_dedupe.py, 0004 auth_attempts.sql,
-                        0005 order_line_settlement.py (hủy đơn paid hoàn tiền không tạo tiền). Web3 bắt đầu từ 0006
+                        0005 order_line_settlement.py (hủy đơn paid hoàn tiền không tạo tiền). Web3: 0006 wallets … 0020 shipper (15 tệp, tuần 2)
   routes/               auth, admin, carts, payments, products, reviews, shops
 frontend/               React 19 + Vite + React Router 7 (JavaScript, không TypeScript)
   src/lib/client.js     CHUẨN: phiên (sessionStorage), authFetch, getUser/setSession/clearSession, API_ORIGIN (VITE_API_BASE)
@@ -60,7 +60,7 @@ frontend/               React 19 + Vite + React Router 7 (JavaScript, không Typ
 contracts/              Foundry (solc 0.8.20, OpenZeppelin 5.0.2): src/{MockUSD,SlopeeEscrowMaster}.sol, script/Deploy.s.sol, test/*.t.sol
                         lib/ cài bằng scripts/install_contract_deps.sh (bị .gitignore)
 shared/eip712/          types.json (kiểu EIP-712 DUY NHẤT, đã khóa) + vectors.json (sinh bằng scripts/gen_eip712_vectors.py)
-scripts/                bootstrap.sh (dựng Anvil + deploy một lệnh), smoke_week1.sh, install_contract_deps.sh, gen_eip712_vectors.py
+scripts/                bootstrap.sh (dựng Anvil + deploy một lệnh), smoke_week1.sh, install_contract_deps.sh, gen_eip712_vectors.py, export_abi.sh (xuất/kiểm ABI)
 deployments/local.json  do bootstrap.sh sinh (bị .gitignore); frontend đọc bản chép ở frontend/public/deployments/
 test/                   pytest (conftest.py: FakeCursor/fake_db/AttemptsStore, unit_test/, integration_test/)
 .github/workflows/tests.yml   CI: pytest + MySQL service, vitest, build
@@ -91,7 +91,7 @@ python app.py                               # cổng 5000
 # Web3 (Foundry cần trong PATH; xem scripts/)
 ./scripts/bootstrap.sh                      # Anvil --block-time 2 + deploy + deployments/local.json + backend/.env.web3
 ./scripts/smoke_week1.sh                    # smoke test trên Anvil thật (cần Anvil sạch vừa bootstrap)
-(cd contracts && forge test)                # 46 test contract + vector EIP-712
+(cd contracts && forge test)                # 139 test contract (gồm invariant ~1,5 phút) + vector EIP-712
 python scripts/gen_eip712_vectors.py --check   # vectors.json còn khớp script sinh?
 
 # Frontend
@@ -154,7 +154,8 @@ Migration: DB mới → `python init_db.py` (đã gồm mọi migration). **DB c
 | P0-06 tắt `debug=True`, lỗi chung cho client, validate body JSON | Đã code, chờ review | A |
 | **Tuần 1**: Foundry + `MockUSD` + `SlopeeEscrowMaster` (nạp đơn/giao/giải ngân/hủy quá hạn), `bootstrap.sh`, `lib/client` + `RequireRole` + `useWallet`, `shared/eip712` (types + vectors, kiểm chéo Python/JS/Solidity) | Đã code, chờ review (46 test forge, 70 vitest, pytest xanh) | A+B+C |
 | Quyết định nhóm sau Phase 0: hủy đơn `paid` hoàn tiền, COD không cộng người bán, giữ FK `RESTRICT`, migration Web3 từ `0006` | Đã code, chờ review | A |
-| Contract tuần 2 (tranh chấp, nạp gom, `claimPending`, quản trị), Indexer, UC-00…UC-09, giao diện Web3 | Chưa bắt đầu | Tuần 2–10 |
+| **Tuần 2**: contract hoàn chỉnh (tranh chấp, thoát hiểm, nạp gom, `claimPending`, quản trị) + bộ test M1 + ABI đóng băng; migration MySQL Web3 `0006`–`0020` | Đã code, chờ review (139 test forge, 360 pytest trên MySQL 8) | A+B |
+| Indexer, UC-00…UC-09, giao diện Web3 | Chưa bắt đầu | Tuần 3–10 |
 
 **Đã xử lý ở P0-03…06 (chờ review, test MySQL thật chờ CI):** chủ sở hữu cart item/đơn/sản phẩm/ảnh/biến thể (không phải chủ → 404); đơn Web3 bị từ chối bằng `409 WEB3_ORDER_MANAGED`; chuyển trạng thái đơn theo bảng hợp lệ; checkout khóa `FOR UPDATE` + `UPDATE` có điều kiện; khóa tạm 5 lần sai mật khẩu/PIN (`429`); route migrate đã bỏ; `debug` theo môi trường; lỗi chung, không còn `str(e)`; validate body.
 
