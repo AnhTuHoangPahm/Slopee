@@ -226,7 +226,7 @@ Hàm `camelCase`, sự kiện/struct `PascalCase`, hằng `UPPER_SNAKE` (`QUOTE_
 | `DB_HOST/DB_USER/DB_PASSWORD/DB_NAME` | `localhost` / `root` (riêng `routes/auth.py`: `slopee`) / `` / `slopee_db` | mọi nơi mở kết nối |
 | `RPC_URL`, `CHAIN_ID`, `ESCROW_ADDRESS`, `MOCKUSD_ADDRESS`, `QUOTE_SIGNER_KEY`, `ARBITRATOR_KEY`, `SHIPPER_KEY`, `POLL_SECONDS`, `CONFIRMATIONS`, `REORG_DEPTH`, `INDEXER_START_BLOCK` | `bootstrap.sh` sinh `backend/.env.web3` (gitignore) | Web3 (backend đọc từ tuần 3) |
 | `VITE_API_BASE`, `VITE_RPC_URL` (frontend) | `http://localhost:5000`, `http://127.0.0.1:8545` | `lib/client.js`, `lib/chain.js` |
-| 🔲 `platform_settings` (DB) | tỷ giá, `PLATFORM_FEE_BPS` (300), `QUOTE_TTL_SECONDS`, `DISPUTE_SIG_TTL_SECONDS` | Admin đổi không cần restart |
+| 🔲 `platform_settings` (DB) | `FX_VND_PER_TOKEN` (25000), `PLATFORM_FEE_BPS` (300), `QUOTE_TTL_SECONDS` (900), `DISPUTE_SIG_TTL_SECONDS` (604800); gieo sẵn trong migration `0014` | Admin đổi không cần restart |
 
 Khóa vận hành chỉ đọc một lần lúc khởi động vào `EnvKeySigner`; `.env` không commit.
 

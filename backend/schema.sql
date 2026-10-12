@@ -290,6 +290,8 @@ CREATE TABLE IF NOT EXISTS platform_settings (
 
 INSERT IGNORE INTO platform_settings (setting_key, setting_value) VALUES ('PLATFORM_FEE_BPS', '300');
 INSERT IGNORE INTO platform_settings (setting_key, setting_value) VALUES ('QUOTE_TTL_SECONDS', '900');
+INSERT IGNORE INTO platform_settings (setting_key, setting_value) VALUES ('FX_VND_PER_TOKEN', '25000');
+INSERT IGNORE INTO platform_settings (setting_key, setting_value) VALUES ('DISPUTE_SIG_TTL_SECONDS', '604800');
 
 CREATE TABLE IF NOT EXISTS category_policies (
     policy_code VARCHAR(32) PRIMARY KEY COMMENT 'GENERAL, PERISHABLE, ELECTRONICS, CUSTOM_BULKY',

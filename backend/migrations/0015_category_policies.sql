@@ -1,6 +1,6 @@
 -- Web3 (SRS 9 bảng 10, BR-10): chính sách thời hạn theo nhóm hàng. SDD 010_category_policies.sql -> 0015.
 -- CHECK ép khoảng 1 giờ..30 ngày (kiểm tra) và 7..90 ngày (tranh chấp) giống contract (MIN/MAX_*).
--- Dữ liệu mẫu theo SRS (giá trị ĐỀ XUẤT, nhóm chốt lại trước tuần 3). SRS/SDD 7.6 ghi gieo ở bootstrap.sh, nhưng bootstrap chưa chạm MySQL
+-- Dữ liệu mẫu theo SRS (giá trị ĐỀ XUẤT, nhóm chốt lại trước tuần 3). SRS ghi gieo ở bootstrap.sh (SDD 7.6 đã được đính chính), nhưng bootstrap chưa chạm MySQL
 -- và nhóm GENERAL là bắt buộc (danh mục chưa ánh xạ dùng GENERAL), nên gieo ở đây bằng INSERT IGNORE (idempotent, không đè giá trị Admin đã sửa).
 CREATE TABLE IF NOT EXISTS category_policies (
     policy_code VARCHAR(32) PRIMARY KEY COMMENT 'GENERAL, PERISHABLE, ELECTRONICS, CUSTOM_BULKY',

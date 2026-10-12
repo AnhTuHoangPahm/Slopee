@@ -6,4 +6,4 @@
 - Sàn tách giỏ thành một đơn cho mỗi shop. Mỗi đơn có báo giá, mã đơn on-chain, thời gian kiểm tra và thời hạn tranh chấp riêng, và gắn đúng một Merchant.
 - Nạp gom là nguyên tử: tất cả đơn trong lần thanh toán cùng thành công hoặc cùng bị từ chối; không có trạng thái nạp một phần.
 - Sau khi nạp, mỗi đơn vận hành hoàn toàn độc lập: mở khóa, khiếu nại, hoàn tiền, phán quyết và timeout của đơn này không ảnh hưởng đơn của shop khác.
-- Giới hạn MVP: một loại token cho cả lần thanh toán và tối đa 5 shop mỗi lần (giới hạn của bản demo).
+- Giới hạn MVP: một loại token cho cả lần thanh toán và tối đa 5 shop mỗi lần.

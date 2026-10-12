@@ -178,7 +178,10 @@ def test_fresh_database_has_all_web3_tables_and_marks_migrations_applied(db_conn
 def test_seed_data_present_in_fresh_database(db_conn):
     cur = db_conn.cursor()
     cur.execute("SELECT setting_key k, setting_value v FROM platform_settings")
-    assert {r['k']: r['v'] for r in cur.fetchall()} == {'PLATFORM_FEE_BPS': '300', 'QUOTE_TTL_SECONDS': '900'}
+    assert {r['k']: r['v'] for r in cur.fetchall()} == {
+        'PLATFORM_FEE_BPS': '300', 'QUOTE_TTL_SECONDS': '900',
+        'FX_VND_PER_TOKEN': '25000', 'DISPUTE_SIG_TTL_SECONDS': '604800',
+    }
     cur.execute("SELECT policy_code p, inspection_duration i, dispute_timeout d, is_default x FROM category_policies ORDER BY p")
     rows = {r['p']: (r['i'], r['d'], r['x']) for r in cur.fetchall()}
     assert rows == {'CUSTOM_BULKY': (1209600, 5184000, 0), 'ELECTRONICS': (604800, 3888000, 0),

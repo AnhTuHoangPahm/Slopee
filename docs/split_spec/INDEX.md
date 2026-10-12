@@ -17,7 +17,7 @@ Tệp sinh bởi `scripts/split_spec.py`. Bản chỉ đọc của BRD / SRS / S
 | `brd-04-br-08.md` | BR-08: Định giá và quy đổi tiền tệ | 0.9 |
 | `brd-04-br-09.md` | BR-09: Nguồn sự thật và đồng bộ dữ liệu | 0.6 |
 | `brd-04-br-10.md` | BR-10: Chính sách thời hạn theo nhóm hàng (Category Policy) | 2.4 |
-| `brd-04-br-11.md` | BR-11: Giỏ hàng nhiều shop: thanh toán gom một lần, vận hành tách đơn độc lập | 1.2 |
+| `brd-04-br-11.md` | BR-11: Giỏ hàng nhiều shop: thanh toán gom một lần, vận hành tách đơn độc lập | 1.1 |
 | `brd-05-vong-doi-don.md` | 5. VÒNG ĐỜI ĐƠN HÀNG (ORDER LIFECYCLE) | 1.3 |
 | `brd-06-tin-cay-de-doa.md` | 6. GIẢ ĐỊNH TIN CẬY & MÔ HÌNH ĐE DỌA | 2.0 |
 | `brd-07-phap-ly.md` | 7. KHUNG PHÁP LÝ VÀ GIỚI HẠN ÁP DỤNG | 1.1 |

@@ -544,7 +544,7 @@ Giá trị ENUM đã lấy từ `schema.sql` của Slopee (`pending, paid, shipp
 
 ### 7.6. Migration và replay
 
-Các tệp SQL đánh số (`001_wallets.sql` …) chạy theo thứ tự, ghi `schema_migrations`, mỗi tệp idempotent; `001` kiểm tra kiểu `orders.id` trước khi tạo khóa ngoại. Dữ liệu mẫu `category_policies` chạy trong `bootstrap.sh`. Chế độ replay `--from-block 0 --reset` đặt lại các cột dẫn xuất của `order_web3` và trạng thái chiếu ở `orders`, nhưng không đụng tới cột sinh từ báo giá (giá VND, `doc_hash`, nhóm hàng, `fee_bps`).
+Các tệp SQL đánh số (`001_wallets.sql` …) chạy theo thứ tự, ghi `schema_migrations`, mỗi tệp idempotent; `001` kiểm tra kiểu `orders.id` trước khi tạo khóa ngoại. Dữ liệu mẫu (`category_policies`, các khóa mặc định của `platform_settings`) được gieo ngay trong migration bằng `INSERT IGNORE` (idempotent, không đè giá trị Admin đã sửa), không phải trong `bootstrap.sh`: `bootstrap.sh` chỉ dựng chuỗi và triển khai contract, không chạm MySQL, trong khi nhóm `GENERAL` là bắt buộc để mọi danh mục chưa ánh xạ có chính sách. *(Đính chính sau khi triển khai Tuần 2: bản đầu của mục này ghi gieo trong `bootstrap.sh`; ghi lại để lần sau kiểm tra đường chạy thực tế của từng bước trước khi chốt vào đặc tả.)* Chế độ replay `--from-block 0 --reset` đặt lại các cột dẫn xuất của `order_web3` và trạng thái chiếu ở `orders`, nhưng không đụng tới cột sinh từ báo giá (giá VND, `doc_hash`, nhóm hàng, `fee_bps`).
 
 ## 8. Thiết kế mật mã và EIP-712
 

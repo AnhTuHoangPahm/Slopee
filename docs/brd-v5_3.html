@@ -112,7 +112,7 @@
   <ul>
     <li>Triển khai trên mainnet hoặc xử lý tiền thật; hệ thống chỉ chạy trên Anvil localhost phục vụ học thuật.</li>
     <li>Hoàn một phần tiền (partial refund); MVP chỉ hỗ trợ hoàn 100% hoặc giải ngân 100% theo từng đơn.</li>
-    <li>Một đơn on-chain có nhiều Merchant (mỗi đơn on-chain luôn gắn đúng một Merchant; giỏ nhiều shop được tách thành nhiều đơn độc lập, xem BR-11); thanh toán gom quá 10 shop trong một lần; thanh toán gom nhiều loại token.</li>
+    <li>Một đơn on-chain có nhiều Merchant (mỗi đơn on-chain luôn gắn đúng một Merchant; giỏ nhiều shop được tách thành nhiều đơn độc lập, xem BR-11); thanh toán gom quá 5 shop trong một lần; thanh toán gom nhiều loại token.</li>
     <li>Cơ chế bằng chứng tự động (video unbox lưu on-chain); Admin chỉ tham chiếu bằng chứng ngoài hệ thống, băm tài liệu lưu qua <code>docHash</code>.</li>
     <li>Tính năng pause khẩn cấp, nâng cấp contract (upgradeable proxy).</li>
     <li>Chính sách thời hạn theo từng sản phẩm riêng lẻ; MVP chỉ cấu hình theo nhóm hàng (BR-10).</li>
@@ -236,7 +236,7 @@
     <li>Sàn tách giỏ thành một đơn cho mỗi shop. Mỗi đơn có báo giá, mã đơn on-chain, thời gian kiểm tra và thời hạn tranh chấp riêng, và gắn đúng một Merchant.</li>
     <li>Nạp gom là nguyên tử: tất cả đơn trong lần thanh toán cùng thành công hoặc cùng bị từ chối; không có trạng thái nạp một phần.</li>
     <li>Sau khi nạp, mỗi đơn vận hành hoàn toàn độc lập: mở khóa, khiếu nại, hoàn tiền, phán quyết và timeout của đơn này không ảnh hưởng đơn của shop khác.</li>
-    <li>Giới hạn MVP: một loại token cho cả lần thanh toán và tối đa 10 shop mỗi lần.</li>
+    <li>Giới hạn MVP: một loại token cho cả lần thanh toán và tối đa 5 shop mỗi lần.</li>
   </ul>
 
   <h1>5. VÒNG ĐỜI ĐƠN HÀNG (ORDER LIFECYCLE)</h1>
