@@ -225,6 +225,8 @@ describe('Web3CheckoutPanel (UC-01, khung Tuần 3)', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Tạo báo giá' }));
         await screen.findByTestId('quote-result');
 
+        await act(async () => {});
+
         await act(async () => { vi.advanceTimersByTime(300_000); });
         expect(screen.getByTestId('quote-countdown').textContent).toContain('10:00');
         await act(async () => { vi.advanceTimersByTime(545_000); });
