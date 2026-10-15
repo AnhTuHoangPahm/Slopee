@@ -59,6 +59,7 @@ export default function Navbar() {
                             <span>Hi, {user.name}</span>
                             <Link to="/play/tetris" className="nav-icon">Game</Link>
                             <Link to="/settings" className="nav-icon">⚙️ My Account</Link>
+                            {(user.role === 'user' || user.role === 'seller') && <Link to="/wallet" className="nav-icon">🦊 Ví</Link>}
 
                             <div
                                 style={{ position: 'relative' }}

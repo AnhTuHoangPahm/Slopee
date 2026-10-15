@@ -224,6 +224,7 @@ Hàm `camelCase`, sự kiện/struct `PascalCase`, hằng `UPPER_SNAKE` (`QUOTE_
 | `AUTH_MAX_ATTEMPTS` | 5 | `throttle` |
 | `AUTH_LOCK_SECONDS` | 900 | `throttle` |
 | `DB_HOST/DB_USER/DB_PASSWORD/DB_NAME` | `localhost` / `root` (riêng `routes/auth.py`: `slopee`) / `` / `slopee_db` | mọi nơi mở kết nối |
+| `WALLET_LINK_DOMAIN` (mặc định `localhost:5173`, tên miền trong thông điệp SIWE), `WALLET_NONCE_MAX_PER_MINUTE` (5), `TOKEN_DECIMALS` (6), `TOKEN_SYMBOL` (mUSD), `SLOPEE_SKIP_WEB3_BOOT` (bỏ qua xác minh khóa lúc khởi động, chỉ cho công cụ/test) | tùy chọn; đọc bởi `slopee_web3/settings.py` |
 | `RPC_URL`, `CHAIN_ID`, `ESCROW_ADDRESS`, `MOCKUSD_ADDRESS`, `QUOTE_SIGNER_KEY`, `ARBITRATOR_KEY`, `SHIPPER_KEY`, `POLL_SECONDS`, `CONFIRMATIONS`, `REORG_DEPTH`, `INDEXER_START_BLOCK` | `bootstrap.sh` sinh `backend/.env.web3` (gitignore) | Web3 (backend đọc từ tuần 3) |
 | `VITE_API_BASE`, `VITE_RPC_URL` (frontend) | `http://localhost:5000`, `http://127.0.0.1:8545` | `lib/client.js`, `lib/chain.js` |
 | 🔲 `platform_settings` (DB) | `FX_VND_PER_TOKEN` (25000), `PLATFORM_FEE_BPS` (300), `QUOTE_TTL_SECONDS` (900), `DISPUTE_SIG_TTL_SECONDS` (604800); gieo sẵn trong migration `0014` | Admin đổi không cần restart |
@@ -248,3 +249,13 @@ Khóa vận hành chỉ đọc một lần lúc khởi động vào `EnvKeySigne
 - `orders.userId` giữ `RESTRICT`: người dùng đã có đơn không xóa cứng được (409 `user_has_orders`).
 - Một số đường import/`get_db_connection` lặp lại như đã nêu; `backend/schema.txt` (nếu còn trong repo) là bản cũ, nên xóa.
 - `docs/spec/` và `sdd-*.md` chưa tồn tại (thực tế `docs/split_spec/` chỉ có BRD/SRS); SDD là một tệp.
+
+### 3.8. Mô-đun Web3 phía backend ✅ (tuần 3: `backend/slopee_web3/`)
+- **Hexagonal, quy tắc phụ thuộc được test** (`test/unit_test/test_w3_architecture.py`): `domain` không I/O và không import ngoài thư viện chuẩn; `ports` chỉ phụ thuộc `domain`; `application` chỉ phụ thuộc `domain` + `ports` (không biết Flask/MySQL/web3). Điểm lắp ghép duy nhất là `adapters/flask_api/container.py`.
+- **Lắp ghép lúc khởi động** (`register_web3(app)` trong `app.py`): chưa có `backend/.env.web3` → app cũ chạy bình thường, API Web3 trả 503 `WEB3_NOT_CONFIGURED`; có cấu hình thì kiểm `hasRole` của từng khóa vai trò trên contract và **dừng khởi động** nếu lệch; Anvil chưa chạy chỉ cảnh báo (dựng lười ở yêu cầu đầu tiên).
+- **Giao dịch DB:** `MySqlUnitOfWork` — thoát khối `with` mà chưa `commit()` thì rollback. Mọi chuyển trạng thái `order_web3` dùng `UPDATE` có điều kiện trạng thái cũ và đồng bộ `orders.status` qua `to_legacy_status`.
+- **Quy tắc khóa (đã gây lỗi thật, giữ nguyên):** (1) đọc **khóa** (`cartItems` → `products`, `ORDER BY id FOR UPDATE`) phải chạy **trước** mọi đọc thường trong cùng giao dịch — InnoDB (REPEATABLE READ) chỉ tạo snapshot ở lần đọc thường đầu tiên, nên yêu cầu đến sau mới thấy lô vừa commit của yêu cầu trước; (2) không dùng `FOR UPDATE`/`UPDATE` có thể không khớp dòng nào trên khoảng chưa tồn tại (khóa khoảng → deadlock khi hai giao dịch cùng chèn); phân xử đua bằng `UNIQUE` + `UPDATE ... WHERE used_at IS NULL` kiểm `rowcount`; (3) `UPDATE` không đổi giá trị nào trả `rowcount = 0` — chỉ kiểm `rowcount` ở lệnh chắc chắn đổi giá trị (trừ kho, tiêu thụ nonce).
+- **Báo giá:** `QuoteService` ký `OrderQuote` bằng `EnvKeySigner` (kiểu EIP-712 đọc từ `shared/eip712/types.json`, domain `SlopeeEscrow`/`1`/chainId/escrow). Test đối chiếu với **contract thật** trên Anvil (`test_w3_chain_anvil.py`). Số tiền token luôn là `int`/chuỗi, không float.
+- **Điều kiện hiển thị cho Checkout:** `POST /api/orders/eligibility` (chỉ đọc, `lock=False` ở repo nên không chặn checkout đang chạy) trả shop nào chưa liên kết ví nhận tiền; chỉ để hiển thị, quyết định thật vẫn là `create_checkout` kiểm lại trong giao dịch. Frontend không chặn khi không hỏi được.
+- **Điểm lệch SDD 10.2 đã chốt (14/10/2026):** `nonce` nhận `address`; `link` nhận `nonce` tùy chọn; cấp lại báo giá làm mới cả tỷ giá. Xem `AI_CONTEXT.md` mục 6.
+- **Indexer** (khung): tiến trình riêng `python -m slopee_web3.adapters.indexer`, một thể hiện nhờ `GET_LOCK`; handler đăng ký ở `indexer/handlers.py` (đang rỗng, Tuần 4).

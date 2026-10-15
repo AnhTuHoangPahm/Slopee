@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 from eth_account import Account
-from eth_account.messages import encode_typed_data
+from eth_account.messages import encode_defunct, encode_typed_data
 from eth_utils import keccak, to_checksum_address
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -92,6 +92,22 @@ def sign(full, who):
     return sig if sig.startswith("0x") else "0x" + sig
 
 
+def link_message(domain, address, user_id, nonce, chain_id, issued_at, expires_at):
+    """Thông điệp liên kết ví UC-00 (SDD 5.3g). Bản dựng ĐỘC LẬP với backend/slopee_web3/domain/wallet.py:
+    hai nơi phải cho cùng từng byte (test_w3_domain.py kiểm), nếu một bên đổi định dạng thì CI đỏ."""
+    from datetime import datetime, timezone
+    iso = lambda t: datetime.fromtimestamp(t, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
+    return (f"{domain} wants you to link your wallet to a Slopee account.\n\n"
+            f"Address: {address.lower()}\nAccount: {user_id}\nNonce: {nonce}\nChain ID: {chain_id}\n"
+            f"Issued At: {iso(issued_at)}\nExpiration Time: {iso(expires_at)}")
+
+
+def personal_sign(message, who):
+    signed = ACCOUNTS[who].sign_message(encode_defunct(text=message))
+    sig = signed.signature.hex()
+    return sig if sig.startswith("0x") else "0x" + sig
+
+
 def message_as_json(msg):
     """uint256 -> chuỗi thập phân (SDD 8.2); địa chỉ giữ dạng checksum."""
     return {k: (str(v) if isinstance(v, int) else v) for k, v in msg.items()}
@@ -112,6 +128,7 @@ def build():
         "orderQuote": [],
         "disputeResolution": [],
         "docHash": [],
+        "walletLink": [],
     }
 
     summary1 = {
@@ -189,6 +206,15 @@ def build():
         {"name": "two-items", "summary": summary1, "canonicalJson": canonical_json(summary1), "docHash": h1},
         {"name": "key-order-and-unicode", "summary": summary2, "canonicalJson": canonical_json(summary2), "docHash": h2},
     ]
+    link_args = {"domain": "localhost:5173", "address": ADDR["buyer"], "user_id": "3f2c9a52-6d0e-4b8e-9a51-0c1d2e3f4a5b",
+                 "nonce": "0123456789abcdef0123456789abcdef", "chain_id": CHAIN_ID,
+                 "issued_at": 1791676800, "expires_at": 1791677100}
+    msg = link_message(**link_args)
+    vectors["walletLink"] = [{
+        "name": "buyer-link", "domain": link_args["domain"], "address": link_args["address"], "userId": link_args["user_id"],
+        "nonce": link_args["nonce"], "chainId": CHAIN_ID, "issuedAt": link_args["issued_at"], "expiresAt": link_args["expires_at"],
+        "message": msg, "signer": ADDR["buyer"], "signature": personal_sign(msg, "buyer"),
+    }]
     return vectors
 
 

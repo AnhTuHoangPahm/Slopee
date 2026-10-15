@@ -7,11 +7,15 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 
 load_dotenv()  # đọc backend/.env (SECRET_KEY, DB_*, ...) trước khi nạp config
+# Web3 (RPC_URL, ESCROW_ADDRESS, khóa vai trò...) do scripts/bootstrap.sh sinh; không ghi đè biến đã đặt sẵn
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env.web3'))
 
 import config
 
 # Initialize flask app
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
+from slopee_web3.adapters.logging_filter import install as install_log_redaction
+install_log_redaction()  # SDD 5.6: che signature/private/key/mnemonic trong log
 
 app = Flask(__name__)
 app.config.from_object(config.Config)
@@ -40,6 +44,10 @@ app.register_blueprint(products_bp, url_prefix='/api/products')
 app.register_blueprint(carts_bp, url_prefix='/api/carts')
 app.register_blueprint(payments_bp, url_prefix='/api/payments')
 app.register_blueprint(reviews_bp, url_prefix='/api/reviews')
+
+# Web3 Escrow (Tuần 3): /api/wallet, /api/orders, /api/checkout-groups
+from slopee_web3.adapters.flask_api import register_web3
+register_web3(app, eager=not os.environ.get('SLOPEE_SKIP_WEB3_BOOT'))
 
 # Enable CORS for the React frontend port (Vite running on localhost:5173)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}})

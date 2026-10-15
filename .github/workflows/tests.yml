@@ -27,6 +27,39 @@ jobs:
       - run: python scripts/gen_eip712_vectors.py --check   # vectors.json còn khớp script sinh
       - run: python -m pytest test -v   # gồm race condition trên MySQL service thật
 
+  # Tuần 3: backend ký báo giá + Indexer chạy trên CHUỖI THẬT (Anvil + contract do bootstrap.sh deploy).
+  # Job `backend` ở trên tự skip các test @anvil (không có Anvil); job này BẮT BUỘC có Anvil (REQUIRE_ANVIL=1 -> thiếu là đỏ, không skip).
+  web3-chain:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root_pw
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot_pw"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      SLOPEE_ENV: test
+      SECRET_KEY: ci-secret-key
+      DB_HOST: 127.0.0.1
+      DB_USER: root
+      DB_PASSWORD: root_pw
+      REQUIRE_ANVIL: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: { version: stable }
+      - run: pip install -r backend/requirements.txt
+      - run: ./scripts/install_contract_deps.sh
+      - run: ./scripts/bootstrap.sh --fresh --force-env   # chạy Anvil nền, deploy contract, sinh backend/.env.web3
+      - run: python -m pytest test/integration_test/test_w3_chain_anvil.py -v
+
   frontend:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: frontend } }

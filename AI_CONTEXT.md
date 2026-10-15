@@ -47,12 +47,21 @@ backend/                Flask + MySQL (không phải package; chạy từ thư m
   migrations/           0001 money_to_vnd.sql, 0002 product_fk_snapshots.py, 0003 reviews_dedupe.py, 0004 auth_attempts.sql,
                         0005 order_line_settlement.py (hủy đơn paid hoàn tiền không tạo tiền). Web3: 0006 wallets … 0020 shipper (15 tệp, tuần 2)
   routes/               auth, admin, carts, payments, products, reviews, shops
+  slopee_web3/          MÔ-ĐUN WEB3 (tuần 3), kiến trúc Hexagonal; import top-level `slopee_web3.…` (backend/ nằm trên sys.path)
+    domain/             thuần, KHÔNG I/O (money, policy, quote/docHash, wallet/SIWE, order_state, errors) — test_w3_architecture.py canh import
+    ports/              Clock/Signer/Chain/Repositories (Protocol)
+    application/        WalletService (UC-00), QuoteService (UC-01) — chỉ phụ thuộc domain + ports
+    adapters/           env_signer (EIP-712), web3_chain (web3.py), mysql_repos (UnitOfWork), clock, logging_filter,
+                        flask_api/ (routes + container = điểm lắp ghép), indexer/ (KHUNG: GET_LOCK, con trỏ, chain_events; handlers rỗng)
+    settings.py         Web3Settings.from_env() (backend/.env.web3 do bootstrap.sh sinh)
 frontend/               React 19 + Vite + React Router 7 (JavaScript, không TypeScript)
   src/lib/client.js     CHUẨN: phiên (sessionStorage), authFetch, getUser/setSession/clearSession, API_ORIGIN (VITE_API_BASE)
   src/lib/format.js     CHUẨN: formatVND (hàm định dạng tiền DUY NHẤT), shortAddress
   src/lib/chain.js      đọc/kiểm deployments/local.json (chainId 31337, địa chỉ contract), tham số wallet_addEthereumChain
   src/lib/eip712.js     kiểu/digest/ký EIP-712 từ shared/eip712/types.json (ethers v6)
-  src/hooks/useWallet.js  WalletProvider + useWallet (EIP-1193/MetaMask); chưa có UI (UC-00 tuần 3)
+  src/hooks/useWallet.js  WalletProvider + useWallet (EIP-1193/MetaMask)
+  src/pages/Wallet.jsx  UC-00 (route /wallet); src/components/Web3CheckoutPanel.jsx khung thanh toán Web3 trong /checkout (nút Ký quỹ khóa tới tuần 4)
+  src/api/web3.js, lib/errors.js, lib/web3Checkout.js, lib/walletLink.js, mocks/web3Mock.js (VITE_WEB3_MOCK=true)
   src/components/RequireRole.jsx  route guard theo role (chỉ là tiện lợi UI; quyền thật ở backend)
   src/api/http.js, src/utils/formatVND.js  CHỈ re-export lib/ để không vỡ import cũ; mã mới import từ lib/
   src/api/*.js          các client REST (auth, carts, payments, shops, products, admin)
@@ -144,20 +153,21 @@ Migration: DB mới → `python init_db.py` (đã gồm mọi migration). **DB c
 
 | Việc | Trạng thái | Ghi chú |
 | --- | --- | --- |
-| P0-01 token ký + `require_auth` | Đã code, chờ review | B |
-| P0-02 khóa role/admin, seed admin CLI, bỏ cấp số dư | Đã code, chờ review | B |
-| P0-07 VND (`DECIMAL(15,0)`, `formatVND`) | Đã code, chờ review | B+C |
-| P0-08 cập nhật test + race test MySQL thật + CI | Đã code, chờ review | B+C |
-| P0-03 kiểm tra quyền sở hữu tài nguyên, `WEB3_ORDER_MANAGED` | Đã code, chờ review | A |
-| P0-04 xóa `/api/shops/migrate`, runner `schema_migrations`, dọn schema `reviews/reviewImages` | Đã code, chờ review | A |
-| P0-05 `FOR UPDATE`, `UPDATE ... WHERE inStock >= qty`, khóa tạm sau 5 lần sai PIN/mật khẩu | Đã code, chờ review | A |
-| P0-06 tắt `debug=True`, lỗi chung cho client, validate body JSON | Đã code, chờ review | A |
+| P0-01 token ký + `require_auth` | **Đã review 14/10/2026 (PR #2)** | B |
+| P0-02 khóa role/admin, seed admin CLI, bỏ cấp số dư | **Đã review 14/10/2026 (PR #2)** | B |
+| P0-07 VND (`DECIMAL(15,0)`, `formatVND`) | **Đã review 14/10/2026 (PR #2)** | B+C |
+| P0-08 cập nhật test + race test MySQL thật + CI | **Đã review 14/10/2026 (PR #2)** | B+C |
+| P0-03 kiểm tra quyền sở hữu tài nguyên, `WEB3_ORDER_MANAGED` | **Đã review 14/10/2026 (PR #2)** | A |
+| P0-04 xóa `/api/shops/migrate`, runner `schema_migrations`, dọn schema `reviews/reviewImages` | **Đã review 14/10/2026 (PR #2)** | A |
+| P0-05 `FOR UPDATE`, `UPDATE ... WHERE inStock >= qty`, khóa tạm sau 5 lần sai PIN/mật khẩu | **Đã review 14/10/2026 (PR #2)** | A |
+| P0-06 tắt `debug=True`, lỗi chung cho client, validate body JSON | **Đã review 14/10/2026 (PR #2)** | A |
 | **Tuần 1**: Foundry + `MockUSD` + `SlopeeEscrowMaster` (nạp đơn/giao/giải ngân/hủy quá hạn), `bootstrap.sh`, `lib/client` + `RequireRole` + `useWallet`, `shared/eip712` (types + vectors, kiểm chéo Python/JS/Solidity) | Đã code, chờ review (46 test forge, 70 vitest, pytest xanh) | A+B+C |
 | Quyết định nhóm sau Phase 0: hủy đơn `paid` hoàn tiền, COD không cộng người bán, giữ FK `RESTRICT`, migration Web3 từ `0006` | Đã code, chờ review | A |
 | **Tuần 2**: contract hoàn chỉnh (tranh chấp, thoát hiểm, nạp gom, `claimPending`, quản trị) + bộ test M1 + ABI đóng băng; migration MySQL Web3 `0006`–`0020` | Đã code, chờ review (139 test forge, 360 pytest trên MySQL 8) | A+B |
-| Indexer, UC-00…UC-09, giao diện Web3 | Chưa bắt đầu | Tuần 3–10 |
+| **Tuần 3**: UC-00 (liên kết ví) + UC-01 (tạo đơn, báo giá ký EIP-712, cấp lại báo giá) + khung Indexer + `Wallet.jsx` + khung thanh toán Web3 + vector `walletLink` | Đã code, chờ review (580 pytest gồm 5 test trên Anvil thật, 150 vitest). Các quyết định đã chốt 14/10/2026: xem mục 6 | B+C |
+| Indexer handler (`LOCKED`), UC-02…UC-09, nạp tiền ở giao diện | Chưa bắt đầu | Tuần 4–10 |
 
-**Đã xử lý ở P0-03…06 (chờ review, test MySQL thật chờ CI):** chủ sở hữu cart item/đơn/sản phẩm/ảnh/biến thể (không phải chủ → 404); đơn Web3 bị từ chối bằng `409 WEB3_ORDER_MANAGED`; chuyển trạng thái đơn theo bảng hợp lệ; checkout khóa `FOR UPDATE` + `UPDATE` có điều kiện; khóa tạm 5 lần sai mật khẩu/PIN (`429`); route migrate đã bỏ; `debug` theo môi trường; lỗi chung, không còn `str(e)`; validate body.
+**Đã xử lý ở P0-03…06 (đã review 14/10/2026, PR #2; test MySQL thật vẫn chờ CI GitHub xác nhận):** chủ sở hữu cart item/đơn/sản phẩm/ảnh/biến thể (không phải chủ → 404); đơn Web3 bị từ chối bằng `409 WEB3_ORDER_MANAGED`; chuyển trạng thái đơn theo bảng hợp lệ; checkout khóa `FOR UPDATE` + `UPDATE` có điều kiện; khóa tạm 5 lần sai mật khẩu/PIN (`429`); route migrate đã bỏ; `debug` theo môi trường; lỗi chung, không còn `str(e)`; validate body.
 
 **Đã quyết và áp dụng (chờ review):** hủy đơn `paid` hoàn kho + hoàn tiền người mua và thu lại từ người bán (`409 refund_unavailable` nếu người bán không đủ số dư); COD/`cash` không cộng số dư người bán; `orders.userId` giữ `RESTRICT`, admin xóa user có đơn → `409 user_has_orders`. Chi tiết: `PROGRESS.md` ghi chú Phase 0. Đã chạy toàn bộ test backend trên MySQL 8.0 thật (329 pass).
 
@@ -179,6 +189,10 @@ Migration: DB mới → `python init_db.py` (đã gồm mọi migration). **DB c
 | Số dư mới | "số dư giả lập ban đầu đổi sang VND" (SDD 16.3 bước 8) | số dư mới = 0 (S-04) | checkout ngân hàng cũ cần nạp tiền thủ công; COD vẫn chạy |
 | Migration | `001_wallets.sql`…`015_shipper.sql` + `schema_migrations` | runner `migrate.py` + `0001…0005` (4 chữ số) | **Đã chốt:** Web3 đánh số từ `0006` (`001`→`0006` … `015`→`0020`); tên tệp là khóa trong `schema_migrations` |
 | Mã lỗi API cũ | `{code, message}` tiếng Việt | `{error, code}` tiếng Anh (`not_found`, `INVALID_STATE`, `WEB3_ORDER_MANAGED`, `too_many_attempts`, `internal_error`…) | API Web3 mới theo SRS; nhóm chốt ngôn ngữ thông báo |
+| `POST /api/wallet/nonce` | SDD 10.2: "không có đầu vào" | nhận `{address}` | **Đã chốt 14/10/2026, đã có test.** Thông điệp SIWE phải chứa địa chỉ nên Backend cần biết địa chỉ lúc phát nonce. SDD/SRS không sửa (quy ước repo: tài liệu gốc giữ nguyên, lệch ghi ở đây) |
+| `POST /api/wallet/link` | SDD 10.2: `address, signature` | thêm `nonce` **tùy chọn** (bỏ thì dùng nonce còn hạn mới nhất của chính tài khoản) | **Đã chốt 14/10/2026, đã có test.** Ví/địa chỉ/tài khoản khác đều bị `BAD_SIGNATURE` vì thông điệp chứa địa chỉ và mã tài khoản |
+| Cấp lại báo giá | SDD 5.3f: đặt deadline mới chung, đọc lại trần phí | làm mới **cả tỷ giá**, ví hiện tại và phí; giữ `price_vnd`, thời hạn, `docHash`, `onchain_order_id` | **Đã chốt 14/10/2026 (không đổi).** `amount_raw` có thể đổi giữa hai lần báo giá; người dùng thấy số mới trước khi ký |
+| `POST /api/orders/eligibility` | không có trong SDD 10.2 | endpoint chỉ đọc: shop trong giỏ đã liên kết ví nhận tiền chưa | **Mới, chờ nhóm xác nhận** (phục vụ F-08, BR-07). Chỉ để hiển thị; quyết định thật vẫn ở `POST /api/orders` |
 
 ---
 
@@ -191,6 +205,8 @@ Migration: DB mới → `python init_db.py` (đã gồm mọi migration). **DB c
 - **Mock con trỏ DB** chỉ dùng cho logic thuần. Mọi đường liên quan tiền, tồn kho, trạng thái đơn, phân quyền phải có test trên MySQL thật.
 - **CHECK constraint** chỉ được MySQL ≥ 8.0.16 thực thi; chưa chạy trên MariaDB/MySQL cũ.
 - **Tài khoản không có PIN** (vd. admin) nay trả `401 pin_not_set` (P0-05). **`reviewImages.id`** là `VARCHAR(36)` không tự tăng: `reviews.py` phải tự cấp UUID (S-13).
+- **Test W3 chạy trên database riêng (đã chốt 14/10/2026):** `test/integration_test/conftest.py` tạo DB riêng cho mỗi module `test_w3_*` và xóa sau khi xong, vì chúng ghi dữ liệu dùng chung (ví theo địa chỉ Anvil cố định, id on-chain, `platform_settings`); chia sẻ DB của phiên làm lệch test migration cũ (so sánh cả `AUTO_INCREMENT`).
+- **Khóa trong `slopee_web3` (đã gây lỗi thật):** đọc **khóa** (`cartItems` → `products`) phải chạy trước mọi đọc thường trong cùng giao dịch; không `UPDATE`/`FOR UPDATE` có thể không khớp dòng trên khoảng chưa tồn tại; chi tiết ở `ARCHITECTURE.md` 3.8.
 - **Test dùng `fake_db`/`FakeCursor`** (trả dữ liệu theo nội dung SQL) thay vì `side_effect` theo thứ tự; route thêm/bớt truy vấn không làm vỡ test. Lỗi chung và `ApiError` được gắn vào **từng blueprint** (`register_blueprint_errors`) nên app tối giản trong `conftest.py` cũng trả đúng; route mới phải gắn handler này.
 - **Khóa thanh toán** phải giữ thứ tự `cartItems → products → paymentMethods` (mỗi nhóm `ORDER BY id`); đổi thứ tự có thể gây deadlock. Bộ đếm sai PIN/mật khẩu `commit` riêng trước giao dịch tiền để không bị rollback.
 - **`schema.sql` là lược đồ mới nhất:** thêm migration mà quên cập nhật `schema.sql` thì DB mới (được đánh dấu "đã áp dụng") sẽ thiếu thay đổi. `schema.txt` là bản cũ không dùng.

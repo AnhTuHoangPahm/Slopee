@@ -74,6 +74,19 @@ Requires [Foundry](https://book.getfoundry.sh/getting-started/installation) (`fo
 - EIP-712 types live in `shared/eip712/types.json`; `python scripts/gen_eip712_vectors.py` regenerates `vectors.json` (`--check` verifies it).
 - Web3 database migrations (later weeks) are numbered after the legacy ones, starting at `0006`.
 
+### Web3 checkout, week 3 (wallet linking + signed quotes)
+
+```bash
+./scripts/bootstrap.sh && (cd backend && python migrate.py)   # chain + contracts, then the Web3 tables (0006-0020)
+(cd backend && flask --app app run)                            # also loads backend/.env.web3 and checks that the signer keys hold their roles on-chain
+(cd frontend && npm run dev)                                   # /wallet links MetaMask; /checkout -> "Thanh toan Web3" creates a signed quote
+(cd backend && python -m slopee_web3.adapters.indexer --once)  # indexer skeleton: records chain events (state handlers arrive in week 4)
+```
+
+- No Anvil/backend yet? `VITE_WEB3_MOCK=true npm run dev` serves the Web3 endpoints from `frontend/src/mocks/web3Mock.js` (fake signatures, UI only; every other API still hits the real backend).
+- The API is only mounted usefully when `backend/.env.web3` exists (otherwise `/api/wallet`, `/api/orders`, `/api/checkout-groups` answer `503 WEB3_NOT_CONFIGURED` and the legacy shop keeps working). Optional: `WALLET_LINK_DOMAIN` (must match the frontend origin shown in the signed message, default `localhost:5173`).
+- Tests against the real chain: `./scripts/bootstrap.sh --fresh --force-env && pytest -m anvil` (skipped automatically when no Anvil is reachable; CI job `web3-chain` requires it).
+
 ## Orders, refunds and payments (legacy flow)
 
 - Cancelling a `paid` order restores stock and refunds the buyer, and takes the same amount back from the seller who was credited. If the seller no longer has enough balance the cancel is rejected (`409 refund_unavailable`) and nothing changes.

@@ -151,5 +151,20 @@
       "canonicalJson": "{\"created_at\":1791676801,\"items\":[{\"product_id\":\"Áo thun — size M\",\"quantity\":1,\"unit_price_vnd\":25000}],\"order_code\":\"SLP-20261011-0002\",\"price_vnd\":25000}",
       "docHash": "0xce039422bbcd2cf06fa177b332eea8fe98546d0b4f723fc3814cfc386a3ee5b5"
     }
+  ],
+  "walletLink": [
+    {
+      "name": "buyer-link",
+      "domain": "localhost:5173",
+      "address": "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+      "userId": "3f2c9a52-6d0e-4b8e-9a51-0c1d2e3f4a5b",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "chainId": 31337,
+      "issuedAt": 1791676800,
+      "expiresAt": 1791677100,
+      "message": "localhost:5173 wants you to link your wallet to a Slopee account.\n\nAddress: 0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc\nAccount: 3f2c9a52-6d0e-4b8e-9a51-0c1d2e3f4a5b\nNonce: 0123456789abcdef0123456789abcdef\nChain ID: 31337\nIssued At: 2026-10-11T00:00:00Z\nExpiration Time: 2026-10-11T00:05:00Z",
+      "signer": "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+      "signature": "0x7f4456158756a994c2accd2e7ae925518c952296b59b2880305612d859a015356dc7e300e0d2ed3bf2ed0861ce139780208f4f143717aa67c13eb4d2325e0cb41c"
+    }
   ]
 }

@@ -1,7 +1,7 @@
 // Kiểm tra chéo ngôn ngữ phía JavaScript: dùng đúng shared/eip712/vectors.json mà Python (test_eip712_vectors.py)
 // và Solidity (Eip712Vectors.t.sol) cũng kiểm tra. Cùng domainSeparator/digest/người ký ⇒ ba nơi băm giống hệt nhau.
 import { describe, it, expect } from 'vitest';
-import { TypedDataEncoder, keccak256, toUtf8Bytes } from 'ethers';
+import { TypedDataEncoder, keccak256, toUtf8Bytes, verifyMessage } from 'ethers';
 import vectors from '../../../shared/eip712/vectors.json';
 import typesFile from '../../../shared/eip712/types.json';
 import {
@@ -52,5 +52,14 @@ describe('shared/eip712 — JavaScript (ethers v6)', () => {
         const v = vectors.orderQuote[0];
         const other = { ...domain, verifyingContract: '0x5FbDB2315678afecb367f032d93F642f64180aa3' };
         expect(quoteDigest(other, v.message)).not.toBe(v.digest);
+    });
+});
+
+describe('walletLink (UC-00): chữ ký personal_sign do Python sinh, ethers phải khôi phục đúng người ký', () => {
+    it.each(vectors.walletLink.map((v) => [v.name, v]))('%s', (_n, v) => {
+        expect(verifyMessage(v.message, v.signature)).toBe(v.signer);
+        expect(verifyMessage(`${v.message} `, v.signature)).not.toBe(v.signer); // đổi một ký tự là ra người khác
+        // thông điệp ràng buộc đủ ngữ cảnh: tên miền, địa chỉ (chữ thường), tài khoản, nonce, chainId, thời hạn
+        [v.domain, v.address.toLowerCase(), v.userId, v.nonce, `Chain ID: ${v.chainId}`, 'Expiration Time:'].forEach((x) => expect(v.message).toContain(x));
     });
 });
