@@ -29,8 +29,8 @@ export const sumRaw = (values) => values.reduce((acc, v) => acc + BigInt(v), 0n)
  * offset = server_time - thời điểm client nhận phản hồi; còn lại = deadline - (now_client + offset).
  */
 export function secondsRemaining({ deadline, serverTime, receivedAtMs, nowMs = Date.now() }) {
-    const offset = Number(serverTime) - receivedAtMs / 1000;
-    return Math.floor(Number(deadline) - (nowMs / 1000 + offset));
+    const elapsedSec = Math.floor((nowMs - receivedAtMs) / 1000);
+    return Number(deadline) - (Number(serverTime) + elapsedSec);
 }
 
 /** 'ok' | 'expiring' (< 60 giây) | 'expired'. */
