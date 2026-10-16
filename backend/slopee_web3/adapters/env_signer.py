@@ -86,6 +86,16 @@ class EnvKeySigner:
     def sender_address(self, role):
         return self._addr[role]
 
+    def sign_transaction(self, role, tx):
+        """Ký giao dịch của relayer (Tuần 5). Chỉ trả raw transaction; khóa vẫn nằm trong đối tượng này."""
+        if role not in self._keys:
+            raise RuntimeError(f"Chưa cấu hình khóa cho vai trò '{role}'.")
+        signed = Account.sign_transaction(tx, self._keys[role])
+        raw = getattr(signed, 'raw_transaction', None)
+        if raw is None:                       # eth-account < 0.13 đặt tên cũ
+            raw = signed.rawTransaction
+        return bytes(raw)
+
     def keccak(self, data):
         return keccak(data)
 

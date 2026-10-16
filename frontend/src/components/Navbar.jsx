@@ -97,6 +97,8 @@ export default function Navbar() {
                                 )}
                             </div>
 
+                            {user.role === 'shipper' && <Link to="/shipper/orders" className="nav-icon">🚚 Đơn cần giao</Link>}
+
                             {user.role === 'seller' && (
                                 <Link to="/seller" className="nav-seller-btn">Manage Shop</Link>
                             )}

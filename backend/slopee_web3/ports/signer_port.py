@@ -16,3 +16,6 @@ class SignerPort(Protocol):
 
     def to_checksum(self, address: str) -> str:
         """Địa chỉ dạng checksum (EIP-55) để hiển thị và đưa vào báo giá."""
+
+    def sign_transaction(self, role: str, tx: dict) -> bytes:
+        """Ký giao dịch (đã đủ nonce/gas/chainId) bằng khóa của vai trò, trả raw transaction. Khóa không bao giờ rời signer."""

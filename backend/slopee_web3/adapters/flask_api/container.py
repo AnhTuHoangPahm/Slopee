@@ -8,27 +8,35 @@ import threading
 
 from ...application.order_status_service import OrderStatusService
 from ...application.quote_service import QuoteService
+from ...application.relayer_service import RelayerService
 from ...application.wallet_service import WalletService
 from ...domain.errors import DomainError
 from ...settings import MAX_BATCH_SIZE, Web3Settings
 from ..clock import HybridClock
 from ..env_signer import EnvKeySigner, recover_personal_sign
 from ..mysql_repos import MySqlUnitOfWork
+from ..relayer_queue import SingleThreadQueue
 from ..web3_chain import Web3Chain
 
 log = logging.getLogger('slopee.web3')
 
 
 class Web3Container:
-    def __init__(self, settings, signer, chain, clock, uow_factory, verifier=recover_personal_sign):
+    def __init__(self, settings, signer, chain, clock, uow_factory, verifier=recover_personal_sign, relayer_queue=None):
         self.settings, self.signer, self.chain, self.clock = settings, signer, chain, clock
         self.uow_factory = uow_factory
         self.verifier = verifier
+        # Hàng đợi relayer PHẢI là một đối tượng duy nhất cho cả tiến trình (DD-06), nên giữ ở container chứ không dựng mỗi lần gọi.
+        self.relayer_queue = relayer_queue or SingleThreadQueue()
 
     def wallet_service(self):
         return WalletService(self.uow_factory, self.verifier, wallet_domain=self.settings.wallet_domain,
                              chain_id=self.settings.chain_id,
                              max_nonces_per_minute=self.settings.nonce_max_per_minute)
+
+    def relayer_service(self):
+        """Việc của Thành viên B (ShipperService, AutoRelease) gọi `confirm_delivery(order_id, onchain_order_id)`."""
+        return RelayerService(self.uow_factory, self.chain, self.signer, self.relayer_queue)
 
     def order_status_service(self):
         return OrderStatusService(self.uow_factory, self.clock)

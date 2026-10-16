@@ -1,4 +1,4 @@
-"""ChainPort (SDD 5.2). Tuần 3 dùng các phương thức đọc; `send_tx` (relayer) làm ở Tuần 5."""
+"""ChainPort (SDD 5.2). Tuần 3: các phương thức đọc. Tuần 5: `send_tx` + `wait_receipt` cho relayer (SDD 5.3h, DD-06)."""
 from typing import Protocol
 
 ORDER_STATES = ('NONE', 'LOCKED', 'DELIVERED', 'DISPUTED', 'COMPLETED', 'REFUNDED')   # khớp enum OrderState
@@ -6,6 +6,11 @@ ORDER_STATES = ('NONE', 'LOCKED', 'DELIVERED', 'DISPUTED', 'COMPLETED', 'REFUNDE
 
 class ChainUnavailable(Exception):
     """RPC không kết nối được hoặc trả lỗi (adapter ném; application/API ánh xạ sang CHAIN_UNAVAILABLE)."""
+
+
+class ChainTxFailed(Exception):
+    """Giao dịch bị contract từ chối (revert khi ước lượng gas, hoặc biên nhận status = 0). KHÁC ChainUnavailable:
+    RPC vẫn sống, lỗi nằm ở nghiệp vụ trên chuỗi, thử lại y nguyên sẽ lại revert."""
 
 
 class ChainPort(Protocol):
@@ -26,3 +31,12 @@ class ChainPort(Protocol):
 
     def has_role(self, role: str, address: str) -> bool:
         """`hasRole(<role>, address)` trên contract; role: 'QUOTE_SIGNER_ROLE' | 'ARBITRATOR_ROLE' | 'SHIPPER_ROLE'."""
+
+    def send_tx(self, fn_name: str, args: list, sender: str, sign) -> str:
+        """Dựng giao dịch gọi `fn_name(*args)` từ `sender`, ước lượng gas, gọi `sign(tx_dict) -> bytes` (raw đã ký, do
+        SignerPort cấp nên khóa không rời signer), gửi đi và trả tx_hash ('0x…'). Chưa chờ biên nhận.
+        Ném ChainTxFailed nếu contract revert khi ước lượng; ChainUnavailable nếu RPC lỗi.
+        KHÔNG tự tuần tự hóa nonce: người gọi (relayer) phải đảm bảo chỉ một luồng gọi hàm này (DD-06)."""
+
+    def wait_receipt(self, tx_hash: str, timeout: float) -> dict:
+        """Chờ biên nhận: {'status': 1|0, 'block_number': int}. Hết `timeout` giây mà chưa có -> ChainUnavailable."""

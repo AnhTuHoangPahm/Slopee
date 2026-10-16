@@ -53,11 +53,21 @@ class CheckoutRepo(Protocol):
     def order_status_row(self, order_id: str) -> Optional[dict]: ...        # đọc không khóa; None nếu không phải đơn Web3
 
 
+class OutboxRepo(Protocol):
+    """Nhật ký giao dịch relayer (bảng tx_outbox): PENDING -> SENT -> CONFIRMED | FAILED. Chỉ để truy vết/gỡ lỗi."""
+    def insert(self, kind: str, order_id: str) -> int: ...                  # trả id, status = PENDING
+    def mark_sent(self, outbox_id: int, tx_hash: str) -> None: ...
+    def mark_confirmed(self, outbox_id: int) -> None: ...
+    def mark_failed(self, outbox_id: int, error: str) -> None: ...
+    def recent_for_order(self, order_id: str, limit: int = 20) -> list: ...  # mới nhất trước
+
+
 class UnitOfWork(Protocol):
     wallets: WalletRepo
     settings: SettingsRepo
     policies: PolicyRepo
     checkout: CheckoutRepo
+    outbox: OutboxRepo
 
     def __enter__(self) -> "UnitOfWork": ...
     def __exit__(self, exc_type, exc, tb) -> None: ...   # chưa commit thì ROLLBACK

@@ -4,6 +4,8 @@ Khóa dưới đây là KHÓA THỬ CÔNG KHAI CỦA ANVIL (giống scripts/gen_
 """
 import json
 import os
+import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -17,7 +19,7 @@ from slopee_web3.adapters.mysql_repos import MySqlUnitOfWork
 from slopee_web3.application.order_status_service import OrderStatusService
 from slopee_web3.application.quote_service import QuoteService
 from slopee_web3.application.wallet_service import WalletService
-from slopee_web3.ports.chain_port import ChainUnavailable
+from slopee_web3.ports.chain_port import ChainTxFailed, ChainUnavailable
 
 ROOT = Path(__file__).resolve().parent.parent
 VECTORS = json.loads((ROOT / 'shared' / 'eip712' / 'vectors.json').read_text(encoding='utf-8'))
@@ -82,6 +84,59 @@ class FakeChain:
 
     def has_role(self, role, address):
         return True
+
+
+
+class RelayChain:
+    """ChainPort giả cho relayer (Tuần 5): trạng thái đơn theo mã, send_tx đo độ song song và nonce, receipt cấu hình được."""
+
+    def __init__(self):
+        self.states = {}
+        self.sent = []                  # [(fn, args, sender, nonce)]
+        self.in_flight = 0
+        self.max_in_flight = 0
+        self.nonce = 0
+        self.send_delay = 0.0
+        self.revert = False
+        self.down = False
+        self.receipt_status = 1
+        self.receipt_timeout = False
+        self.mine_on_send = True        # gửi xong coi như đã DELIVERED (như contract thật sau khi được đào)
+        self._lock = threading.Lock()
+
+    def get_order_state(self, oid):
+        if self.down:
+            raise ChainUnavailable('RPC down')
+        return self.states.get(int(oid), 'NONE')
+
+    def send_tx(self, fn, args, sender, sign):
+        if self.down:
+            raise ChainUnavailable('RPC down')
+        with self._lock:
+            self.in_flight += 1
+            self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        try:
+            time.sleep(self.send_delay)
+            if self.revert:
+                raise ChainTxFailed('execution reverted: Invalid state')
+            with self._lock:
+                n = self.nonce
+                self.nonce += 1
+            raw = sign({'to': ADDR['quote_signer'], 'value': 0, 'gas': 100000, 'gasPrice': 10 ** 9, 'nonce': n,
+                        'chainId': CHAIN_ID, 'data': b''})
+            assert isinstance(raw, (bytes, bytearray)) and len(raw) > 0
+            self.sent.append((fn, list(args), sender, n))
+            if self.mine_on_send:
+                self.states[int(args[0])] = 'DELIVERED'
+            return '0x' + format(len(self.sent), '064x')
+        finally:
+            with self._lock:
+                self.in_flight -= 1
+
+    def wait_receipt(self, tx_hash, timeout):
+        if self.receipt_timeout:
+            raise ChainUnavailable('TimeExhausted')
+        return {'status': self.receipt_status, 'block_number': 7}
 
 
 def event(name, block, log_index=0, tx=None, **args):

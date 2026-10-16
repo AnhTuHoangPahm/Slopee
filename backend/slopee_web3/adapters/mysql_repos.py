@@ -277,6 +277,33 @@ class MySqlCheckoutRepo:
         return self.cur.fetchone()
 
 
+class MySqlOutboxRepo:
+    """tx_outbox (SDD 012): chỉ ghi vết giao dịch relayer. Chuyển trạng thái có điều kiện trạng thái cũ (SDD 7.5)."""
+    MAX_ERROR = 2000
+
+    def __init__(self, cur):
+        self.cur = cur
+
+    def insert(self, kind, order_id):
+        self.cur.execute("INSERT INTO tx_outbox (kind, order_id, status) VALUES (%s, %s, 'PENDING')", (kind, order_id))
+        return int(self.cur.lastrowid)
+
+    def mark_sent(self, outbox_id, tx_hash):
+        self.cur.execute("UPDATE tx_outbox SET status='SENT', tx_hash=%s WHERE id=%s AND status='PENDING'", (tx_hash, outbox_id))
+
+    def mark_confirmed(self, outbox_id):
+        self.cur.execute("UPDATE tx_outbox SET status='CONFIRMED' WHERE id=%s AND status='SENT'", (outbox_id,))
+
+    def mark_failed(self, outbox_id, error):
+        self.cur.execute("UPDATE tx_outbox SET status='FAILED', error=%s WHERE id=%s AND status IN ('PENDING','SENT')",
+                         (str(error)[:self.MAX_ERROR], outbox_id))
+
+    def recent_for_order(self, order_id, limit=20):
+        self.cur.execute("SELECT id, kind, tx_hash, status, error, UNIX_TIMESTAMP(created_at) AS created_at "
+                         "FROM tx_outbox WHERE order_id=%s ORDER BY id DESC LIMIT %s", (order_id, int(limit)))
+        return list(self.cur.fetchall())
+
+
 class MySqlUnitOfWork:
     """Một kết nối + một transaction. Thoát khối `with` mà chưa `commit()` thì ROLLBACK (lỗi bất kỳ -> rollback cả lô)."""
 
@@ -291,6 +318,7 @@ class MySqlUnitOfWork:
         self.settings = MySqlSettingsRepo(self.cur)
         self.policies = MySqlPolicyRepo(self.cur)
         self.checkout = MySqlCheckoutRepo(self.cur)
+        self.outbox = MySqlOutboxRepo(self.cur)
         return self
 
     def commit(self):

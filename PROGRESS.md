@@ -174,11 +174,23 @@
 
 ### TUẦN 5: Cổng Shipper, Relayer & Luồng Giải ngân tự động
 - [ ] **[B] Thành viên B:** Cổng Shipper: API `GET /api/shipper/orders` và `POST /api/shipper/orders/:code/deliver`.
-- [ ] **[A ➔ B] Thành viên A:** Cài đặt Relayer gửi giao dịch `confirmDelivery` lên Anvil bằng khóa `SHIPPER_KEY` qua hàng đợi một luồng (`tx_outbox`).
+- [~] **[A ➔ B] Thành viên A:** Cài đặt Relayer gửi giao dịch `confirmDelivery` lên Anvil bằng khóa `SHIPPER_KEY` qua hàng đợi một luồng (`tx_outbox`). *Đã code + test xanh cục bộ (MySQL 8.0.46), **chưa chạy với Anvil + contract thật**, chờ PR review.* `application/relayer_service.py::RelayerService.confirm_delivery(order_id, onchain_order_id)` → `{outcome: 'SENT'|'ALREADY_DELIVERED', tx_hash, outbox_id}`; `adapters/relayer_queue.py::SingleThreadQueue` (DD-06); cổng mới `ChainPort.send_tx/wait_receipt`, `SignerPort.sign_transaction`, `OutboxRepo`; `Web3Container.relayer_service()` để **B** gọi từ `ShipperService` (UC-03) và `AutoRelease`.
 - [ ] **[B] Thành viên B:** Tác vụ nền (Scheduler): Quét báo giá quá hạn (`QuoteExpirySweeper`), Quét tự động giải ngân khi hết thời hạn kiểm tra (`AutoRelease`).
-- [ ] **[A ➔ F] Thành viên A:** Xây dựng màn hình cổng Shipper (`pages/ShipperOrders.jsx`).
+- [~] **[A ➔ F] Thành viên A:** Xây dựng màn hình cổng Shipper (`pages/ShipperOrders.jsx`). *Đã code + test xanh cục bộ, chờ PR review và API thật của B.* Route `/shipper/orders` (chỉ role `shipper`), link trên Navbar, đăng nhập xong shipper vào thẳng cổng; `api/shipper.js`, `lib/shipperOrders.js` (hàm thuần).
 - [ ] **[F] Thành viên C:** Cập nhật màn hình Buyer (`pages/MyOrders.jsx`): Hiển thị đồng hồ đếm ngược kiểm tra (`CountdownTimer`), nút "Đã nhận hàng" (`earlyRelease`), nút "Khiếu nại".
 - [ ] **[Q] Thành viên C:** Chạy kịch bản tích hợp luồng Happy Path (I-05, E-01).
+
+---
+
+**Ghi chú Tuần 5 — phần Thành viên A (cập nhật gần nhất):**
+1. **Kết quả test (chạy cục bộ, MySQL 8.0.46):** `pytest test` **621 pass, 6 skip** (5 test `anvil` cũ + 1 test `anvil` mới của relayer; cần `bootstrap.sh`). Thêm 19 test đơn vị `test/unit_test/test_w3_relayer.py` (không cần MySQL/Anvil) + 8 test MySQL thật `test/integration_test/test_w3_relayer_mysql.py`. Frontend: `vitest` **219 pass** (+16), `eslint` sạch trên các tệp đụng tới, `vite build` thành công.
+2. **Idempotent hai lớp (SDD 5.3h):** đọc trạng thái trực tiếp từ contract trước khi xếp hàng (DELIVERED ⇒ `ALREADY_DELIVERED`, khác LOCKED ⇒ `INVALID_STATE` 409 kèm `chain_state`), rồi **kiểm lại lần nữa bên trong hàng đợi**: hai lần bấm cùng đơn đều thấy LOCKED ở lần kiểm đầu, lần thứ hai chạy sau khi lần thứ nhất đã được đào nên thấy DELIVERED thay vì gửi giao dịch sẽ revert (có test đua, cả bản giả lẫn MySQL).
+3. **`tx_outbox` commit riêng từng bước** (PENDING → SENT → CONFIRMED|FAILED, UPDATE có điều kiện trạng thái cũ): dấu vết còn nguyên kể cả khi bước sau lỗi. **Hết hạn chờ biên nhận KHÔNG đánh FAILED** (giao dịch có thể đã vào chuỗi): giữ `SENT`, người dùng thử lại sẽ đọc chuỗi và nhận `ALREADY_DELIVERED`. Revert/`status=0` ⇒ `CHAIN_TX_FAILED` 502 (chi tiết revert chỉ ở `tx_outbox.error`, không trả cho người dùng).
+4. **Khóa không rời signer:** cổng mới `SignerPort.sign_transaction(role, tx)` chỉ trả raw transaction; `Web3Chain.send_tx` nhận hàm `sign` thay vì khóa. Relayer không sửa `order_web3`/`orders` (BR-09: Indexer làm khi thấy `OrderDelivered`; handler này **vẫn là việc của B**, hiện `HANDLERS` chưa có Delivered).
+5. **Giới hạn đã biết:** hàng đợi nằm trong tiến trình. Chạy gunicorn nhiều worker dùng chung `SHIPPER_KEY` thì mỗi worker một hàng đợi và lỗi nonce có thể quay lại (đúng rủi ro SDD 12). MVP chạy một tiến trình relayer; nếu cần nhiều worker thì thêm khóa `GET_LOCK` của MySQL quanh job.
+6. **Hợp đồng API giả định với B (cần B xác nhận trước khi merge):** `GET /api/shipper/orders` → `{orders:[{order_id, status, shop_name, buyer_name, price_vnd, chain_created_at, delivered_at}]}` (chấp nhận cả mảng trần); `POST /api/shipper/orders/:code/deliver` → `{outcome, tx_hash}` (đúng kết quả của `confirm_delivery`); lỗi `INVALID_STATE`/`ORDER_NOT_FOUND`/`CHAIN_TX_FAILED`/`CHAIN_UNAVAILABLE`. `ShipperService` còn phải kiểm đơn được gán trong `shipper_assignments` trước khi gọi relayer.
+7. **Giao diện:** xác nhận hai bước (tránh bấm nhầm), cờ đồng bộ chống bấm đúp, sau khi gửi hiện "đang chờ hệ thống ghi nhận" tới khi polling 5 s thấy đơn sang DELIVERED hoặc biến mất; không dùng ví. Việc cũ `api/web3.js::request` được `export` (đổi đúng một từ khóa) để dùng lại.
+8. **Chưa làm / ngoài phạm vi A:** chạy với Anvil + contract thật (cần `bootstrap.sh`; test `anvil` đã viết, đặt `RELAYER_TEST_ONCHAIN_ID` = id đơn đang LOCKED), nối `ShipperService`/route/`AutoRelease` (B), Indexer handler `OrderDelivered` (B), kịch bản E-01 (C). Việc tạo tài khoản `shipper` và gán đơn cho shipper (`shipper_assignments`) chưa có CLI/Admin UI.
 
 ---
 

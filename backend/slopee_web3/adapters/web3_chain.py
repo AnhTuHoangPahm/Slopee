@@ -4,8 +4,9 @@ from pathlib import Path
 
 from eth_utils import keccak, to_checksum_address
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 
-from ..ports.chain_port import ORDER_STATES, ChainUnavailable
+from ..ports.chain_port import ORDER_STATES, ChainTxFailed, ChainUnavailable
 
 ABI_PATH = Path(__file__).resolve().parents[3] / 'shared' / 'abi' / 'SlopeeEscrowMaster.json'
 
@@ -26,7 +27,7 @@ def _unavailable(fn):
     def wrapper(*a, **kw):
         try:
             return fn(*a, **kw)
-        except ChainUnavailable:
+        except (ChainUnavailable, ChainTxFailed):
             raise
         except Exception as e:      # ConnectionError, Timeout, ProviderConnectionError, ContractLogicError...
             raise ChainUnavailable(f'{type(e).__name__}: {e}') from e
@@ -89,3 +90,26 @@ class Web3Chain:
             })
         out.sort(key=lambda e: (e['block_number'], e['log_index']))
         return out
+
+    # ---- relayer (Tuần 5). Người gọi PHẢI tuần tự hóa (hàng đợi một luồng, DD-06): nonce lấy từ 'pending' ở đây
+    # chỉ đúng khi không có giao dịch nào khác của cùng tài khoản đang được dựng song song.
+    GAS_MARGIN = 1.2
+
+    @_unavailable
+    def send_tx(self, fn_name, args, sender, sign):
+        fn = getattr(self.contract.functions, fn_name)(*args)
+        sender = to_checksum_address(sender)
+        try:
+            gas = fn.estimate_gas({'from': sender})
+        except ContractLogicError as e:         # revert khi mô phỏng: nghiệp vụ sai, không phải RPC hỏng
+            raise ChainTxFailed(str(e)) from e
+        tx = fn.build_transaction({
+            'from': sender, 'gas': int(gas * self.GAS_MARGIN) + 1,
+            'nonce': self.w3.eth.get_transaction_count(sender, 'pending'), 'chainId': int(self.w3.eth.chain_id),
+        })
+        return _hex(self.w3.eth.send_raw_transaction(sign(tx)))
+
+    @_unavailable
+    def wait_receipt(self, tx_hash, timeout):
+        r = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=timeout, poll_latency=0.2)
+        return {'status': int(r['status']), 'block_number': int(r['blockNumber'])}

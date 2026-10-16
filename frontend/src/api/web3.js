@@ -2,7 +2,7 @@
 import { API_ORIGIN, authFetch } from '../lib/client';
 import { ERROR_MESSAGES, Web3ApiError } from '../lib/errors';
 
-async function request(path, { method = 'GET', body } = {}) {
+export async function request(path, { method = 'GET', body } = {}) {
     let res;
     try {
         res = await authFetch(`${API_ORIGIN}${path}`, { method, body: body === undefined ? undefined : JSON.stringify(body) });
