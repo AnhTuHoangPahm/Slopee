@@ -3,9 +3,11 @@ import { getShopAPI, setupShopAPI, addProductAPI, updateShopNameAPI, updateProdu
 import { fetchCategoriesAPI } from '../api/products';
 import { fetchPaymentMethodsAPI, addPaymentMethodAPI } from '../api/payments';
 import Navbar from '../components/Navbar';
+import { getUser } from '../api/http';
+import { formatVND } from '../utils/formatVND';
 
 export default function SellerDashboard() {
-    const user = JSON.parse(localStorage.getItem('user'));
+    const user = getUser();
 
     const [shop, setShop] = useState(null);
     const [methods, setMethods] = useState([]);
@@ -34,14 +36,14 @@ export default function SellerDashboard() {
 
     const loadData = async () => {
         try {
-            const data = await getShopAPI(user.id);
+            const data = await getShopAPI();
             setShop(data);
         } catch (err) {
             setShop(null);
         }
 
         try {
-            const pmData = await fetchPaymentMethodsAPI(user.id);
+            const pmData = await fetchPaymentMethodsAPI();
             setMethods(pmData.methods);
         } catch (err) { console.error(err); }
 
@@ -62,7 +64,6 @@ export default function SellerDashboard() {
         e.preventDefault();
         try {
             await addPaymentMethodAPI({
-                userId: user.id,
                 methodType: 'bank',
                 providerName: methodName,
                 accountNumber: 'xxxx-' + Math.floor(1000 + Math.random() * 9000)
@@ -98,7 +99,7 @@ export default function SellerDashboard() {
     const handleSetupShop = async (e) => {
         e.preventDefault();
         try {
-            await setupShopAPI({ seller_id: user.id, name: shopName, description: shopDesc });
+            await setupShopAPI({ name: shopName, description: shopDesc });
             loadData();
         } catch (err) { alert(err.message); }
     }
@@ -107,7 +108,7 @@ export default function SellerDashboard() {
         const newName = prompt("Enter new shop name:", shop.name);
         if (newName && newName.trim() !== '') {
             try {
-                await updateShopNameAPI(user.id, newName);
+                await updateShopNameAPI(newName);
                 loadData();
             } catch (err) { alert(err.message); }
         }
@@ -120,7 +121,7 @@ export default function SellerDashboard() {
         const catId = matchingCat ? matchingCat.id : 1;
 
         try {
-            const res = await addProductAPI({ shopId: shop.id, name: prodName, unitPrice: Number(prodPrice), inStock: Number(prodStock), categoryId: catId });
+            const res = await addProductAPI({ name: prodName, unitPrice: Number(prodPrice), inStock: Number(prodStock), categoryId: catId });
 
             if (res.productId) {
                 // Upload Rich Metadata Sequentially
@@ -140,7 +141,7 @@ export default function SellerDashboard() {
     }
 
     const handleEditProduct = async (prod) => {
-        const newPrice = prompt(`Enter new price for ${prod.name}:`, prod.unitPrice);
+        const newPrice = prompt(`Enter new price (VND) for ${prod.name}:`, prod.unitPrice);
         if (newPrice === null) return;
         const newStock = prompt(`Enter new stock for ${prod.name}:`, prod.inStock);
         if (newStock === null) return;
@@ -216,8 +217,8 @@ export default function SellerDashboard() {
                                 </datalist>
                             </div>
                             <div style={{ flex: 1, minWidth: '100px' }}>
-                                <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>PRICE ($)</label>
-                                <input type="number" step="0.01" placeholder='0.00' value={prodPrice} required onChange={e => setProdPrice(e.target.value)} style={{ padding: '10px', width: '100%', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '4px' }} />
+                                <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>PRICE (VND)</label>
+                                <input type="number" step="1" min="0" placeholder='0' value={prodPrice} required onChange={e => setProdPrice(e.target.value)} style={{ padding: '10px', width: '100%', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '4px' }} />
                             </div>
                             <div style={{ flex: 1, minWidth: '100px' }}>
                                 <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>STOCK (QTY)</label>
@@ -292,7 +293,7 @@ export default function SellerDashboard() {
                                 </div>
 
                                 <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '15px', fontSize: '14px' }}>
-                                    <span style={{ color: '#ee4d2d', fontWeight: 'bold' }}>${p.unitPrice}</span>
+                                    <span style={{ color: '#ee4d2d', fontWeight: 'bold' }}>{formatVND(p.unitPrice)}</span>
                                     <span style={{ color: p.inStock > 0 ? '#2e7d32' : '#d32f2f', fontWeight: '500' }}>
                                         {p.inStock > 0 ? `${p.inStock} in stock` : 'Out of Stock!'}
                                     </span>

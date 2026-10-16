@@ -1,13 +1,25 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 import pymysql
 import os
 
+from auth_utils import authenticate_request
+from errors import register_blueprint_errors
+from validation import json_body, get_str
+
 admin_bp = Blueprint('admin', __name__)
+register_blueprint_errors(admin_bp)
+
+
+@admin_bp.before_request
+def _require_admin():
+    """Khóa toàn bộ admin_bp: chỉ token hợp lệ có role 'admin' mới đi tiếp (S-02)."""
+    if request.method == 'OPTIONS':  # preflight CORS không mang Authorization
+        return None
+    return authenticate_request(roles=('admin',))
 
 def get_db_connection():
     return pymysql.connect(
         host=os.environ.get('DB_HOST', 'localhost'),
-        port=int(os.environ.get('DB_PORT') or 3306),
         user=os.environ.get('DB_USER', 'root'),
         password=os.environ.get('DB_PASSWORD', ''),
         database=os.environ.get('DB_NAME', 'slopee_db'),
@@ -52,13 +64,30 @@ def delete_user(user_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # Prevent deleting the master admin
-            cursor.execute("SELECT email FROM users WHERE id=%s", (user_id,))
+            if user_id == g.user_id:
+                return jsonify({"error": "You cannot delete your own admin account."}), 403
+            # Không cho xóa bất kỳ tài khoản admin nào qua API
+            cursor.execute("SELECT role FROM users WHERE id=%s", (user_id,))
             u = cursor.fetchone()
-            if u and u['email'] == '0':
-                return jsonify({"error": "Cannot delete the Master System Admin!"}), 403
+            if not u:
+                return jsonify({"error": "User not found"}), 404
+            if u['role'] == 'admin':
+                return jsonify({"error": "Admin accounts cannot be deleted via the API."}), 403
                 
-            cursor.execute("DELETE FROM users WHERE id=%s", (user_id,))
+            # Quyết định nhóm: giữ orders.userId ON DELETE RESTRICT (SDD Q-06 cũng dùng RESTRICT cho order_web3): đơn hàng
+            # và tiền ký quỹ là hồ sơ kế toán nên không xóa cứng người dùng đã có đơn. Báo rõ thay vì lỗi 500.
+            cursor.execute("SELECT 1 AS x FROM orders WHERE userId=%s LIMIT 1", (user_id,))
+            if cursor.fetchone():
+                return jsonify({"error": "This user has orders and cannot be deleted. Orders are kept for accounting.",
+                                "code": "user_has_orders"}), 409
+            try:
+                cursor.execute("DELETE FROM users WHERE id=%s", (user_id,))
+            except pymysql.err.IntegrityError as e:
+                conn.rollback()
+                if e.args and e.args[0] == 1451:  # FK RESTRICT khác (ví dụ order_web3 sau này)
+                    return jsonify({"error": "This user is referenced by other records and cannot be deleted.",
+                                    "code": "user_has_orders"}), 409
+                raise
             conn.commit()
             return jsonify({"message": "User permanently eradicated"}), 200
     finally:
@@ -86,10 +115,8 @@ def get_admin_categories():
 
 @admin_bp.route('/categories', methods=['POST'])
 def create_category():
-    data = request.json
-    name = data.get('name')
-    if not name:
-        return jsonify({"error": "Category name required"}), 400
+    data = json_body()
+    name = get_str(data, 'name', max_len=100, label='Category name', required_msg="Category name required")
         
     conn = get_db_connection()
     try:
@@ -97,17 +124,13 @@ def create_category():
             cursor.execute("INSERT INTO categories (name) VALUES (%s)", (name,))
             conn.commit()
             return jsonify({"message": "Category securely logged."}), 201
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
 
 @admin_bp.route('/categories/<int:cat_id>', methods=['PUT'])
 def rename_category(cat_id):
-    data = request.json
-    name = data.get('name')
-    if not name:
-        return jsonify({"error": "Category name required"}), 400
+    data = json_body()
+    name = get_str(data, 'name', max_len=100, label='Category name', required_msg="Category name required")
         
     conn = get_db_connection()
     try:
@@ -132,7 +155,5 @@ def delete_category(cat_id):
             cursor.execute("DELETE FROM categories WHERE id=%s", (cat_id,))
             conn.commit()
             return jsonify({"message": "Global category permanently eliminated."}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
     finally:
         conn.close()

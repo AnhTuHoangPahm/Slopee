@@ -1,16 +1,17 @@
-const API_BASE = 'http://localhost:5000/api/carts';
+import { API_ORIGIN, authFetch } from '../lib/client';
 
-export const fetchCartAPI = async (userId) => {
-    const res = await fetch(`${API_BASE}/${userId}`);
+const API_BASE = `${API_ORIGIN}/api/carts`;
+
+export const fetchCartAPI = async () => {
+    const res = await authFetch(`${API_BASE}/`);
     if (!res.ok) throw new Error("Failed to fetch cart");
     return await res.json();
 };
 
-export const addToCartAPI = async (userId, productId, quantity = 1, selectedVariants = {}) => {
-    const res = await fetch(`${API_BASE}/items`, {
+export const addToCartAPI = async (productId, quantity = 1, selectedVariants = {}) => {
+    const res = await authFetch(`${API_BASE}/items`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, productId, quantity, selectedVariants })
+        body: JSON.stringify({ productId, quantity, selectedVariants })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
@@ -18,9 +19,8 @@ export const addToCartAPI = async (userId, productId, quantity = 1, selectedVari
 };
 
 export const updateCartItemAPI = async (itemId, quantity) => {
-    const res = await fetch(`${API_BASE}/items/${itemId}`, {
+    const res = await authFetch(`${API_BASE}/items/${itemId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quantity })
     });
     const data = await res.json();
@@ -29,7 +29,7 @@ export const updateCartItemAPI = async (itemId, quantity) => {
 };
 
 export const removeCartItemAPI = async (itemId) => {
-    const res = await fetch(`${API_BASE}/items/${itemId}`, { method: 'DELETE' });
+    const res = await authFetch(`${API_BASE}/items/${itemId}`, { method: 'DELETE' });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
     return data;

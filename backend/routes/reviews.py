@@ -1,20 +1,35 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, g
 import uuid
 from routes.auth import get_db_connection
+from auth_utils import require_auth
+from errors import register_blueprint_errors
+from validation import json_body, get_int, get_str, get_url_list
 
 reviews_bp = Blueprint('reviews', __name__)
+register_blueprint_errors(reviews_bp)
+
+MAX_COMMENT_LEN = 5000
+MAX_REVIEW_IMAGES = 5
+
 
 @reviews_bp.route('/<product_id>', methods=['POST'])
+@require_auth
 def add_review(product_id):
-    data = request.json
-    user_id = data.get('userId')
-    rating = int(data.get('rating', 0))
+    data = json_body()
+    user_id = g.user_id
+    try:
+        rating = get_int(data, 'rating', default=0, label='rating')
+    except Exception:
+        rating = 0
     comment = data.get('comment', '')
-    images = data.get('images', [])
-    
-    if not user_id or not (1 <= rating <= 5) or not comment.strip():
-        return jsonify({"error": "Valid User ID, a 1-5 rating, and a written comment are required."}), 400
-        
+    if not isinstance(comment, str):
+        comment = ''
+    images = get_url_list(data, 'images', max_items=MAX_REVIEW_IMAGES, label='images')
+
+    if not (1 <= rating <= 5) or not comment.strip():
+        return jsonify({"error": "A 1-5 rating, and a written comment are required."}), 400
+    comment = comment.strip()[:MAX_COMMENT_LEN]
+
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
@@ -44,15 +59,16 @@ def add_review(product_id):
                 VALUES (%s, %s, %s, %s, %s)
             """, (review_id, user_id, product_id, rating, comment))
             
-            # Synthesize Associated Imagery
-            for imgUrl in images:
-                if imgUrl:
-                    cursor.execute("INSERT INTO reviewImages (reviewId, imageUrl) VALUES (%s, %s)", (review_id, imgUrl))
+            # P0-04 (S-13): reviewImages.id là VARCHAR(36) không tự sinh -> backend phải cấp UUID
+            # (trước đây INSERT thiếu id gây lỗi 1364 ở strict mode)
+            for img_url in images:
+                cursor.execute("INSERT INTO reviewImages (id, reviewId, imageUrl) VALUES (%s, %s, %s)",
+                               (str(uuid.uuid4()), review_id, img_url))
                     
             conn.commit()
             return jsonify({"message": "Review perfectly published!", "reviewId": review_id}), 201
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()

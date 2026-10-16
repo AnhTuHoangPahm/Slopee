@@ -1,0 +1,170 @@
+{
+  "$comment": "SINH TỰ ĐỘNG bởi scripts/gen_eip712_vectors.py — không sửa tay. Python, JS và Solidity phải cho cùng domainSeparator/structHash/digest và chữ ký này.",
+  "version": 1,
+  "domain": {
+    "name": "SlopeeEscrow",
+    "version": "1",
+    "chainId": 31337,
+    "verifyingContract": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+  },
+  "accounts": {
+    "arbitrator": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+    "quoteSigner": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+    "buyer": "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+    "merchant": "0x976EA74026E726554dB657fA54763abd0C3a0aa9"
+  },
+  "orderQuote": [
+    {
+      "name": "token-MockUSD",
+      "message": {
+        "orderId": "1001",
+        "buyer": "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+        "merchant": "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
+        "token": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+        "amount": "16500000",
+        "inspectionDuration": "259200",
+        "disputeTimeout": "1209600",
+        "feeBps": "300",
+        "docHash": "0x594f9d92c0cd4449bf33003a9f83b69d2f57e7cbc00bcf871c0ee1ac95e2f247",
+        "deadline": "4102444800"
+      },
+      "domainSeparator": "0xe7fbd529f18f10b14541fa6bb20edf2916656d895c97eddbc3b0398f087a375f",
+      "structHash": "0x265e9b4fab3add2572ab57fcea19dea671595376844e68010f6ff374a0115b1f",
+      "digest": "0xb7032909d1956dc4174e5ca237994be801a37506ae5a71d65fb65eb6f394591a",
+      "signer": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "signature": "0xa6f647eaa7a1b2f14ffc83ced31f972e2840810b5128b3b0a4168fb099ff4de20e4e92dfcf66a81c828ccf2251bf8613710fdf07181802b6494b4b4ebba7e7e31c"
+    },
+    {
+      "name": "eth-zero-fee",
+      "message": {
+        "orderId": "1002",
+        "buyer": "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+        "merchant": "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
+        "token": "0x0000000000000000000000000000000000000000",
+        "amount": "1000000000000000000",
+        "inspectionDuration": "3600",
+        "disputeTimeout": "604800",
+        "feeBps": "0",
+        "docHash": "0xce039422bbcd2cf06fa177b332eea8fe98546d0b4f723fc3814cfc386a3ee5b5",
+        "deadline": "4102444800"
+      },
+      "domainSeparator": "0xe7fbd529f18f10b14541fa6bb20edf2916656d895c97eddbc3b0398f087a375f",
+      "structHash": "0xa6e64864452a9ce80cfc320365a8b884f583151739a9718b29f627aa0b2dc7f4",
+      "digest": "0x425860ec9991e6eb190d0b92b65dc8ba8e2a30deccf37fe5e0d06ce55d7d30eb",
+      "signer": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "signature": "0xd83881add72a640debd96de4b6e8fc34e7edb2900fbd1d409db5e93c26efc4860dfca421e45c953440340a4c166c868ba52c9433d5d11bf5b49b241929662ea11b"
+    },
+    {
+      "name": "uint256-large-orderId",
+      "message": {
+        "orderId": "9007199254753337",
+        "buyer": "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+        "merchant": "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
+        "token": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+        "amount": "1606938044258990275541962092341162602522202993782792835301383",
+        "inspectionDuration": "2592000",
+        "disputeTimeout": "7776000",
+        "feeBps": "1000",
+        "docHash": "0xabababababababababababababababababababababababababababababababab",
+        "deadline": "4102444800"
+      },
+      "domainSeparator": "0xe7fbd529f18f10b14541fa6bb20edf2916656d895c97eddbc3b0398f087a375f",
+      "structHash": "0x4bb048713cf5aecbdc4198f509e5b31def3a3179eb52420edc4e7444ce5018e9",
+      "digest": "0x3be49c14fc1aa8f90e6a487d01a3394704f8dea80ffdd05e1149da70d9f91b4f",
+      "signer": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      "signature": "0xfb1698577b12c9433ef4ff3517a62fbbf432332393a316e32dcd971ed8f5a1a77277ff0c0d06d4a4ab06be96542cfb4e11b1f8910ffa4241348b57394c5ced0a1b"
+    }
+  ],
+  "disputeResolution": [
+    {
+      "name": "payout-merchant",
+      "message": {
+        "orderId": "1001",
+        "payoutTo": "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
+        "amount": "16500000",
+        "nonce": "0",
+        "deadline": "4102444800"
+      },
+      "domainSeparator": "0xe7fbd529f18f10b14541fa6bb20edf2916656d895c97eddbc3b0398f087a375f",
+      "structHash": "0x58b4096a697e3f4bd11201d24f2709804b6c23326bb85f0c2b05df90d5216c12",
+      "digest": "0x8c456da96e9b1d67092c350caf8a7e7eb1572a3d8c27c340d532dc6cda2d1861",
+      "signer": "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+      "signature": "0xe4e12b80e319dc36beb5f11daf93bcc18728dea6b5e9dbea9dda25b9d0fb2537117f58623e32e0d8023ccfc8e8e0c91952709c83bb5d1458a6af87e969b923981c",
+      "arbitratorSignature": "0x618473f1dab27538ba8a783bceb16d15139282265f3abf38b4f3e4f83906547f7cc1680c78a65bd6170ee1fe561bf32d2090f59170e2af9ec85cf5ce21747a861c",
+      "arbitrator": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+    },
+    {
+      "name": "refund-buyer-nonce-3",
+      "message": {
+        "orderId": "1001",
+        "payoutTo": "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+        "amount": "16500000",
+        "nonce": "3",
+        "deadline": "4102444799"
+      },
+      "domainSeparator": "0xe7fbd529f18f10b14541fa6bb20edf2916656d895c97eddbc3b0398f087a375f",
+      "structHash": "0xbb7228751e2337ce578f9c8963c1836b08fc32f2290fcefa5b3351a36f7ea66d",
+      "digest": "0x62c00b1ef54c43781d70a458aa64a9e5bbf72ac25b5cd4f1a3477f61d9b246eb",
+      "signer": "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
+      "signature": "0xe56e657052410e8f7c60a2ab8de39e25bcd663f84b64c9b41c071600d99b0f217dc95e99c55f92425fdd09826ac0fa7fd47e34019eae850eb5aec33b2f1482fe1b",
+      "arbitratorSignature": "0x93ae9c72ccba2e01cf0542e9aab1e7d377d301b09a54ef0dc74936e5f04dffa80028b223d398b267a0d56d28ffea63bf590299ad413d8436c105b996511ba2a91c",
+      "arbitrator": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+    }
+  ],
+  "docHash": [
+    {
+      "name": "two-items",
+      "summary": {
+        "order_code": "SLP-20261011-0001",
+        "items": [
+          {
+            "product_id": "a1b2c3d4-0001",
+            "quantity": 2,
+            "unit_price_vnd": 150000
+          },
+          {
+            "product_id": "a1b2c3d4-0002",
+            "quantity": 1,
+            "unit_price_vnd": 99000
+          }
+        ],
+        "price_vnd": 399000,
+        "created_at": 1791676800
+      },
+      "canonicalJson": "{\"created_at\":1791676800,\"items\":[{\"product_id\":\"a1b2c3d4-0001\",\"quantity\":2,\"unit_price_vnd\":150000},{\"product_id\":\"a1b2c3d4-0002\",\"quantity\":1,\"unit_price_vnd\":99000}],\"order_code\":\"SLP-20261011-0001\",\"price_vnd\":399000}",
+      "docHash": "0x594f9d92c0cd4449bf33003a9f83b69d2f57e7cbc00bcf871c0ee1ac95e2f247"
+    },
+    {
+      "name": "key-order-and-unicode",
+      "summary": {
+        "price_vnd": 25000,
+        "items": [
+          {
+            "quantity": 1,
+            "unit_price_vnd": 25000,
+            "product_id": "Áo thun — size M"
+          }
+        ],
+        "created_at": 1791676801,
+        "order_code": "SLP-20261011-0002"
+      },
+      "canonicalJson": "{\"created_at\":1791676801,\"items\":[{\"product_id\":\"Áo thun — size M\",\"quantity\":1,\"unit_price_vnd\":25000}],\"order_code\":\"SLP-20261011-0002\",\"price_vnd\":25000}",
+      "docHash": "0xce039422bbcd2cf06fa177b332eea8fe98546d0b4f723fc3814cfc386a3ee5b5"
+    }
+  ],
+  "walletLink": [
+    {
+      "name": "buyer-link",
+      "domain": "localhost:5173",
+      "address": "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+      "userId": "3f2c9a52-6d0e-4b8e-9a51-0c1d2e3f4a5b",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "chainId": 31337,
+      "issuedAt": 1791676800,
+      "expiresAt": 1791677100,
+      "message": "localhost:5173 wants you to link your wallet to a Slopee account.\n\nAddress: 0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc\nAccount: 3f2c9a52-6d0e-4b8e-9a51-0c1d2e3f4a5b\nNonce: 0123456789abcdef0123456789abcdef\nChain ID: 31337\nIssued At: 2026-10-11T00:00:00Z\nExpiration Time: 2026-10-11T00:05:00Z",
+      "signer": "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc",
+      "signature": "0x7f4456158756a994c2accd2e7ae925518c952296b59b2880305612d859a015356dc7e300e0d2ed3bf2ed0861ce139780208f4f143717aa67c13eb4d2325e0cb41c"
+    }
+  ]
+}

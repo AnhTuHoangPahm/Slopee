@@ -1,85 +1,98 @@
-name: Slopee Test Suite
-
-on:
-  push:
-    branches:
-      - main
-      - development/*
-      - feature/*
-  pull_request:
-    branches:
-      - main
+name: tests
+on: [push, pull_request]
 
 jobs:
-  backend-tests:
-    name: Backend Pytest
+  backend:
     runs-on: ubuntu-latest
-    
-    # Optional: If your integration tests need a real MySQL database to run,
-    # you can spin one up instantly inside GitHub Actions!
     services:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: slopee_test_db
-        ports:
-          - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
-
+          MYSQL_ROOT_PASSWORD: root_pw
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot_pw"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      SLOPEE_ENV: test
+      SECRET_KEY: ci-secret-key
+      DB_HOST: 127.0.0.1
+      DB_USER: root
+      DB_PASSWORD: root_pw
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -r backend/requirements.txt
+      - run: python scripts/gen_eip712_vectors.py --check   # vectors.json còn khớp script sinh
+      - run: python -m pytest test -v   # gồm race condition trên MySQL service thật
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install Backend Dependencies
-        run: |
-          cd backend
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Initialize Database
-        env:
-          DB_HOST: 127.0.0.1
-          DB_USER: root
-          DB_PASSWORD: root
-          DB_NAME: slopee_test_db
-        run: |
-          cd backend
-          python init_db.py
-
-      - name: Run Pytest
-        env:
-          DB_HOST: 127.0.0.1
-          DB_USER: root
-          DB_PASSWORD: root
-          DB_NAME: slopee_test_db
-        run: |
-          pytest test/ -v
-
-  frontend-tests:
-    name: Frontend Vitest
+  # Tuần 3: backend ký báo giá + Indexer chạy trên CHUỖI THẬT (Anvil + contract do bootstrap.sh deploy).
+  # Job `backend` ở trên tự skip các test @anvil (không có Anvil); job này BẮT BUỘC có Anvil (REQUIRE_ANVIL=1 -> thiếu là đỏ, không skip).
+  web3-chain:
     runs-on: ubuntu-latest
-
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root_pw
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot_pw"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      SLOPEE_ENV: test
+      SECRET_KEY: ci-secret-key
+      DB_HOST: 127.0.0.1
+      DB_USER: root
+      DB_PASSWORD: root_pw
+      REQUIRE_ANVIL: '1'
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: { version: stable }
+      - run: pip install -r backend/requirements.txt
+      - run: ./scripts/install_contract_deps.sh
+      - run: ./scripts/bootstrap.sh --fresh --force-env   # chạy Anvil nền, deploy contract, sinh backend/.env.web3
+      - run: python -m pytest test/integration_test/test_w3_chain_anvil.py -v
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
+  frontend:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: frontend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - run: npx vitest run
+      - run: npm run build
 
-      - name: Install Frontend Dependencies
+  contracts:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: contracts } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: { version: stable }
+      - run: ../scripts/install_contract_deps.sh   # forge-std v1.9.4 + OpenZeppelin v5.0.2 đúng tag
+      - run: forge build
+      - run: forge test -vv   # gồm Eip712Vectors.t.sol đọc ../shared/eip712/vectors.json và invariant INV-01..07 (~1,5 phút)
+      - run: ../scripts/export_abi.sh --check   # ABI đã commit (shared/abi, frontend/src/lib/abi) còn khớp contract (đóng băng M1)
+      - name: Coverage gate (M1, AC-11) >= 90% dòng của src/
         run: |
-          cd frontend
-          npm install
-
-      - name: Run Vitest
+          forge coverage --ir-minimum --report summary --no-match-coverage "(test|script)" | tee /tmp/cov.txt
+          python3 - <<'PY'
+          import re, sys
+          m = re.search(r'\|\s*Total\s*\|\s*([\d.]+)%', open('/tmp/cov.txt').read())
+          pct = float(m.group(1)) if m else 0.0
+          print(f"Line coverage src/: {pct}%")
+          sys.exit(0 if pct >= 90 else 1)
+          PY
+      - name: Slither (không High/Medium)
         run: |
-          cd frontend
-          npm run test -- --run
+          pip install slither-analyzer
+          slither . --exclude-informational --fail-medium

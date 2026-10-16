@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getStatsAPI, getUsersAPI, deleteUserAPI, fetchAdminCategoriesAPI, addCategoryAPI, updateCategoryAPI, deleteCategoryAPI } from '../api/admin';
 import '../assets/admin.css';
+import { getUser, clearSession } from '../api/http';
 
 export default function AdminDashboard() {
-    const user = JSON.parse(localStorage.getItem('user'));
+    const user = getUser();
     const navigate = useNavigate();
 
     const [stats, setStats] = useState({ users: 0, shops: 0, products: 0 });
@@ -40,7 +41,7 @@ export default function AdminDashboard() {
     };
 
     const handleLogout = () => {
-        localStorage.removeItem('user');
+        clearSession();
         navigate('/');
     };
 

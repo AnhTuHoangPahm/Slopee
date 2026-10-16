@@ -1,24 +1,17 @@
 import pymysql
 import os
-import uuid
-import hashlib
-from dotenv import load_dotenv
 
-# load .env file inside /backend
-env_path = os.path.join(os.path.dirname(__file__), '.env')
-load_dotenv(dotenv_path=env_path)
+import migrate
 
 def create_connection():
     # Attempt to use standard local development credentials, or read from env.
     host = os.environ.get('DB_HOST', 'localhost')
-    port = int(os.environ.get('DB_PORT', 3306))
     user = os.environ.get('DB_USER', 'root')
     password = os.environ.get('DB_PASSWORD', '') # Default no password
     
     # Connect without a db initially to create it if it doesn't exist.
     conn = pymysql.connect(
         host=host,
-        port=port,
         user=user,
         password=password,
         cursorclass=pymysql.cursors.DictCursor
@@ -41,52 +34,36 @@ def init_database():
             cursor.execute(f"CREATE DATABASE IF NOT EXISTS {db_name}")
             cursor.execute(f"USE {db_name}")
             print(f"Database '{db_name}' created/selected.")
+
+            # DB đã có bảng users từ trước = DB cũ: schema.sql (IF NOT EXISTS) không nâng cấp được nó
+            cursor.execute("SELECT COUNT(*) AS c FROM information_schema.TABLES "
+                           "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = 'users'", (db_name,))
+            is_fresh = cursor.fetchone()['c'] == 0
             
             # Run schema.sql from the identical directory
             schema_path = os.path.join(os.path.dirname(__file__), 'schema.sql')
-            with open(schema_path, 'r', encoding='utf8') as f:
+            with open(schema_path, 'r', encoding='utf-8') as f:
                 sql_script = f.read()
             
-            # Split schema statements
-            statements = [stmt.strip() for stmt in sql_script.split(';') if stmt.strip()]
-            for stmt in statements:
-                if stmt:
-                    cursor.execute(stmt)
+            # P0-04: bộ tách an toàn (bỏ chú thích, không cắt nhầm dấu ; trong chuỗi)
+            for stmt in migrate.split_sql(sql_script):
+                cursor.execute(stmt)
             print("Schema loaded successfully.")
             
-            # 1. Provide Admin Credentials: (Shadowed,admin,admin,0,0)
-            admin_username = "admin"
-            admin_password = "admin"
-            
-            cursor.execute("SELECT id FROM users WHERE email='0'")
-            admin_exists = cursor.fetchone()
-            
-            if not admin_exists:
-                admin_id = str(uuid.uuid4())
-                
-                cursor.execute(
-                    "INSERT INTO users (id, role, name, email, phone, bio) VALUES (%s, %s, %s, %s, %s, %s)",
-                    (admin_id, 'admin', 'Shadowed', '0', '0', '')
-                )
-                
-                salt = os.urandom(16).hex()
-                try:
-                    from werkzeug.security import generate_password_hash
-                    # Werkzeug includes the salt within the hash string natively
-                    password_hash = generate_password_hash(admin_password)
-                    salt = 'werkzeug-managed' 
-                except ImportError:
-                    password_hash = hashlib.sha256((admin_password + salt).encode()).hexdigest()
-                    
-                cursor.execute(
-                    "INSERT INTO credentials (userId, username, passwordHash, passwordSalt, passPhraseHash) VALUES (%s, %s, %s, %s, %s)",
-                    (admin_id, admin_username, password_hash, salt, None)
-                )
-                print("Admin user (admin:admin) created successfully.")
-            else:
-                print("Admin user already exists in DB. (admin:admin)")
+            # P0-02: không còn tạo sẵn tài khoản admin/admin.
+            # Tạo admin bằng CLI:  flask --app app seed-admin
+            print("Tip: create the admin account with: flask --app app seed-admin")
                 
         conn.commit()
+
+        # schema.sql đã là schema mới nhất nên các migration hiện có được đánh dấu là đã áp dụng (không chạy lại).
+        # DB cũ tạo trước đây thì chạy:  python migrate.py
+        if is_fresh:
+            conn.select_db(db_name)
+            marked = migrate.mark_applied(conn)
+            print(f"Marked {len(marked)} migration(s) as applied (schema.sql is up to date).")
+        else:
+            print("Existing database detected: run `python migrate.py` to apply pending migrations.")
         print("Database Initialization completely successful!")
     finally:
         conn.close()

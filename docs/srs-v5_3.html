@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>SRS - Đặc tả Yêu cầu Kỹ thuật Hệ thống TMĐT Tự động hóa (Slopee)</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap');
+    @page { size: A4; margin: 20mm 15mm 20mm 15mm; }
+    body {
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      font-size: 13px; line-height: 1.6; color: #24292f; margin: 0; padding: 0;
+    }
+    .cover-page {
+      height: 90vh; display: flex; flex-direction: column; justify-content: center;
+      align-items: center; text-align: center; page-break-after: always;
+      border-bottom: 2px solid #0969da; padding: 20px; box-sizing: border-box;
+    }
+    .cover-org { font-size: 13px; font-weight: 500; color: #57606a; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 25px; }
+    .cover-title { font-size: 22px; font-weight: 700; color: #0969da; text-transform: uppercase; margin-bottom: 12px; line-height: 1.3; }
+    .cover-subtitle { font-size: 14px; font-weight: 400; color: #424a53; max-width: 650px; margin-bottom: 35px; line-height: 1.5; }
+    .cover-meta-table { width: 80%; margin: 20px auto; border: none; font-size: 13px; }
+    .cover-meta-table td { border: none; padding: 6px 12px; background: transparent !important; }
+    .cover-meta-table td:first-child { font-weight: 600; text-align: right; width: 40%; color: #57606a; }
+    .cover-meta-table td:last-child { text-align: left; color: #1f2328; }
+    h1 { font-size: 17px; color: #0969da; border-bottom: 2px solid #0969da; padding-bottom: 5px; margin-top: 28px; page-break-after: avoid; text-transform: uppercase; }
+    h2 { font-size: 14.5px; color: #1f2328; border-bottom: 1px solid #d0d7de; padding-bottom: 4px; margin-top: 20px; page-break-after: avoid; }
+    h3 { font-size: 13px; color: #24292f; margin-top: 15px; page-break-after: avoid; }
+    p, li { text-align: justify; margin: 6px 0; }
+    ol, ul { padding-left: 20px; margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 12px; }
+    tr { page-break-inside: avoid; }
+    th, td { border: 1px solid #d0d7de; padding: 7px 10px; text-align: left; vertical-align: top; }
+    th { background-color: #f6f8fa; font-weight: 600; color: #24292f; }
+    tr:nth-child(even) { background-color: #fcfcfc; }
+    pre {
+      background-color: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px;
+      padding: 10px 12px; overflow-x: auto; font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 10px; line-height: 1.45;
+    }
+    code { font-family: 'JetBrains Mono', Consolas, monospace; font-size: 11.5px; background-color: #f0f2f5; padding: 2px 4px; border-radius: 4px; }
+    pre code { background: transparent; padding: 0; font-size: 10px; }
+    .note-box { background-color: #fff8c5; border-left: 4px solid #9a6700; padding: 10px 14px; margin: 12px 0; font-size: 12.5px; page-break-inside: avoid; }
+    .info-box { background-color: #f0f7ff; border-left: 4px solid #0969da; padding: 10px 14px; margin: 12px 0; font-size: 12.5px; page-break-inside: avoid; }
+  </style>
+</head>
+<body>
+
+  <!-- TRANG BÌA -->
+  <div class="cover-page">
+    <div class="cover-org">BÁO CÁO THIẾT KẾ KỸ THUẬT PHẦN MỀM (ISO/IEC/IEEE 29148:2018)</div>
+    <div class="cover-title">ĐẶC TẢ YÊU CẦU PHẦN MỀM (SRS)</div>
+    <div class="cover-subtitle">Dự án: Tích hợp Hợp đồng thông minh Escrow và Ký điện tử không lưu khóa vào Sàn Slopee</div>
+    <table class="cover-meta-table">
+      <tr><td>Mã tài liệu:</td><td>SRS-SLOPEE-MVP-01</td></tr>
+      <tr><td>Phiên bản:</td><td>v5.3 (Kế hoạch 10 tuần - Bản hoàn thiện, thanh toán gom nhiều shop, chuyển VND)</td></tr>
+      <tr><td>Công nghệ:</td><td>Python Flask / MySQL 8.0 / React (ethers.js) / Solidity (Anvil)</td></tr>
+      <tr><td>Kiến trúc:</td><td>Hexagonal Architecture + Event-driven Indexer</td></tr>
+      <tr><td>Tài liệu đi kèm:</td><td>BRD-SLOPEE-MVP-01 v5.3; SDD-SLOPEE-MVP-01 v1.2</td></tr>
+    </table>
+  </div>
+
+  <h1>0. LỊCH SỬ THAY ĐỔI (v4.1 &rarr; v5.0 &rarr; v5.1 &rarr; v5.2 &rarr; v5.3)</h1>
+  <p>Bảng dưới là các thay đổi của v5.0 so với v4.1; các thay đổi của v5.1, v5.2 và v5.3 nằm ngay sau bảng.</p>
+  <table>
+    <tr><th style="width:5%">#</th><th>Thay đổi</th><th style="width:18%">Liên quan</th></tr>
+    <tr><td>1</td><td>Thêm <code>disputedAt</code> và hàm <code>arbitratorForceResolve</code> để hiện thực Dispute Timeout (v4.1 khai báo hằng số nhưng chưa có hàm).</td><td>BR-05</td></tr>
+    <tr><td>2</td><td>Thêm <code>deadline</code> vào chữ ký <code>DisputeResolution</code>; mỗi chữ ký có hạn dùng.</td><td>BR-04</td></tr>
+    <tr><td>3</td><td>Nạp tiền phải kèm báo giá EIP-712 do sàn ký (<code>OrderQuote</code>), ràng buộc mã đơn, ví Buyer, ví Merchant, token, số tiền, <code>docHash</code>.</td><td>BR-06</td></tr>
+    <tr><td>4</td><td>Chữ ký tranh chấp được tính theo "bên" (Buyer / Merchant / Trọng tài), không theo địa chỉ; hai địa chỉ cùng vai Trọng tài chỉ là một phiếu. Cấm Trọng tài làm Buyer/Merchant.</td><td>BR-04</td></tr>
+    <tr><td>5</td><td>Thêm sổ chờ rút (pull-payment) khi người nhận ETH từ chối nhận; từ chối token phí-khi-chuyển (fee-on-transfer).</td><td>BR-05</td></tr>
+    <tr><td>6</td><td>Thêm UC-00 liên kết ví, UC-01 tạo đơn và báo giá, quy đổi VND sang token; làm rõ khóa vận hành của sàn.</td><td>BR-01, 07, 08</td></tr>
+    <tr><td>7</td><td>Bổ sung bảng CSDL: <code>user_wallets</code>, <code>wallet_nonces</code>, <code>order_quotes</code>, <code>dispute_resolutions</code>, <code>dispute_signatures</code>, <code>indexer_cursor</code>, <code>platform_settings</code>; mở rộng <code>orders</code>. Đổi trạng thái <code>CREATED</code> thành <code>PENDING_PAYMENT</code> (trạng thái chỉ có ở sàn), thêm <code>EXPIRED</code>.</td><td>BR-09</td></tr>
+    <tr><td>8</td><td>Sửa "97%/3%" thành "theo <code>feeBps</code>"; bổ sung mô hình tin cậy, danh sách API, kế hoạch kiểm thử, ma trận truy vết, lộ trình có cột mốc và phân công theo vai trò.</td><td>BR-02</td></tr>
+  </table>
+
+  <h3>Thay đổi trong v5.1</h3>
+  <table>
+    <tr><th style="width:5%">#</th><th>Thay đổi</th><th style="width:18%">Liên quan</th></tr>
+    <tr><td>9</td><td>Thời hạn tranh chấp theo nhóm hàng: thêm <code>disputeTimeout</code> vào báo giá <code>OrderQuote</code>, lưu trong đơn, giới hạn 7-90 ngày; <code>arbitratorForceResolve</code> dùng giá trị của từng đơn thay cho hằng số 30 ngày.</td><td>BR-05, BR-10</td></tr>
+    <tr><td>10</td><td>Thêm bảng <code>category_policies</code>, cột <code>category_code</code> và <code>dispute_timeout</code> ở <code>orders</code>, API chính sách nhóm hàng; hạn chữ ký phán quyết bị chặn trên bởi <code>disputedAt + disputeTimeout</code>.</td><td>BR-10</td></tr>
+    <tr><td>11</td><td>Thêm cấu hình Foundry (<code>foundry.toml</code>: solc 0.8.20, optimizer, <code>via_ir</code>, remappings) ở mục 10.2.</td><td>Môi trường</td></tr>
+    <tr><td>12</td><td>Phân công cho nhóm 3 người với dự phòng chéo (mục 11); thêm ca kiểm thử T-20, T-21, I-04.</td><td>AC-12</td></tr>
+  </table>
+
+  <h3>Thay đổi trong v5.2</h3>
+  <table>
+    <tr><th style="width:5%">#</th><th>Thay đổi</th><th style="width:18%">Liên quan</th></tr>
+    <tr><td>13</td><td>Thêm <code>buyer</code> và <code>feeBps</code> vào <code>Quote</code> và <code>OrderQuote</code> (struct ABI và kiểu EIP-712 trùng nhau). <code>defaultFeeBps</code> trở thành trần phí on-chain; phí của đơn chốt trong báo giá và phải không vượt trần (<code>require(q.feeBps &lt;= defaultFeeBps)</code>, <code>require(q.buyer == msg.sender)</code>).</td><td>BR-02, BR-06, AC-13</td></tr>
+    <tr><td>14</td><td><code>resolveDispute</code> ép <code>deadline &lt; disputedAt + disputeTimeout</code>; backend ký <code>deadline = min(now_chain + TTL, disputedAt + disputeTimeout - 1)</code>, bỏ điểm giao nhau với <code>arbitratorForceResolve</code> tại đúng mốc timeout.</td><td>BR-04, BR-05</td></tr>
+    <tr><td>15</td><td>Thay việc mở rộng bảng <code>orders</code> bằng bảng 1-1 <code>order_web3</code>; đổi mọi khóa sang <code>VARCHAR(36)</code> cho khớp UUID của Slopee; mốc thời gian chuỗi lưu <code>BIGINT</code>; thêm <code>chain_events.block_timestamp</code>, <code>tx_outbox</code>, <code>onchain_id_seq</code>, <code>pending_balances</code>, <code>shipper_assignments</code>, <code>category_policy_map</code>; đồng bộ trạng thái ngược sang <code>orders</code> cũ (mục 5.1).</td><td>BR-09, BR-10</td></tr>
+    <tr><td>16</td><td>Tách đồng hồ <code>now_system()</code> và <code>now_chain()</code>; Anvil chạy với <code>--block-time 2</code>.</td><td>BR-05, BR-06</td></tr>
+    <tr><td>17</td><td>Thêm vai trò <code>shipper</code> vào <code>users.role</code> và quan hệ Shipper-đơn; MVP chặn thanh toán Web3 khi giỏ có nhiều shop; giá và tổng tiền đơn Web3 là VND số nguyên.</td><td>BR-03, BR-06, BR-08</td></tr>
+    <tr><td>18</td><td>Thêm mục 15: điều kiện nền tảng và Giai đoạn 0 (xác thực, phân quyền, sửa các lỗi bảo mật của Slopee) phải xong trước khi tích hợp.</td><td>BR-01, BR-07</td></tr>
+    <tr><td>19</td><td>Thêm ca kiểm thử T-22 đến T-24, I-05, I-06, A-01 đến A-07; sửa T-08, T-15, T-21; thêm AC-13 ở BRD.</td><td>AC-13</td></tr>
+  </table>
+
+  <h3>Thay đổi trong v5.3</h3>
+  <table>
+    <tr><th style="width:5%">#</th><th>Thay đổi</th><th style="width:18%">Liên quan</th></tr>
+    <tr><td>20</td><td>Thanh toán gom: thêm <code>depositEscrowBatch</code> (nguyên tử, tối đa 5 đơn, một token, một lần chuyển token). Mọi kiểm tra của <code>depositEscrow</code> dùng chung một hàm nội bộ <code>_acceptQuote</code> nên không có đường nạp yếu hơn; mã đơn trùng trong cùng lô bị từ chối.</td><td>BR-11, BR-06</td></tr>
+    <tr><td>21</td><td>Bỏ việc chặn giỏ nhiều shop: giỏ được tách thành một đơn cho mỗi shop (báo giá, mã đơn on-chain, thời hạn riêng), thanh toán gom với đúng hai lần xác nhận ví; thêm bảng <code>checkout_groups</code>, cột <code>order_web3.checkout_group_id</code>, API theo lô.</td><td>BR-11, AC-14</td></tr>
+    <tr><td>22</td><td>Toàn bộ Slopee dùng VND số nguyên (cột tiền <code>DECIMAL(15,0)</code>, định dạng VND ở giao diện, không còn USD); thêm P0-07.</td><td>BR-08</td></tr>
+    <tr><td>23</td><td>Chốt cơ chế xác thực bằng token ký (P0-01). Hai lỗi S-08 và S-13 đã được kiểm chứng; bổ sung phát hiện <code>reviews</code> bản đầu thiếu <code>UNIQUE(userId, productId)</code>.</td><td>Mục 15</td></tr>
+    <tr><td>24</td><td>Thêm ca kiểm thử T-25 đến T-34, I-07, E-07.</td><td>AC-14</td></tr>
+    <tr><td>25</td><td>Giữ nguyên stack frontend hiện có (React 19, JavaScript, không TypeScript, không TanStack Query), chỉ thêm <code>ethers</code> v6; thêm yêu cầu client API chung và route guard (mục 8); thêm kiểm thử frontend F-01 đến F-06, chuyển bộ test sẵn có và CI (mục 12.3); thêm P0-08.</td><td>Mục 8, 12, 15</td></tr>
+  </table>
+
+  <h1>1. PHẠM VI, ĐỐI TƯỢNG VÀ THUẬT NGỮ</h1>
+  <p>Tài liệu mô tả yêu cầu kỹ thuật cho mô-đun Web3 tích hợp vào sàn Slopee: smart contract escrow, dịch vụ đồng bộ sự kiện (indexer), các API bổ sung của Flask và các màn hình React. Phần nghiệp vụ được quy định trong BRD-SLOPEE-MVP-01 v5.3; mỗi yêu cầu trong tài liệu này dẫn chiếu mã quy tắc nghiệp vụ (BR-xx) tương ứng.</p>
+  <table>
+    <tr><th style="width:20%">Thuật ngữ</th><th>Giải thích</th></tr>
+    <tr><td>orderId (on-chain)</td><td>Số nguyên 256-bit định danh đơn trên contract, do sàn cấp, ánh xạ 1-1 với <code>orders.id</code> (UUID) của Slopee.</td></tr>
+    <tr><td>Quote (báo giá)</td><td>Cấu trúc dữ liệu EIP-712 do sàn ký, cho phép Buyer nạp tiền cho đúng một đơn.</td></tr>
+    <tr><td>Bên (party)</td><td>Một trong ba vai trò tham gia phân xử: Buyer, Merchant, Arbitrator.</td></tr>
+    <tr><td>MockUSD</td><td>ERC-20 giả lập (6 chữ số thập phân, đã chốt) dùng làm đồng tiền mặc định.</td></tr>
+    <tr><td>Nhóm hàng</td><td>Phân loại dùng để tra chính sách <code>inspectionDuration</code> và <code>disputeTimeout</code> (bảng <code>category_policies</code>). Danh mục sản phẩm của Slopee được gán vào nhóm qua <code>category_policy_map</code>.</td></tr>
+    <tr><td>Đồng hồ chuỗi (<code>now_chain</code>)</td><td><code>max(đồng hồ hệ thống, thời gian block mới nhất)</code>, dùng cho mọi hạn so với <code>block.timestamp</code>; <code>now_system</code> chỉ dùng cho nonce liên kết ví, phiên đăng nhập và giới hạn tần suất.</td></tr>
+    <tr><td>Lô thanh toán (checkout group)</td><td>Tập các đơn con (mỗi shop một đơn) được nạp trong một giao dịch <code>depositEscrowBatch</code>; nguyên tử, tối đa 5 đơn, một token.</td></tr>
+    <tr><td>Giai đoạn 0</td><td>Nhóm việc nền tảng (xác thực, phân quyền, sửa lỗi bảo mật Slopee) bắt buộc xong trước khi tích hợp Web3 (mục 15).</td></tr>
+    <tr><td>Relayer</td><td>Dịch vụ của sàn gửi giao dịch hộ (ví dụ <code>confirmDelivery</code>, nộp chữ ký tranh chấp); không có quyền di chuyển tiền ngoài các hàm công khai của contract.</td></tr>
+  </table>
+
+  <h1>2. KIẾN TRÚC TỔNG THỂ &amp; STACK CÔNG NGHỆ</h1>
+  <p>Hệ thống kết hợp phần lõi Web2 hiện có của Slopee (Flask + MySQL) với mô-đun Web3 (smart contract trên Anvil) theo kiến trúc không xâm lấn:</p>
+
+  <pre><code>[ REACT FRONTEND (ethers.js + MetaMask) ]
+       │                            ▲
+       │ 1. REST API                │ 5. Polling trạng thái đơn
+       ▼                            │
+[ FLASK BACKEND (Python) ] ─────────┴──► [ MYSQL (Slopee DB) ]
+   │  ▲  │                                      ▲
+   │  │  └─ Dịch vụ ký của sàn (báo giá,        │ 4. Ghi idempotent
+   │  │     Trọng tài) + Relayer (Shipper)      │    (tx_hash, log_index)
+   │  │                                         │
+   ▼  │ 2. Tx của Relayer / chữ ký người dùng   │
+[ ANVIL EVM CHAIN ] ─────────────────► [ PYTHON INDEXER (web3.py) ]
+  (SlopeeEscrowMaster, MockUSD)    3. Đọc sự kiện on-chain theo con trỏ block</code></pre>
+
+  <h2>2.1. Thành phần và trách nhiệm</h2>
+  <table>
+    <tr><th style="width:22%">Thành phần</th><th>Trách nhiệm</th></tr>
+    <tr><td>Smart Contract</td><td>Giữ tiền, ép luật chuyển trạng thái, chia phí, xác minh chữ ký báo giá và phán quyết. Là nguồn sự thật về tiền (BR-09).</td></tr>
+    <tr><td>Flask Backend</td><td>Xác thực và phân quyền người dùng bằng token ký (xây mới, mục 15), liên kết ví, tính giá và phát hành báo giá, quản lý đề xuất tranh chấp và chữ ký, relayer cho Shipper, API đọc trạng thái.</td></tr>
+    <tr><td>Indexer</td><td>Lắng nghe sự kiện, cập nhật <code>order_web3</code> (và đồng bộ bảng <code>orders</code> cũ), <code>dispute_resolutions</code>, kiểm tra khớp với dữ liệu sàn, lưu con trỏ block.</td></tr>
+    <tr><td>React Frontend</td><td>Kết nối MetaMask, gửi giao dịch nạp tiền (approve + deposit), mở khóa sớm, khiếu nại, ký EIP-712; màn hình Buyer, Merchant, Shipper, Admin.</td></tr>
+  </table>
+
+  <h2>2.2. Khóa và cấu hình môi trường</h2>
+  <table>
+    <tr><th style="width:26%">Khóa / cấu hình</th><th>Mục đích</th><th style="width:26%">Nơi lưu</th></tr>
+    <tr><td><code>QUOTE_SIGNER_KEY</code></td><td>Ký báo giá (<code>QUOTE_SIGNER_ROLE</code>)</td><td>Biến môi trường</td></tr>
+    <tr><td><code>ARBITRATOR_KEY</code></td><td>Ký phán quyết (<code>ARBITRATOR_ROLE</code>)</td><td>Biến môi trường</td></tr>
+    <tr><td><code>SHIPPER_KEY</code></td><td>Gửi <code>confirmDelivery</code> (<code>SHIPPER_ROLE</code>)</td><td>Biến môi trường</td></tr>
+    <tr><td><code>FEE_RECIPIENT</code></td><td>Địa chỉ nhận phí (chỉ cần địa chỉ công khai)</td><td>Cấu hình triển khai</td></tr>
+    <tr><td><code>FX_VND_PER_TOKEN</code>, <code>QUOTE_TTL_SECONDS</code>, <code>DISPUTE_SIG_TTL_SECONDS</code>, <code>CONFIRMATIONS</code>, <code>PLATFORM_FEE_BPS</code> (mặc định 300), <code>AUTH_TOKEN_TTL_SECONDS</code></td><td>Tham số vận hành. Phí báo giá = <code>min(PLATFORM_FEE_BPS, defaultFeeBps on-chain)</code></td><td>Bảng <code>platform_settings</code></td></tr>
+    <tr><td><code>SECRET_KEY</code></td><td>Ký token phiên đăng nhập</td><td>Biến môi trường, bắt buộc, không có giá trị mặc định</td></tr>
+    <tr><td>Chính sách theo nhóm hàng (<code>inspection_duration</code>, <code>dispute_timeout</code>)</td><td>Thời hạn kiểm tra và thời hạn tranh chấp của từng nhóm hàng</td><td>Bảng <code>category_policies</code></td></tr>
+  </table>
+  <div class="note-box">Bốn khóa của sàn phải khác nhau và không được ghi vào CSDL, nhật ký hay kho mã nguồn; <code>SECRET_KEY</code> là bí mật riêng, cũng không được ghi vào mã nguồn. Không có khóa của Buyer hoặc Merchant ở bất kỳ nơi nào của hệ thống (BR-01).</div>
+
+  <h1>3. PHÂN QUYỀN</h1>
+  <table>
+    <tr><th>Hành động</th><th>Buyer</th><th>Merchant</th><th>Shipper</th><th>Arbitrator</th><th>Admin</th><th>Bất kỳ ai</th></tr>
+    <tr><td><code>depositEscrow</code> (cần báo giá)</td><td>Có</td><td>-</td><td>-</td><td>Không</td><td>-</td><td>-</td></tr>
+    <tr><td><code>depositEscrowBatch</code> (mỗi đơn một báo giá)</td><td>Có</td><td>-</td><td>-</td><td>Không</td><td>-</td><td>-</td></tr>
+    <tr><td><code>confirmDelivery</code></td><td>-</td><td>-</td><td>Có</td><td>-</td><td>-</td><td>-</td></tr>
+    <tr><td><code>earlyRelease</code></td><td>Có</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+    <tr><td><code>releaseAfterInspection</code></td><td>Có</td><td>Có</td><td>Có</td><td>Có</td><td>Có</td><td>Có (sau hạn)</td></tr>
+    <tr><td><code>raiseDispute</code> (trong hạn)</td><td>Có</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>
+    <tr><td><code>resolveDispute</code> (cần 2 chữ ký)</td><td>Nộp</td><td>Nộp</td><td>Nộp</td><td>Nộp</td><td>Nộp</td><td>Nộp</td></tr>
+    <tr><td><code>arbitratorForceResolve</code> (sau <code>disputeTimeout</code>)</td><td>-</td><td>-</td><td>-</td><td>Có</td><td>-</td><td>-</td></tr>
+    <tr><td><code>cancelIfUnfulfilled</code> (sau 14 ngày)</td><td>Có</td><td>-</td><td>-</td><td>-</td><td>Có</td><td>-</td></tr>
+    <tr><td><code>claimPending</code></td><td colspan="6">Chủ sở hữu khoản chờ rút</td></tr>
+    <tr><td><code>setDefaultFeeBps</code> (trần phí), <code>setFeeRecipient</code></td><td>-</td><td>-</td><td>-</td><td>-</td><td>Có</td><td>-</td></tr>
+  </table>
+
+  <p>Bảng trên là quyền trên contract. Ở tầng API, bốn vai trò tài khoản Slopee là <code>user</code> (Buyer), <code>seller</code> (Merchant), <code>shipper</code> và <code>admin</code>; vai trò Trọng tài là dịch vụ ký phía máy chủ, không phải tài khoản đăng nhập. Mọi API Web3 kiểm vai trò và quyền sở hữu từ token phiên (mục 15).</p>
+
+  <h1>4. ĐẶC TẢ CA SỬ DỤNG (USE CASES)</h1>
+
+  <h3>UC-00: Liên kết ví với tài khoản Slopee (BR-07)</h3>
+  <ul>
+    <li><strong>Tác nhân:</strong> Buyer, Merchant. <strong>Tiền điều kiện:</strong> đã đăng nhập tài khoản Slopee (có token phiên hợp lệ, mục 15), đã cài MetaMask. Mã tài khoản lấy từ token, không nhận từ thân yêu cầu.</li>
+    <li><strong>Luồng chính:</strong>
+      <ol>
+        <li>Người dùng bấm "Kết nối ví"; Frontend lấy địa chỉ ví từ MetaMask.</li>
+        <li>Frontend gọi <code>POST /api/wallet/nonce</code>; Backend tạo nonce dùng một lần (hết hạn sau 5 phút) và thông điệp chuẩn: tên miền, địa chỉ, mã tài khoản, nonce, chainId, thời điểm phát hành và hết hạn.</li>
+        <li>MetaMask yêu cầu ký thông điệp (<code>personal_sign</code>), không tốn gas.</li>
+        <li>Frontend gửi chữ ký qua <code>POST /api/wallet/link</code>; Backend khôi phục địa chỉ ký, so khớp ví, kiểm tra nonce chưa dùng và còn hạn, rồi lưu <code>user_wallets</code>.</li>
+      </ol>
+    </li>
+    <li><strong>Luồng thay thế:</strong> nonce hết hạn hoặc đã dùng, chữ ký sai, ví đã liên kết với tài khoản khác &rarr; từ chối, không thay đổi dữ liệu. Đổi ví: ví cũ chuyển <code>is_active = 0</code>, yêu cầu ký lại với ví mới.</li>
+  </ul>
+
+  <h3>UC-01: Tạo đơn và nhận báo giá (BR-06, BR-08)</h3>
+  <ul>
+    <li><strong>Tiền điều kiện:</strong> Buyer và Merchant đều đã liên kết ví (UC-00); sản phẩm bật chế độ thanh toán Web3; giỏ hàng có thể gồm sản phẩm của nhiều shop (tối đa 5 shop mỗi lần thanh toán, một token); giá và tổng tiền là VND số nguyên.</li>
+    <li><strong>Luồng chính:</strong>
+      <ol>
+        <li>Buyer chọn "Thanh toán Web3 Escrow" ở bước thanh toán.</li>
+        <li>Backend nhóm các mặt hàng theo shop, tạo một lô thanh toán (<code>checkout_groups</code>) và với mỗi shop tạo một đơn trong <code>orders</code> (trạng thái <code>pending</code>) cùng <code>order_web3</code> (<code>PENDING_PAYMENT</code>, chung <code>checkout_group_id</code>), giữ chỗ tồn kho, cấp <code>onchain_order_id</code> riêng, quy đổi giá VND sang số lượng token theo <code>FX_VND_PER_TOKEN</code> (làm tròn lên, đơn vị nhỏ nhất của token), tra nhóm chính sách của danh mục sản phẩm qua <code>category_policy_map</code> (danh mục chưa ánh xạ dùng nhóm mặc định) rồi bảng <code>category_policies</code> để lấy <code>inspectionDuration</code> và <code>disputeTimeout</code> (đơn nhiều nhóm hàng: lấy giá trị lớn nhất của mỗi thời hạn; không xác định được nhóm thì dùng nhóm mặc định), tính <code>docHash</code> = keccak256 của bản tóm tắt đơn hàng chuẩn hóa (mã đơn, danh sách hàng, giá, thời điểm); đọc trần phí <code>defaultFeeBps</code> trên chuỗi và đặt <code>feeBps = min(PLATFORM_FEE_BPS, trần)</code>.</li>
+        <li>Backend ký một <code>OrderQuote</code> (EIP-712, gồm <code>buyer</code> và <code>feeBps</code>) cho từng shop bằng khóa báo giá, tất cả cùng hạn dùng = <code>now_chain + QUOTE_TTL_SECONDS</code> (mặc định 15 phút). Số token của mỗi shop làm tròn lên riêng và <code>total_amount_raw</code> là tổng các số đó, để khớp đúng tổng mà contract thu, lưu vào <code>order_quotes</code> và trả cho Frontend.</li>
+      </ol>
+    </li>
+    <li><strong>Luồng thay thế:</strong> báo giá hết hạn trước khi nạp tiền &rarr; đơn chuyển <code>EXPIRED</code> (tác vụ nền quét định kỳ); Buyer có thể yêu cầu báo giá mới, cấp lại báo giá cho cả lô, giữ nguyên các <code>onchain_order_id</code> chỉ khi contract trả trạng thái <code>NONE</code> cho từng mã (kiểm tra trực tiếp trên chuỗi, không chỉ dựa vào CSDL vì Indexer có thể trễ). Khi đơn <code>EXPIRED</code> thì trả lại tồn kho. Nếu Admin hạ trần phí khiến báo giá cũ không còn nạp được (<code>FEE_CAP_CHANGED</code>), backend cấp báo giá mới với phí mới.</li>
+  </ul>
+
+  <h3>UC-02: Buyer ký quỹ On-chain (Deposit Escrow)</h3>
+  <ul>
+    <li><strong>Tiền điều kiện:</strong> có báo giá còn hạn; ví Buyer kết nối mạng Anvil, đủ số dư token và ETH trả gas.</li>
+    <li><strong>Luồng chính (MockUSD):</strong>
+      <ol>
+        <li>Frontend gọi <code>approve(escrow, total_amount_raw)</code> với tổng của cả giỏ trên MockUSD (MetaMask yêu cầu xác nhận lần 1).</li>
+        <li>Frontend gọi <code>depositEscrowBatch(quotes, quoteSigs)</code> (xác nhận lần 2); giỏ một shop dùng cùng đường này với một phần tử.</li>
+        <li>Contract kiểm tra từng báo giá, thu tổng tiền bằng đúng một lần chuyển token, ghi từng đơn ở trạng thái <code>LOCKED</code> và phát một <code>OrderCreated</code> cho mỗi đơn. Cả lô thành công hoặc thất bại cùng nhau.</li>
+        <li>Indexer bắt sự kiện, đối chiếu với dữ liệu sàn, cập nhật <code>order_web3.status = LOCKED</code> (và <code>orders.status = paid</code>) cho từng đơn, kèm <code>deposit_tx_hash</code> (chung một giao dịch cho cả lô), rồi xóa các <code>cartItems</code> của sản phẩm thuộc đơn đó.</li>
+        <li>Frontend nhận trạng thái mới qua polling <code>GET /api/orders/:code/status</code>.</li>
+      </ol>
+    </li>
+    <li><strong>Luồng ETH (nếu còn thời gian):</strong> token = <code>address(0)</code>, gửi kèm <code>msg.value = amount</code>, không cần <code>approve</code>.</li>
+    <li><strong>Luồng lỗi:</strong> báo giá hết hạn, sai người nạp, mã đơn đã tồn tại, sai số tiền ETH, thiếu allowance, phí trong báo giá vượt trần on-chain, ví gửi khác <code>buyer</code> trong báo giá, mã đơn trùng nhau trong lô, bất kỳ báo giá nào trong lô không hợp lệ &rarr; cả giao dịch revert, không đơn nào được tạo; Frontend hiển thị lý do và cho phép yêu cầu báo giá mới.</li>
+  </ul>
+
+  <h3>UC-03: Shipper xác nhận giao hàng (BR-03)</h3>
+  <ul>
+    <li><strong>Ràng buộc:</strong> chỉ ví có <code>SHIPPER_ROLE</code> gọi được <code>confirmDelivery</code>. Trong MVP, tài khoản có vai trò <code>shipper</code> (giá trị mới của <code>users.role</code>) trên cổng Slopee thao tác, Backend (relayer) ký bằng <code>SHIPPER_KEY</code> thay mặt.</li>
+    <li><strong>Luồng chính:</strong>
+      <ol>
+        <li>Shipper bấm "Xác nhận phát hàng thành công" (<code>POST /api/shipper/orders/:code/deliver</code>); Backend kiểm tra đơn <code>LOCKED</code> và đơn được gán cho Shipper đó trong <code>shipper_assignments</code>.</li>
+        <li>Relayer gọi <code>confirmDelivery(orderId)</code>; contract ghi <code>deliveredAt = block.timestamp</code>, chuyển <code>DELIVERED</code>, phát <code>OrderDelivered</code>.</li>
+        <li>Indexer cập nhật <code>delivered_at</code>, trạng thái; Backend gửi thông báo cho Buyer kèm hạn khiếu nại.</li>
+      </ol>
+    </li>
+  </ul>
+
+  <h3>UC-04: Giải ngân tự động &amp; Mở khóa sớm (BR-02, BR-03)</h3>
+  <ul>
+    <li><strong>Kịch bản 1 (Mở khóa sớm):</strong> Buyer bấm "Đã nhận hàng" &rarr; <code>earlyRelease(orderId)</code> &rarr; Merchant nhận <code>amount - feeAmount</code>, ví thu phí nhận <code>feeAmount = amount * feeBps / 10000</code> (<code>feeBps</code> chốt trong báo giá, không vượt trần on-chain, mặc định 300).</li>
+    <li><strong>Kịch bản 2 (Hết hạn kiểm tra):</strong> khi <code>block.timestamp &gt;= deliveredAt + inspectionDuration</code> và đơn vẫn <code>DELIVERED</code>, bất kỳ ai gọi <code>releaseAfterInspection(orderId)</code>. Một tác vụ nền của sàn tự gọi hàm này cho các đơn đến hạn (không bắt buộc, vì ai cũng có thể gọi).</li>
+    <li><strong>Hậu điều kiện:</strong> trạng thái <code>COMPLETED</code>, phát <code>OrderCompleted(orderId, netPayout, feeAmount)</code>.</li>
+    <li><strong>Trường hợp đặc biệt:</strong> nếu ví Merchant là contract từ chối nhận ETH, phần của người đó được ghi vào <code>pendingWithdrawals</code> và sự kiện <code>PayoutDeferred</code>; người đó gọi <code>claimPending</code> sau.</li>
+  </ul>
+
+  <h3>UC-05: Buyer khiếu nại (BR-03, BR-04)</h3>
+  <ul>
+    <li><strong>Tiền điều kiện:</strong> đơn <code>DELIVERED</code> và <code>block.timestamp &lt; deliveredAt + inspectionDuration</code>.</li>
+    <li><strong>Luồng chính:</strong> Buyer bấm "Yêu cầu trả hàng / Khiếu nại", nhập lý do và đường dẫn bằng chứng (lưu ở sàn) &rarr; <code>raiseDispute(orderId)</code> &rarr; trạng thái <code>DISPUTED</code>, ghi <code>disputedAt</code>, phát <code>OrderDisputed</code>. Tiền bị đóng băng.</li>
+    <li><strong>Luồng lỗi:</strong> gọi sau hạn kiểm tra hoặc không phải Buyer &rarr; revert.</li>
+  </ul>
+
+  <h3>UC-06: Phân xử tranh chấp bằng 2/3 chữ ký EIP-712 (BR-04)</h3>
+  <ul>
+    <li><strong>Tác nhân:</strong> Admin, Buyer, Merchant.</li>
+    <li><strong>Luồng chính:</strong>
+      <ol>
+        <li>Admin thẩm định bằng chứng và chọn phán quyết: <code>payoutTo</code> = Buyer (hoàn tiền) hoặc Merchant (giải ngân). Backend đọc <code>disputeNonces(orderId)</code> từ contract, đặt <code>deadline</code> = min(<code>now_chain</code> + <code>DISPUTE_SIG_TTL_SECONDS</code> (mặc định 7 ngày), <code>disputedAt + disputeTimeout - 1</code>) để chữ ký luôn hết hạn trước khi Trọng tài có quyền xử đơn phương; contract cũng từ chối mọi chữ ký có <code>deadline</code> không nhỏ hơn <code>disputedAt + disputeTimeout</code>; tạo bản ghi <code>dispute_resolutions</code> trạng thái <code>PROPOSED</code>.</li>
+        <li>Backend ký phán quyết bằng <code>ARBITRATOR_KEY</code> và lưu chữ ký vai Arbitrator (<code>dispute_signatures</code>).</li>
+        <li>Buyer và Merchant xem đề xuất. Bên đồng ý ký bằng MetaMask (<code>eth_signTypedData_v4</code>, không tốn gas); Backend khôi phục địa chỉ ký, kiểm tra trùng với ví đã liên kết của bên đó và lưu chữ ký.</li>
+        <li>Khi có ít nhất 2 chữ ký của 2 bên khác nhau, trạng thái <code>READY</code>. Vì chữ ký Trọng tài đã có từ bước 2, một chữ ký hợp lệ của Buyer hoặc Merchant là đủ; giao diện phải cảnh báo rõ rằng việc ký cho phép bất kỳ ai thi hành ngay. Bất kỳ ai (mặc định bên được lợi, hoặc relayer của sàn) nộp <code>resolveDispute(orderId, payoutTo, deadline, sig1, sig2)</code>.</li>
+        <li>Contract kiểm tra, rồi hoàn 100% cho Buyer hoặc giải ngân cho Merchant (trừ phí theo BR-02), phát <code>OrderRefunded</code> hoặc <code>OrderCompleted</code>, rồi <code>DisputeResolved</code>. Indexer đặt <code>dispute_resolutions.status = EXECUTED</code>.</li>
+      </ol>
+    </li>
+    <li><strong>Luồng thay thế:</strong> nếu cả hai bên không ký trong hạn &rarr; chữ ký hết hạn (<code>EXPIRED</code>); Admin có thể tạo đề xuất mới. Nếu bế tắc kéo dài đến hết <code>disputeTimeout</code> của đơn &rarr; UC-07.</li>
+    <li><strong>Luồng lỗi (contract từ chối):</strong> hai chữ ký cùng một bên; chữ ký không thuộc bộ ba; <code>payoutTo</code> không phải Buyer hoặc Merchant; chữ ký hết hạn hoặc có <code>deadline</code> không nhỏ hơn <code>disputedAt + disputeTimeout</code>; sai số tiền hoặc sai nonce; đơn không ở <code>DISPUTED</code>.</li>
+  </ul>
+
+  <h3>UC-07: Timeout và thoát hiểm (BR-05)</h3>
+  <ul>
+    <li><strong>Delivery Timeout:</strong> đơn <code>LOCKED</code> quá 14 ngày kể từ <code>createdAt</code> &rarr; Buyer hoặc Admin gọi <code>cancelIfUnfulfilled</code> &rarr; hoàn 100% cho Buyer. Giao diện Buyer hiện nút này khi đến hạn; tác vụ nền của sàn có thể nhắc.</li>
+    <li><strong>Dispute Timeout:</strong> đơn <code>DISPUTED</code> quá <code>disputeTimeout</code> của đơn (7-90 ngày theo nhóm hàng, mặc định 30 ngày) kể từ <code>disputedAt</code> &rarr; Trọng tài gọi <code>arbitratorForceResolve(orderId, payoutTo)</code>; hoàn tiền Buyer hoặc giải ngân Merchant. Hành động này được ghi nhận là giả định tin cậy vào sàn (BRD mục 6).</li>
+  </ul>
+
+  <h3>UC-08: Đồng bộ sự kiện on-chain (Indexer) (BR-09)</h3>
+  <ul>
+    <li><strong>Vòng lặp:</strong> đọc <code>indexer_cursor</code>; lấy log từ <code>last_block + 1</code> đến <code>latest - CONFIRMATIONS</code> (Anvil: 0 hoặc 1; mạng thật: 12 trở lên); với mỗi log theo thứ tự (block, logIndex) trong một giao dịch CSDL: chèn <code>chain_events</code> (bỏ qua nếu trùng <code>tx_hash, log_index</code>), áp dụng thay đổi vào bảng nghiệp vụ, cập nhật con trỏ. Lỗi giữa chừng thì rollback, lần sau xử lý lại.</li>
+    <li><strong>Bảo vệ reorg:</strong> lưu hash của block cuối đã xử lý; nếu hash không còn khớp khi chạy lại, lùi con trỏ N block (mặc định 20) và xử lý lại.</li>
+    <li><strong>Đối chiếu:</strong> với <code>OrderCreated</code>, so khớp buyer, merchant, token, amount, <code>inspectionDuration</code>, <code>disputeTimeout</code>, <code>feeBps</code>, <code>docHash</code> với báo giá đã lưu; sai lệch &rarr; đặt <code>order_web3.anomaly_flag = 1</code>, ghi log cảnh báo, không tự sửa dữ liệu. Sự kiện cho đơn không tồn tại ở sàn &rarr; chỉ lưu <code>chain_events</code> và cảnh báo.</li>
+    <li><strong>Thời gian block và đồng bộ ngược:</strong> mỗi log kèm <code>block_timestamp</code> (đệm theo block, mỗi block gọi RPC một lần); mọi mốc thời gian dẫn xuất lấy từ đây, không dùng đồng hồ máy chủ. Mỗi lần đổi <code>order_web3.status</code>, Indexer cập nhật <code>orders.status</code> cũ trong cùng giao dịch theo bảng ánh xạ ở mục 5.1.</li>
+    <li><strong>Chế độ replay:</strong> tham số <code>--from-block 0 --reset</code> đặt lại các cột dẫn xuất của <code>order_web3</code> và trạng thái chiếu ở <code>orders</code> cũ rồi dựng lại từ đầu; kết quả phải khớp on-chain (AC-08).</li>
+    <li><strong>Đối soát:</strong> script đối chiếu tổng tiền các đơn đang mở theo từng token với số dư contract (AC-10).</li>
+  </ul>
+
+  <h3>UC-09: Quản trị tham số</h3>
+  <ul>
+    <li>Admin đổi <code>defaultFeeBps</code> (trần phí, tối đa 1.000) và <code>feeRecipient</code> qua giao dịch từ ví Admin; đổi <code>PLATFORM_FEE_BPS</code>, tỷ giá, thời hạn báo giá, thời hạn chữ ký trong <code>platform_settings</code>. Mọi thay đổi ghi lại người thực hiện và thời điểm.</li>
+    <li><strong>Quy trình đổi phí:</strong> khi tăng phí, đổi trần trên chuỗi trước rồi mới đổi <code>PLATFORM_FEE_BPS</code>; khi hạ phí, đổi <code>PLATFORM_FEE_BPS</code> trước rồi hạ trần. Báo giá chưa dùng có phí cao hơn trần mới sẽ bị contract từ chối và Buyer nhận báo giá mới (<code>FEE_CAP_CHANGED</code>).</li>
+    <li>Admin gán từng danh mục sản phẩm vào một nhóm chính sách (<code>category_policy_map</code>); thay đổi chỉ ảnh hưởng đơn mới.</li>
+  </ul>
+
+  <h1>5. MÁY TRẠNG THÁI ĐƠN HÀNG</h1>
+  <table>
+    <tr><th>Từ trạng thái</th><th>Sự kiện / Hàm</th><th>Điều kiện</th><th>Sang trạng thái</th></tr>
+    <tr><td>(chưa có)</td><td>Backend tạo đơn</td><td>Ví đã liên kết</td><td><code>PENDING_PAYMENT</code> (chỉ ở sàn)</td></tr>
+    <tr><td><code>PENDING_PAYMENT</code></td><td>Quá hạn báo giá</td><td>Chưa có <code>OrderCreated</code></td><td><code>EXPIRED</code> (chỉ ở sàn)</td></tr>
+    <tr><td><code>PENDING_PAYMENT</code></td><td><code>depositEscrow</code></td><td>Báo giá hợp lệ</td><td><code>LOCKED</code></td></tr>
+    <tr><td><code>LOCKED</code></td><td><code>confirmDelivery</code></td><td>Có <code>SHIPPER_ROLE</code></td><td><code>DELIVERED</code></td></tr>
+    <tr><td><code>LOCKED</code></td><td><code>cancelIfUnfulfilled</code></td><td>Quá 14 ngày; Buyer hoặc Admin</td><td><code>REFUNDED</code></td></tr>
+    <tr><td><code>DELIVERED</code></td><td><code>earlyRelease</code></td><td>Buyer</td><td><code>COMPLETED</code></td></tr>
+    <tr><td><code>DELIVERED</code></td><td><code>releaseAfterInspection</code></td><td>Hết hạn kiểm tra</td><td><code>COMPLETED</code></td></tr>
+    <tr><td><code>DELIVERED</code></td><td><code>raiseDispute</code></td><td>Buyer, trong hạn kiểm tra</td><td><code>DISPUTED</code></td></tr>
+    <tr><td><code>DISPUTED</code></td><td><code>resolveDispute</code></td><td>2 chữ ký của 2 bên khác nhau, còn hạn</td><td><code>REFUNDED</code> hoặc <code>COMPLETED</code></td></tr>
+    <tr><td><code>DISPUTED</code></td><td><code>arbitratorForceResolve</code></td><td>Quá <code>disputeTimeout</code> của đơn; Trọng tài</td><td><code>REFUNDED</code> hoặc <code>COMPLETED</code></td></tr>
+  </table>
+  <p><code>COMPLETED</code> và <code>REFUNDED</code> là trạng thái cuối. Mọi cặp (trạng thái, hàm) không có trong bảng đều phải revert; bộ kiểm thử phải có ca âm cho từng cặp.</p>
+
+  <p>Các đơn cùng một lô thanh toán chỉ chung giao dịch nạp; sau đó không có quan hệ trạng thái nào giữa chúng. Mở khóa, khiếu nại, hoàn tiền, phán quyết và timeout được áp dụng riêng cho từng đơn (BR-11).</p>
+
+  <h2>5.1. Ánh xạ sang trạng thái của bảng <code>orders</code> cũ</h2>
+  <p>Giá trị ENUM của <code>orders.status</code> trong Slopee là <code>pending, paid, shipped, cancelled, received</code>; không sửa ENUM. Trạng thái Web3 là nguồn sự thật, bảng cũ chỉ là bản chiếu cho giao diện hiện có.</p>
+  <table>
+    <tr><th style="width:24%">Trạng thái Web3</th><th style="width:20%"><code>orders.status</code></th><th>Ghi chú</th></tr>
+    <tr><td><code>PENDING_PAYMENT</code></td><td><code>pending</code></td><td>Đã giữ chỗ tồn kho.</td></tr>
+    <tr><td><code>LOCKED</code></td><td><code>paid</code></td><td>Tiền đã khóa trong contract.</td></tr>
+    <tr><td><code>DELIVERED</code></td><td><code>shipped</code></td><td>-</td></tr>
+    <tr><td><code>DISPUTED</code></td><td><code>shipped</code></td><td>Giữ nguyên; giao diện cũ thêm huy hiệu vàng Khiếu nại Web3 lấy từ <code>order_web3</code> (<code>LEFT JOIN</code> trong <code>GET /api/payments/orders</code>) và khóa nút thao tác thường.</td></tr>
+    <tr><td><code>COMPLETED</code></td><td><code>received</code></td><td>-</td></tr>
+    <tr><td><code>EXPIRED</code>, <code>REFUNDED</code></td><td><code>cancelled</code></td><td>Hoàn tồn kho.</td></tr>
+  </table>
+  <p>Đường ghi trạng thái cũ <code>PUT /api/payments/orders/:id</code> phải từ chối đơn đã có dòng <code>order_web3</code> (mã <code>WEB3_ORDER_MANAGED</code>). Chỉ một hàm đồng bộ duy nhất được ghi <code>orders.status</code> của đơn Web3.</p>
+
+  <h1>6. DỮ LIỆU CHUẨN EIP-712</h1>
+  <table>
+    <tr><th style="width:20%">Thành phần</th><th>Giá trị</th></tr>
+    <tr><td>Domain</td><td><code>name = "SlopeeEscrow"</code>, <code>version = "1"</code>, <code>chainId</code> (Anvil mặc định 31337), <code>verifyingContract</code> = địa chỉ contract</td></tr>
+    <tr><td><code>OrderQuote</code></td><td><code>(uint256 orderId, address buyer, address merchant, address token, uint256 amount, uint256 inspectionDuration, uint256 disputeTimeout, uint256 feeBps, bytes32 docHash, uint256 deadline)</code> &mdash; ký bởi <code>QUOTE_SIGNER_ROLE</code>. Struct <code>Quote</code> trong ABI của <code>depositEscrow</code> có cùng danh sách và thứ tự trường.</td></tr>
+    <tr><td><code>DisputeResolution</code></td><td><code>(uint256 orderId, address payoutTo, uint256 amount, uint256 nonce, uint256 deadline)</code> &mdash; ký bởi Buyer, Merchant hoặc Arbitrator</td></tr>
+  </table>
+  <p>Chuỗi định nghĩa kiểu và thứ tự trường ở Python (eth_account), JavaScript (ethers.js) và Solidity phải giống hệt nhau. Dùng chung một tệp định nghĩa kiểu và có test chéo ngôn ngữ (băm cùng dữ liệu ở 3 nơi, kết quả phải bằng nhau).</p>
+
+  <h1>7. GIAO DIỆN PROGRAMMING (REST API)</h1>
+  <p>Mọi endpoint, trừ đăng nhập, đăng ký và danh sách sản phẩm công khai, yêu cầu token phiên trong header <code>Authorization</code> (mục 15). Định danh người dùng luôn lấy từ token, không nhận từ thân yêu cầu hay đường dẫn. <code>:code</code> là <code>orders.id</code> (UUID) của Slopee.</p>
+  <table>
+    <tr><th style="width:36%">Phương thức và đường dẫn</th><th>Mô tả</th><th style="width:18%">Quyền</th></tr>
+    <tr><td><code>POST /api/wallet/nonce</code></td><td>Cấp nonce và thông điệp liên kết ví</td><td>Đã đăng nhập</td></tr>
+    <tr><td><code>POST /api/wallet/link</code></td><td>Gửi chữ ký, liên kết ví</td><td>Đã đăng nhập</td></tr>
+    <tr><td><code>GET /api/wallet</code></td><td>Ví đang liên kết</td><td>Đã đăng nhập</td></tr>
+    <tr><td><code>POST /api/orders</code></td><td>Tạo lô thanh toán Web3 từ giỏ hàng (một hoặc nhiều shop, tối đa 5) và trả <code>checkout_group_id</code>, <code>total_amount_raw</code> cùng mảng <code>orders</code> (mỗi phần tử gồm <code>order_id</code>, <code>quote</code>, <code>signature</code>, <code>fee_bps</code>) (UC-01)</td><td>Buyer</td></tr>
+    <tr><td><code>POST /api/checkout-groups/:id/quote</code></td><td>Cấp lại báo giá cho cả lô nếu hết hạn hoặc phí đổi</td><td>Buyer của lô</td></tr>
+    <tr><td><code>GET /api/checkout-groups/:id</code></td><td>Danh sách đơn con của lô và trạng thái từng đơn</td><td>Buyer của lô</td></tr>
+    <tr><td><code>GET /api/orders/:code</code></td><td>Chi tiết đơn, giá VND, token, số tiền, hạn các mốc</td><td>Buyer, Merchant, Admin</td></tr>
+    <tr><td><code>GET /api/orders/:code/status</code></td><td>Trạng thái đơn cho polling</td><td>Buyer, Merchant, Admin</td></tr>
+    <tr><td><code>POST /api/shipper/orders/:code/deliver</code></td><td>Xác nhận giao hàng qua relayer (UC-03)</td><td>Shipper</td></tr>
+    <tr><td><code>POST /api/orders/:code/dispute-note</code></td><td>Lưu lý do và đường dẫn bằng chứng của khiếu nại (giao dịch <code>raiseDispute</code> do Buyer tự gửi)</td><td>Buyer</td></tr>
+    <tr><td><code>POST /api/admin/disputes/:code/proposal</code></td><td>Tạo đề xuất phán quyết và chữ ký Trọng tài (UC-06)</td><td>Admin</td></tr>
+    <tr><td><code>GET /api/disputes/:code</code></td><td>Đề xuất, danh sách chữ ký, trạng thái</td><td>Buyer, Merchant, Admin</td></tr>
+    <tr><td><code>POST /api/disputes/:code/signatures</code></td><td>Gửi chữ ký EIP-712 của Buyer hoặc Merchant</td><td>Buyer, Merchant</td></tr>
+    <tr><td><code>POST /api/disputes/:code/submit</code></td><td>Relayer nộp <code>resolveDispute</code> khi đủ chữ ký (tùy chọn)</td><td>Buyer, Merchant, Admin</td></tr>
+    <tr><td><code>GET /api/categories/policies</code></td><td>Danh sách nhóm hàng và thời hạn kiểm tra, thời hạn tranh chấp tương ứng (hiển thị cho Buyer và Merchant)</td><td>Đã đăng nhập</td></tr>
+    <tr><td><code>PUT /api/admin/category-policies/:code</code></td><td>Cập nhật chính sách một nhóm hàng; chỉ áp dụng cho đơn mới, kiểm tra giới hạn 1 giờ-30 ngày và 7-90 ngày</td><td>Admin</td></tr>
+    <tr><td><code>PUT /api/admin/settings</code></td><td>Cập nhật tỷ giá, hạn báo giá, hạn chữ ký</td><td>Admin</td></tr>
+    <tr><td><code>GET /api/admin/reconcile</code></td><td>Kết quả đối soát số dư contract và dữ liệu sàn</td><td>Admin</td></tr>
+    <tr><td><code>GET /api/shipper/orders</code></td><td>Danh sách đơn <code>LOCKED</code> được gán cho Shipper</td><td>Shipper</td></tr>
+    <tr><td><code>PUT /api/admin/category-policy-map/:categoryId</code></td><td>Gán danh mục sản phẩm vào nhóm chính sách</td><td>Admin</td></tr>
+    <tr><td><code>PUT /api/payments/orders/:id</code> (hiện có)</td><td>Chỉ cho chủ đơn, kiểm trạng thái hợp lệ, từ chối đơn Web3 (<code>WEB3_ORDER_MANAGED</code>)</td><td>Chủ đơn</td></tr>
+  </table>
+  <p>Quy ước lỗi: mã HTTP 4xx kèm trường <code>code</code> (ví dụ <code>UNAUTHENTICATED</code>, <code>FORBIDDEN</code>, <code>QUOTE_EXPIRED</code>, <code>FEE_CAP_CHANGED</code>, <code>WALLET_NOT_LINKED</code>, <code>BAD_SIGNATURE</code>, <code>INVALID_STATE</code>, <code>WEB3_ORDER_MANAGED</code>, <code>BATCH_TOO_LARGE</code>) và thông báo tiếng Việt cho người dùng.</p>
+
+  <h1>8. YÊU CẦU GIAO DIỆN TỐI THIỂU</h1>
+  <table>
+    <tr><th style="width:18%">Vai trò</th><th>Màn hình / chức năng bắt buộc</th></tr>
+    <tr><td>Buyer</td><td>Kết nối và liên kết ví; thanh toán Web3 (hiển thị giá VND, số token từng shop và tổng, tỷ giá, hạn báo giá, hai bước approve tổng và nạp gom); sau khi nạp, danh sách đơn con theo shop, mỗi đơn có đồng hồ đếm ngược kiểm tra riêng; nút "Đã nhận hàng", "Khiếu nại"; màn hình ký phán quyết; nút hủy khi quá hạn giao hàng.</td></tr>
+    <tr><td>Merchant</td><td>Liên kết ví nhận tiền; danh sách đơn Web3 và trạng thái; xem và ký đề xuất phán quyết; rút khoản chờ rút (nếu có).</td></tr>
+    <tr><td>Shipper</td><td>Danh sách đơn <code>LOCKED</code> được giao; nút "Xác nhận phát hàng thành công".</td></tr>
+    <tr><td>Mọi vai trò</td><td>Đăng nhập nhận token, các route được bảo vệ theo vai trò (<code>user</code>, <code>seller</code>, <code>shipper</code>, <code>admin</code>), tự chuyển về đăng nhập khi gặp 401; mọi số tiền hiển thị bằng VND qua một hàm định dạng duy nhất, không còn ký hiệu $.</td></tr>
+    <tr><td>Admin</td><td>Danh sách khiếu nại; tạo đề xuất phán quyết; theo dõi trạng thái chữ ký; cấu hình phí, tham số và chính sách theo nhóm hàng, gán danh mục cho nhóm chính sách; bảng đối soát; danh sách cảnh báo bất thường từ indexer.</td></tr>
+  </table>
+
+  <p><strong>Ràng buộc kỹ thuật frontend.</strong> Giữ stack hiện có của Slopee: React 19, JavaScript (không TypeScript), React Router 7, Vite, Vitest và Playwright. Chỉ thêm một thư viện chạy là <code>ethers</code> v6. Mọi lời gọi API đi qua một client chung (đọc địa chỉ máy chủ từ <code>VITE_API_BASE</code>, gắn header <code>Authorization</code>, xử lý 401), thay cho việc mỗi tệp <code>api/*.js</code> hardcode <code>http://localhost:5000</code>. Trạng thái đơn lấy bằng polling 2-3 giây qua một hook <code>usePolling</code> tự viết. Các trang hiện có phải đổi: <code>Checkout.jsx</code> (thêm thanh toán Web3 và nạp gom), <code>Cart.jsx</code>, <code>MyOrders.jsx</code> (đơn con theo shop, huy hiệu tranh chấp), <code>Navbar.jsx</code> (nút ví), <code>SellerDashboard.jsx</code> (giá VND số nguyên, ví nhận tiền), <code>AdminDashboard.jsx</code>; trang mới gồm liên kết ví, Shipper, ký phán quyết.</p>
+
+  <h1>9. THIẾT KẾ CƠ SỞ DỮ LIỆU MYSQL CHO MODULE BLOCKCHAIN</h1>
+  <pre><code>-- Quy ước: khóa người dùng và đơn là VARCHAR(36) (UUID) cho khớp bảng users và orders của Slopee.
+-- Charset và collation của các cột tham chiếu phải khớp cột cha (migration 001 đọc từ information_schema).
+-- Tệp migration không dùng dấu chấm phẩy trong chú thích (init_db tách câu lệnh theo dấu chấm phẩy).
+
+-- Bảng 0: thêm vai trò shipper vào cuối ENUM (thao tác chỉ đổi metadata)
+ALTER TABLE users MODIFY role ENUM('admin','seller','user','shipper') NOT NULL;
+
+-- Bảng 0b: Chuyển các cột tiền của Slopee sang VND số nguyên (P0-07)
+-- Dữ liệu cũ tính theo USD phải nhân với tỷ giá trước khi đổi kiểu
+ALTER TABLE products MODIFY unitPrice DECIMAL(15,0) NOT NULL;
+ALTER TABLE orderLines MODIFY unitPrice DECIMAL(15,0) NOT NULL;
+ALTER TABLE orders MODIFY totalAmount DECIMAL(15,0) NOT NULL DEFAULT 0;
+ALTER TABLE paymentMethods MODIFY balance DECIMAL(15,0) DEFAULT 0;
+
+-- Bảng 1: Ví đã liên kết với tài khoản (BR-07)
+CREATE TABLE IF NOT EXISTS user_wallets (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    address CHAR(42) NOT NULL,                 -- lưu dạng chữ thường để so khớp
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    linked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_wallet_address (address),
+    INDEX idx_wallet_user (user_id, is_active),
+    CONSTRAINT fk_wallet_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Bảng 2: Nonce liên kết ví (dùng một lần)
+CREATE TABLE IF NOT EXISTS wallet_nonces (
+    nonce CHAR(32) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Bảng 2b: Lô thanh toán (một lần nạp gom, tối đa 5 đơn con)
+CREATE TABLE IF NOT EXISTS checkout_groups (
+    group_id VARCHAR(36) PRIMARY KEY,
+    buyer_user_id VARCHAR(36) NOT NULL,
+    token_address CHAR(42) DEFAULT NULL,
+    total_amount_raw VARCHAR(78) NOT NULL,         -- tổng amount_raw của các đơn con
+    order_count TINYINT UNSIGNED NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_cg_count CHECK (order_count BETWEEN 1 AND 5),
+    CONSTRAINT fk_cg_buyer FOREIGN KEY (buyer_user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Bảng 3: Đơn hàng Web3, quan hệ 1-1 với orders của Slopee (không sửa bảng orders)
+CREATE TABLE IF NOT EXISTS order_web3 (
+    order_id VARCHAR(36) NOT NULL PRIMARY KEY,         -- = orders.id
+    onchain_order_id BIGINT UNSIGNED NOT NULL UNIQUE,  -- cấp từ onchain_id_seq, nhỏ hơn 2^53
+    buyer_user_id VARCHAR(36) NOT NULL,
+    merchant_user_id VARCHAR(36) NOT NULL,             -- = shops.sellerId
+    shop_id VARCHAR(36) NOT NULL,
+    checkout_group_id VARCHAR(36) NOT NULL,            -- lô thanh toán chứa đơn này
+    buyer_wallet CHAR(42) NOT NULL,
+    merchant_wallet CHAR(42) NOT NULL,
+    token_address CHAR(42) DEFAULT NULL,               -- NULL = ETH gốc, có địa chỉ = ERC-20
+    token_symbol VARCHAR(16) NOT NULL DEFAULT 'mUSD',
+    amount_raw VARCHAR(78) NOT NULL,                   -- đơn vị nhỏ nhất, lưu chuỗi
+    price_vnd BIGINT UNSIGNED NOT NULL,                -- từ orders.totalAmount, phải là số nguyên
+    fx_vnd_per_token DECIMAL(18,4) NOT NULL,           -- tỷ giá đã chốt trong báo giá
+    payment_method VARCHAR(20) NOT NULL DEFAULT 'CRYPTO_ESCROW',
+    status ENUM('PENDING_PAYMENT','EXPIRED','LOCKED','DELIVERED','DISPUTED','COMPLETED','REFUNDED')
+           NOT NULL DEFAULT 'PENDING_PAYMENT',
+    policy_code VARCHAR(32) NOT NULL DEFAULT 'GENERAL',
+    fee_bps INT UNSIGNED NOT NULL,                     -- phí chốt trong báo giá
+    inspection_duration INT UNSIGNED NOT NULL,         -- giây, chốt trong báo giá
+    dispute_timeout INT UNSIGNED NOT NULL,             -- giây, 7-90 ngày, chốt trong báo giá
+    doc_hash CHAR(66) NOT NULL,
+    deposit_tx_hash CHAR(66) DEFAULT NULL,
+    chain_created_at BIGINT UNSIGNED DEFAULT NULL,     -- giây UTC theo thời gian block
+    delivered_at BIGINT UNSIGNED DEFAULT NULL,
+    disputed_at BIGINT UNSIGNED DEFAULT NULL,
+    closed_at BIGINT UNSIGNED DEFAULT NULL,
+    anomaly_flag TINYINT(1) NOT NULL DEFAULT 0,        -- indexer phát hiện sai lệch
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_buyer (buyer_wallet),
+    INDEX idx_merchant (merchant_wallet),
+    INDEX idx_status (status),
+    INDEX idx_group (checkout_group_id),
+    CONSTRAINT chk_onchain_id CHECK (onchain_order_id < 9007199254740992),
+    CONSTRAINT chk_fee CHECK (fee_bps <= 1000),
+    CONSTRAINT fk_order_web3_group FOREIGN KEY (checkout_group_id) REFERENCES checkout_groups(group_id),
+    CONSTRAINT fk_order_web3_parent FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_order_web3_buyer FOREIGN KEY (buyer_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_order_web3_merchant FOREIGN KEY (merchant_user_id) REFERENCES users(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Bảng 4: Báo giá đã phát hành (BR-06)
+CREATE TABLE IF NOT EXISTS order_quotes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_id VARCHAR(36) NOT NULL,
+    quote_json JSON NOT NULL,                      -- các trường OrderQuote, gồm buyer và feeBps
+    signature VARCHAR(132) NOT NULL,
+    deadline BIGINT UNSIGNED NOT NULL,             -- giây, theo now_chain
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_quote_order (order_id),
+    CONSTRAINT fk_quote_order FOREIGN KEY (order_id) REFERENCES order_web3(order_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Bảng 5: Đề xuất phán quyết tranh chấp (BR-04)
+CREATE TABLE IF NOT EXISTS dispute_resolutions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_id VARCHAR(36) NOT NULL,
+    payout_to CHAR(42) NOT NULL,
+    amount_raw VARCHAR(78) NOT NULL,
+    nonce BIGINT UNSIGNED NOT NULL,                -- đọc từ disputeNonces(orderId)
+    deadline BIGINT UNSIGNED NOT NULL,             -- giây, nhỏ hơn disputedAt + disputeTimeout
+    status ENUM('PROPOSED','READY','SUBMITTED','EXECUTED','EXPIRED','CANCELLED') NOT NULL DEFAULT 'PROPOSED',
+    reason_note TEXT,                              -- ghi chú thẩm định, đường dẫn bằng chứng
+    created_by_admin VARCHAR(36) NOT NULL,
+    submitted_tx_hash CHAR(66) DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_dr_order (order_id),
+    CONSTRAINT fk_dr_order FOREIGN KEY (order_id) REFERENCES order_web3(order_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Bảng 6: Chữ ký off-chain EIP-712 của từng bên
+CREATE TABLE IF NOT EXISTS dispute_signatures (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    resolution_id BIGINT NOT NULL,
+    party ENUM('BUYER','MERCHANT','ARBITRATOR') NOT NULL,
+    signer_address CHAR(42) NOT NULL,
+    signature VARCHAR(132) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_res_party (resolution_id, party),
+    CONSTRAINT fk_sig_res FOREIGN KEY (resolution_id) REFERENCES dispute_resolutions(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Bảng 7: Nhật ký sự kiện on-chain (idempotent, chống trùng lặp)
+CREATE TABLE IF NOT EXISTS chain_events (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    tx_hash CHAR(66) NOT NULL,
+    log_index INT UNSIGNED NOT NULL,
+    event_name VARCHAR(50) NOT NULL,
+    order_id BIGINT UNSIGNED DEFAULT NULL,         -- onchain_order_id, NULL với sự kiện không gắn đơn
+    block_number BIGINT UNSIGNED NOT NULL,
+    block_hash CHAR(66) NOT NULL,
+    block_timestamp BIGINT UNSIGNED NOT NULL,      -- giây UTC, nguồn thời gian cho mọi mốc dẫn xuất
+    payload_json JSON NOT NULL,
+    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_tx_log (tx_hash, log_index),
+    INDEX idx_order (order_id),
+    INDEX idx_block (block_number)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Bảng 8: Con trỏ của indexer (chạy lại an toàn sau khi khởi động lại)
+CREATE TABLE IF NOT EXISTS indexer_cursor (
+    name VARCHAR(50) PRIMARY KEY,                  -- ví dụ escrow
+    last_block BIGINT UNSIGNED NOT NULL,
+    last_block_hash CHAR(66) NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Bảng 9: Tham số vận hành (FX_VND_PER_TOKEN, QUOTE_TTL_SECONDS, PLATFORM_FEE_BPS, ...)
+CREATE TABLE IF NOT EXISTS platform_settings (
+    setting_key VARCHAR(64) PRIMARY KEY,
+    setting_value VARCHAR(255) NOT NULL,
+    updated_by VARCHAR(36) DEFAULT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Bảng 10: Chính sách thời hạn theo nhóm hàng (BR-10)
+CREATE TABLE IF NOT EXISTS category_policies (
+    policy_code VARCHAR(32) PRIMARY KEY,           -- GENERAL, PERISHABLE, ELECTRONICS, CUSTOM_BULKY
+    display_name VARCHAR(100) NOT NULL,
+    inspection_duration INT UNSIGNED NOT NULL,     -- giây, 3600 (1 giờ) .. 2592000 (30 ngày)
+    dispute_timeout INT UNSIGNED NOT NULL,         -- giây, 604800 (7 ngày) .. 7776000 (90 ngày)
+    is_default TINYINT(1) NOT NULL DEFAULT 0,
+    updated_by VARCHAR(36) DEFAULT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT chk_inspection CHECK (inspection_duration BETWEEN 3600 AND 2592000),
+    CONSTRAINT chk_dispute_timeout CHECK (dispute_timeout BETWEEN 604800 AND 7776000)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Dữ liệu mẫu (giá trị đề xuất, nhóm chốt lại trước tuần 3)
+INSERT INTO category_policies (policy_code, display_name, inspection_duration, dispute_timeout, is_default) VALUES
+ ('PERISHABLE',  'Thực phẩm, hàng dễ hỏng',               7200,    604800,  0),
+ ('GENERAL',     'Hàng tiêu dùng thông thường',           259200,  2592000, 1),
+ ('ELECTRONICS', 'Điện tử, đồ gia dụng giá trị cao',      604800,  3888000, 0),
+ ('CUSTOM_BULKY','Hàng cồng kềnh, đặt theo yêu cầu',      1209600, 5184000, 0);
+
+-- Bảng 11: Gán danh mục sản phẩm của Slopee vào nhóm chính sách (không sửa bảng categories)
+CREATE TABLE IF NOT EXISTS category_policy_map (
+    category_id INT UNSIGNED PRIMARY KEY,
+    policy_code VARCHAR(32) NOT NULL,
+    CONSTRAINT fk_cpm_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
+    CONSTRAINT fk_cpm_policy FOREIGN KEY (policy_code) REFERENCES category_policies(policy_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Bảng 12: Nhật ký giao dịch relayer đã gửi
+CREATE TABLE IF NOT EXISTS tx_outbox (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    kind VARCHAR(30) NOT NULL,                     -- DELIVER, RELEASE, RESOLVE
+    order_id VARCHAR(36) DEFAULT NULL,
+    tx_hash CHAR(66) DEFAULT NULL,
+    status ENUM('PENDING','SENT','CONFIRMED','FAILED') NOT NULL DEFAULT 'PENDING',
+    error TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_outbox_order (order_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Bảng 13: Bộ đếm onchain_order_id đơn điệu
+CREATE TABLE IF NOT EXISTS onchain_id_seq (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB AUTO_INCREMENT=100001 DEFAULT CHARSET=utf8mb4;
+
+-- Bảng 14: Số dư chờ rút dẫn xuất từ PayoutDeferred và PendingClaimed
+CREATE TABLE IF NOT EXISTS pending_balances (
+    token_address CHAR(42) NOT NULL,               -- ETH dùng địa chỉ 0x00..00
+    address CHAR(42) NOT NULL,
+    amount_raw VARCHAR(78) NOT NULL DEFAULT '0',
+    PRIMARY KEY (token_address, address)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Bảng 15: Gán đơn cho Shipper
+CREATE TABLE IF NOT EXISTS shipper_assignments (
+    order_id VARCHAR(36) NOT NULL PRIMARY KEY,
+    shipper_user_id VARCHAR(36) NOT NULL,
+    assigned_by VARCHAR(36) DEFAULT NULL,
+    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_shipper (shipper_user_id),
+    CONSTRAINT fk_sa_order FOREIGN KEY (order_id) REFERENCES order_web3(order_id),
+    CONSTRAINT fk_sa_shipper FOREIGN KEY (shipper_user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;</code></pre>
+  <p>Bảng <code>order_web3</code> thay cho việc mở rộng <code>orders</code>: bảng <code>orders</code> của Slopee giữ nguyên, chỉ được đồng bộ trạng thái (mục 5.1). Mọi mốc thời gian lấy từ thời gian block và lưu dạng giây UTC (<code>BIGINT</code>) để replay cho kết quả giống hệt. Giữ <code>onchain_order_id</code> nhỏ hơn 2^53 và truyền dạng chuỗi hoặc <code>BigInt</code> ở JavaScript.</p>
+
+  <h2>9.1. Ánh xạ sự kiện on-chain sang cập nhật CSDL</h2>
+  <table>
+    <tr><th style="width:26%">Sự kiện</th><th>Cập nhật</th></tr>
+    <tr><td><code>OrderCreated</code></td><td>Đối chiếu báo giá đã lưu (gồm <code>feeBps</code>); <code>order_web3.status = LOCKED</code>, <code>deposit_tx_hash</code>, <code>chain_created_at</code>.</td></tr>
+    <tr><td><code>OrderDelivered</code></td><td><code>status = DELIVERED</code>, <code>delivered_at</code> theo tham số sự kiện.</td></tr>
+    <tr><td><code>OrderDisputed</code></td><td><code>status = DISPUTED</code>, <code>disputed_at</code>.</td></tr>
+    <tr><td><code>OrderCompleted</code></td><td><code>status = COMPLETED</code>, <code>closed_at</code>.</td></tr>
+    <tr><td><code>OrderRefunded</code></td><td><code>status = REFUNDED</code>, <code>closed_at</code>.</td></tr>
+    <tr><td><code>DisputeResolved</code>, <code>ArbitratorForceResolved</code></td><td>Đặt đề xuất tương ứng <code>EXECUTED</code>; ghi lại cách giải quyết.</td></tr>
+    <tr><td><code>PayoutDeferred</code>, <code>PendingClaimed</code></td><td>Cập nhật sổ chờ rút hiển thị cho người nhận.</td></tr>
+    <tr><td><code>FeeUpdated</code>, <code>FeeRecipientUpdated</code></td><td>Chỉ lưu <code>chain_events</code>.</td></tr>
+  </table>
+  <p>Một lần nạp gom phát nhiều <code>OrderCreated</code> cùng <code>tx_hash</code> và khác <code>log_index</code>; Indexer xử lý từng sự kiện độc lập như trước. Mọi cập nhật trạng thái ở bảng trên được kèm cập nhật <code>orders.status</code> cũ trong cùng giao dịch CSDL theo bảng ánh xạ mục 5.1. Các cột thời gian lấy từ <code>block_timestamp</code>.</p>
+
+  <h1>10. MÃ NGUỒN SMART CONTRACT THAM CHIẾU (OPENZEPPELIN v5.x)</h1>
+  <div class="note-box">Đây là mã tham chiếu thể hiện thiết kế. Cấu hình biên dịch dùng Solidity 0.8.20, optimizer và <code>via_ir</code> (xem mục 10.2; <code>via_ir</code> tránh lỗi "stack too deep" với struct nhiều trường), và chỉ được coi là hoàn thiện khi vượt toàn bộ kế hoạch kiểm thử ở mục 12. Đây là mã cho đồ án, chưa qua kiểm toán độc lập.</div>
+
+  <pre><code>// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+contract SlopeeEscrowMaster is AccessControl, ReentrancyGuard, EIP712 {
+    using SafeERC20 for IERC20;
+
+    bytes32 public constant SHIPPER_ROLE      = keccak256("SHIPPER_ROLE");
+    bytes32 public constant ARBITRATOR_ROLE   = keccak256("ARBITRATOR_ROLE");
+    bytes32 public constant QUOTE_SIGNER_ROLE = keccak256("QUOTE_SIGNER_ROLE");
+
+    bytes32 public constant QUOTE_TYPEHASH = keccak256(
+        "OrderQuote(uint256 orderId,address buyer,address merchant,address token,uint256 amount,uint256 inspectionDuration,uint256 disputeTimeout,uint256 feeBps,bytes32 docHash,uint256 deadline)"
+    );
+    bytes32 public constant DISPUTE_TYPEHASH = keccak256(
+        "DisputeResolution(uint256 orderId,address payoutTo,uint256 amount,uint256 nonce,uint256 deadline)"
+    );
+
+    enum OrderState { NONE, LOCKED, DELIVERED, DISPUTED, COMPLETED, REFUNDED }
+
+    struct Order {
+        address buyer;
+        address merchant;
+        address token;              // address(0) = ETH, khác = ERC20
+        uint256 amount;
+        uint256 createdAt;
+        uint256 deliveredAt;
+        uint256 disputedAt;
+        uint256 disputeTimeout;     // chốt từ báo giá, 7-90 ngày
+        uint256 inspectionDuration;
+        uint256 feeBps;             // chốt từ báo giá, không vượt trần defaultFeeBps
+        OrderState state;
+        bytes32 docHash;
+    }
+
+    // Trùng 1-1 với kiểu EIP-712 OrderQuote (cùng trường, cùng thứ tự)
+    struct Quote {
+        uint256 orderId;
+        address buyer;
+        address merchant;
+        address token;
+        uint256 amount;
+        uint256 inspectionDuration;
+        uint256 disputeTimeout;
+        uint256 feeBps;             // phí chốt trong báo giá
+        bytes32 docHash;
+        uint256 deadline;
+    }
+
+    uint256 public constant MIN_INSPECTION_DURATION = 1 hours;
+    uint256 public constant MAX_INSPECTION_DURATION = 30 days;
+    uint256 public constant DELIVERY_TIMEOUT = 14 days;
+    uint256 public constant MIN_DISPUTE_TIMEOUT = 7 days;   // &ge; hạn chữ ký phán quyết mặc định
+    uint256 public constant MAX_DISPUTE_TIMEOUT = 90 days;
+    uint256 public constant MAX_FEE_BPS = 1000; // tối đa 10%
+    uint256 public constant MAX_BATCH_SIZE = 5; // số đơn tối đa trong một lần nạp gom (bản demo)
+
+    address public feeRecipient;
+    uint256 public defaultFeeBps = 300;         // 3%
+
+    mapping(uint256 =&gt; Order) public orders;
+    mapping(uint256 =&gt; uint256) public disputeNonces;
+    // token =&gt; người nhận =&gt; số tiền chờ rút (pull-payment)
+    mapping(address =&gt; mapping(address =&gt; uint256)) public pendingWithdrawals;
+
+    event OrderCreated(
+        uint256 indexed orderId, address indexed buyer, address indexed merchant,
+        address token, uint256 amount, uint256 inspectionDuration, uint256 disputeTimeout, bytes32 docHash, uint256 feeBps
+    );
+    event OrderDelivered(uint256 indexed orderId, uint256 deliveredAt);
+    event OrderDisputed(uint256 indexed orderId, address indexed raisedBy, uint256 disputedAt);
+    event OrderCompleted(uint256 indexed orderId, uint256 netPayout, uint256 feeAmount);
+    event OrderRefunded(uint256 indexed orderId, address indexed to, uint256 amount);
+    event DisputeResolved(uint256 indexed orderId, address indexed payoutTo, uint256 amount);
+    event ArbitratorForceResolved(uint256 indexed orderId, address indexed payoutTo);
+    event PayoutDeferred(address indexed token, address indexed to, uint256 amount);
+    event PendingClaimed(address indexed token, address indexed to, uint256 amount);
+    event FeeUpdated(uint256 newFeeBps);
+    event FeeRecipientUpdated(address newRecipient);
+
+    constructor(
+        address _admin,
+        address _shipper,
+        address _arbitrator,
+        address _quoteSigner,
+        address _feeRecipient
+    ) EIP712("SlopeeEscrow", "1") {
+        require(_admin != address(0) &amp;&amp; _feeRecipient != address(0), "Invalid address");
+        feeRecipient = _feeRecipient;
+        _grantRole(DEFAULT_ADMIN_ROLE, _admin);
+        _grantRole(SHIPPER_ROLE, _shipper);
+        _grantRole(ARBITRATOR_ROLE, _arbitrator);
+        _grantRole(QUOTE_SIGNER_ROLE, _quoteSigner);
+    }
+
+    // ---------------------------------------------------------------- Nạp tiền
+
+    // Nạp tiền cho một đơn (tương đương lô một phần tử)
+    function depositEscrow(Quote calldata q, bytes calldata quoteSig)
+        external
+        payable
+        nonReentrant
+    {
+        _acceptQuote(q, quoteSig);
+        _collect(q.token, q.amount);
+    }
+
+    // Nạp gom: nhiều đơn (nhiều shop) trong đúng một giao dịch, thu token đúng một lần.
+    // Nguyên tử: một báo giá lỗi thì cả giao dịch revert, không đơn nào được tạo.
+    function depositEscrowBatch(Quote[] calldata quotes, bytes[] calldata quoteSigs)
+        external
+        payable
+        nonReentrant
+    {
+        uint256 n = quotes.length;
+        require(n &gt; 0 &amp;&amp; n &lt;= MAX_BATCH_SIZE, "Invalid batch size");
+        require(n == quoteSigs.length, "Length mismatch");
+
+        address token = quotes[0].token;
+        uint256 total;
+        for (uint256 i = 0; i &lt; n; i++) {
+            require(quotes[i].token == token, "Mixed tokens unsupported");
+            // Ghi đơn LOCKED ngay trong vòng lặp, nên mã đơn trùng nhau trong lô sẽ revert "Order exists"
+            _acceptQuote(quotes[i], quoteSigs[i]);
+            total += quotes[i].amount;
+        }
+        _collect(token, total);
+    }
+
+    // Kiểm tra mọi điều kiện của một báo giá và ghi đơn. Không chuyển tiền.
+    function _acceptQuote(Quote calldata q, bytes calldata sig) internal {
+        require(orders[q.orderId].state == OrderState.NONE, "Order exists");
+        require(block.timestamp &lt;= q.deadline, "Quote expired");
+        require(q.amount &gt; 0, "Zero amount");
+        require(q.buyer == msg.sender, "Caller must be quote buyer");
+        require(q.feeBps &lt;= defaultFeeBps, "Fee exceeds on-chain cap");
+        require(q.merchant != address(0) &amp;&amp; q.merchant != msg.sender, "Invalid merchant");
+        require(
+            q.inspectionDuration &gt;= MIN_INSPECTION_DURATION &amp;&amp;
+            q.inspectionDuration &lt;= MAX_INSPECTION_DURATION,
+            "Invalid duration"
+        );
+        require(
+            q.disputeTimeout &gt;= MIN_DISPUTE_TIMEOUT &amp;&amp; q.disputeTimeout &lt;= MAX_DISPUTE_TIMEOUT,
+            "Invalid dispute timeout"
+        );
+        require(
+            !hasRole(ARBITRATOR_ROLE, msg.sender) &amp;&amp; !hasRole(ARBITRATOR_ROLE, q.merchant),
+            "Arbitrator cannot trade"
+        );
+        _verifyQuote(q, sig);
+
+        Order storage o = orders[q.orderId];
+        o.buyer = msg.sender;
+        o.merchant = q.merchant;
+        o.token = q.token;
+        o.amount = q.amount;
+        o.createdAt = block.timestamp;
+        o.inspectionDuration = q.inspectionDuration;
+        o.disputeTimeout = q.disputeTimeout;
+        o.feeBps = q.feeBps;           // phí theo báo giá (đã kiểm không vượt trần)
+        o.state = OrderState.LOCKED;
+        o.docHash = q.docHash;
+
+        emit OrderCreated(
+            q.orderId, msg.sender, q.merchant, q.token, q.amount,
+            q.inspectionDuration, q.disputeTimeout, q.docHash, q.feeBps
+        );
+    }
+
+    // Thu tiền đúng một lần cho cả lô (trạng thái đã ghi trước, hàm gọi được bảo vệ bởi nonReentrant)
+    function _collect(address token, uint256 total) internal {
+        if (token == address(0)) {
+            require(msg.value == total, "Wrong ETH value");
+        } else {
+            require(msg.value == 0, "Do not send ETH for token");
+            uint256 before = IERC20(token).balanceOf(address(this));
+            IERC20(token).safeTransferFrom(msg.sender, address(this), total);
+            require(
+                IERC20(token).balanceOf(address(this)) - before == total,
+                "Fee-on-transfer unsupported"
+            );
+        }
+    }
+
+    function _verifyQuote(Quote calldata q, bytes calldata sig) internal view {
+        bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(
+            QUOTE_TYPEHASH, q.orderId, q.buyer, q.merchant, q.token,
+            q.amount, q.inspectionDuration, q.disputeTimeout, q.feeBps, q.docHash, q.deadline
+        )));
+        require(hasRole(QUOTE_SIGNER_ROLE, ECDSA.recover(digest, sig)), "Bad quote signature");
+    }
+
+    // ------------------------------------------------------------ Giao hàng, giải ngân
+
+    function confirmDelivery(uint256 _orderId) external onlyRole(SHIPPER_ROLE) {
+        Order storage order = orders[_orderId];
+        require(order.state == OrderState.LOCKED, "Not locked");
+        order.deliveredAt = block.timestamp;
+        order.state = OrderState.DELIVERED;
+        emit OrderDelivered(_orderId, block.timestamp);
+    }
+
+    function earlyRelease(uint256 _orderId) external nonReentrant {
+        Order storage order = orders[_orderId];
+        require(order.state == OrderState.DELIVERED, "Not delivered");
+        require(msg.sender == order.buyer, "Only buyer");
+        _executePayout(order, _orderId);
+    }
+
+    function releaseAfterInspection(uint256 _orderId) external nonReentrant {
+        Order storage order = orders[_orderId];
+        require(order.state == OrderState.DELIVERED, "Not delivered");
+        require(block.timestamp &gt;= order.deliveredAt + order.inspectionDuration, "Under inspection");
+        _executePayout(order, _orderId);
+    }
+
+    function cancelIfUnfulfilled(uint256 _orderId) external nonReentrant {
+        Order storage order = orders[_orderId];
+        require(order.state == OrderState.LOCKED, "Not locked");
+        require(block.timestamp &gt;= order.createdAt + DELIVERY_TIMEOUT, "Timeout not reached");
+        require(msg.sender == order.buyer || hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Unauthorized");
+        _refund(order, _orderId);
+    }
+
+    // ----------------------------------------------------------------- Tranh chấp
+
+    function raiseDispute(uint256 _orderId) external {
+        Order storage order = orders[_orderId];
+        require(order.state == OrderState.DELIVERED, "Not delivered");
+        require(msg.sender == order.buyer, "Only buyer");
+        require(block.timestamp &lt; order.deliveredAt + order.inspectionDuration, "Expired");
+        order.state = OrderState.DISPUTED;
+        order.disputedAt = block.timestamp;
+        emit OrderDisputed(_orderId, msg.sender, block.timestamp);
+    }
+
+    function resolveDispute(
+        uint256 _orderId,
+        address _payoutTo,
+        uint256 _deadline,
+        bytes calldata _sig1,
+        bytes calldata _sig2
+    ) external nonReentrant {
+        Order storage order = orders[_orderId];
+        require(order.state == OrderState.DISPUTED, "Not disputed");
+        require(_payoutTo == order.buyer || _payoutTo == order.merchant, "Invalid payout recipient");
+        require(block.timestamp &lt;= _deadline, "Signature expired");
+        require(_deadline &lt; order.disputedAt + order.disputeTimeout, "Deadline must be before dispute timeout");
+
+        bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(
+            DISPUTE_TYPEHASH, _orderId, _payoutTo, order.amount, disputeNonces[_orderId], _deadline
+        )));
+        disputeNonces[_orderId]++;
+
+        uint8 p1 = _partyOf(order, ECDSA.recover(digest, _sig1));
+        uint8 p2 = _partyOf(order, ECDSA.recover(digest, _sig2));
+        require(p1 != 0 &amp;&amp; p2 != 0 &amp;&amp; p1 != p2, "Need two distinct parties");
+
+        _settle(order, _orderId, _payoutTo);
+        emit DisputeResolved(_orderId, _payoutTo, order.amount);
+    }
+
+    // Thoát hiểm: Trọng tài xử đơn phương sau order.disputeTimeout (BR-05, BR-10)
+    function arbitratorForceResolve(uint256 _orderId, address _payoutTo)
+        external
+        nonReentrant
+        onlyRole(ARBITRATOR_ROLE)
+    {
+        Order storage order = orders[_orderId];
+        require(order.state == OrderState.DISPUTED, "Not disputed");
+        require(block.timestamp &gt;= order.disputedAt + order.disputeTimeout, "Dispute timeout not reached");
+        require(_payoutTo == order.buyer || _payoutTo == order.merchant, "Invalid payout recipient");
+
+        _settle(order, _orderId, _payoutTo);
+        emit ArbitratorForceResolved(_orderId, _payoutTo);
+    }
+
+    // ------------------------------------------------------------------- Nội bộ
+
+    function _settle(Order storage order, uint256 _orderId, address _payoutTo) internal {
+        if (_payoutTo == order.buyer) {
+            _refund(order, _orderId);
+        } else {
+            _executePayout(order, _orderId);
+        }
+    }
+
+    function _refund(Order storage order, uint256 _orderId) internal {
+        order.state = OrderState.REFUNDED;                 // cập nhật trạng thái trước khi chuyển tiền
+        _payout(order.token, order.buyer, order.amount);
+        emit OrderRefunded(_orderId, order.buyer, order.amount);
+    }
+
+    function _executePayout(Order storage order, uint256 _orderId) internal {
+        order.state = OrderState.COMPLETED;
+        uint256 feeAmount = (order.amount * order.feeBps) / 10000;
+        uint256 netPayout = order.amount - feeAmount;
+
+        _payout(order.token, order.merchant, netPayout);
+        if (feeAmount &gt; 0) {
+            _payout(order.token, feeRecipient, feeAmount);
+        }
+        emit OrderCompleted(_orderId, netPayout, feeAmount);
+    }
+
+    // ETH: nếu người nhận từ chối, ghi vào sổ chờ rút thay vì revert làm kẹt đơn.
+    function _payout(address _token, address _to, uint256 _amount) internal {
+        if (_token == address(0)) {
+            (bool ok, ) = payable(_to).call{value: _amount, gas: 30000}("");
+            if (!ok) {
+                pendingWithdrawals[_token][_to] += _amount;
+                emit PayoutDeferred(_token, _to, _amount);
+            }
+        } else {
+            IERC20(_token).safeTransfer(_to, _amount);
+        }
+    }
+
+    function claimPending(address _token) external nonReentrant {
+        uint256 amount = pendingWithdrawals[_token][msg.sender];
+        require(amount &gt; 0, "Nothing to claim");
+        pendingWithdrawals[_token][msg.sender] = 0;
+        if (_token == address(0)) {
+            (bool ok, ) = payable(msg.sender).call{value: amount}("");
+            require(ok, "ETH transfer failed");
+        } else {
+            IERC20(_token).safeTransfer(msg.sender, amount);
+        }
+        emit PendingClaimed(_token, msg.sender, amount);
+    }
+
+    // 1 = Buyer, 2 = Merchant, 3 = Arbitrator, 0 = không thuộc đơn
+    function _partyOf(Order storage order, address _signer) internal view returns (uint8) {
+        if (_signer == order.buyer) return 1;
+        if (_signer == order.merchant) return 2;
+        if (hasRole(ARBITRATOR_ROLE, _signer)) return 3;
+        return 0;
+    }
+
+    // ------------------------------------------------------------------ Quản trị
+
+    function setDefaultFeeBps(uint256 _newFeeBps) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_newFeeBps &lt;= MAX_FEE_BPS, "Exceeds cap");
+        defaultFeeBps = _newFeeBps;
+        emit FeeUpdated(_newFeeBps);
+    }
+
+    function setFeeRecipient(address _newRecipient) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_newRecipient != address(0), "Invalid fee recipient");
+        feeRecipient = _newRecipient;
+        emit FeeRecipientUpdated(_newRecipient);
+    }
+}</code></pre>
+
+  <h2>10.1. Quyết định thiết kế và giới hạn đã biết</h2>
+  <ul>
+    <li><strong>Chống chiếm mã đơn và đổi Merchant:</strong> contract chỉ nhận tiền khi có báo giá do <code>QUOTE_SIGNER_ROLE</code> ký, gắn với đúng ví người nạp (<code>q.buyer == msg.sender</code>). Một báo giá chỉ dùng được một lần vì mã đơn chuyển khỏi <code>NONE</code> sau lần nạp đầu.</li>
+    <li><strong>Chữ ký theo "bên":</strong> kể cả khi có nhiều địa chỉ mang vai Trọng tài, chỉ tính một phiếu. Trọng tài bị cấm làm Buyer hoặc Merchant ở cùng đơn. Nếu địa chỉ Buyer hoặc Merchant được cấp vai Trọng tài sau khi đơn đã tạo, <code>_partyOf</code> ưu tiên vai Buyer/Merchant.</li>
+    <li><strong>Nonce:</strong> <code>disputeNonces</code> tăng mỗi lần <code>resolveDispute</code> chạy thành công; giao dịch revert thì nonce không đổi. Chữ ký còn bị giới hạn bởi <code>deadline</code>. Chưa có hàm hủy chữ ký chủ động (Phase 2).</li>
+    <li><strong>ETH gửi đến ví từ chối nhận:</strong> chuyển tiền với giới hạn gas 30.000, thất bại thì ghi sổ chờ rút. Với ERC-20, MVP chỉ hỗ trợ token chuẩn (MockUSD); token có danh sách đen hoặc phí-khi-chuyển nằm ngoài phạm vi.</li>
+    <li><strong>Khóa vận hành tập trung:</strong> xem mô hình tin cậy ở BRD mục 6. Không có chức năng tạm dừng khẩn cấp hay nâng cấp contract trong MVP.</li>
+    <li><strong>Thời hạn tranh chấp theo nhóm hàng:</strong> <code>disputeTimeout</code> do sàn đặt trong báo giá (đã được ký) nên Merchant và Buyer không tự đổi được; contract chỉ kiểm tra khoảng 7-90 ngày chứ không biết nhóm hàng. Tính đúng của giá trị theo nhóm là trách nhiệm của backend, do đó indexer đối chiếu lại với bảng <code>category_policies</code> (UC-08).</li>
+    <li><strong>Trần phí on-chain:</strong> phí của từng đơn do backend đặt trong báo giá đã ký, nhưng contract từ chối báo giá có <code>feeBps</code> lớn hơn <code>defaultFeeBps</code> do Admin đặt. Nhờ đó khóa ký báo giá bị lộ cũng không thể phát hành báo giá có phí vượt mức Admin cho phép. Admin hạ trần thì báo giá cũ phí cao bị từ chối và phải cấp lại (UC-09).</li>
+    <li><strong>Hạn chữ ký phán quyết:</strong> <code>resolveDispute</code> chỉ nhận chữ ký có <code>deadline &lt; disputedAt + disputeTimeout</code>, còn <code>arbitratorForceResolve</code> hợp lệ từ <code>disputedAt + disputeTimeout</code>; hai đường xử lý không bao giờ cùng hợp lệ tại một thời điểm.</li>
+    <li><strong>Chữ ký Trọng tài có sẵn:</strong> vì chữ ký Trọng tài được tạo cùng đề xuất, một chữ ký của Buyer hoặc Merchant là đủ để thi hành; đây là thiết kế của BR-04, giao diện phải cảnh báo người ký.</li>
+    <li><strong>Nạp gom:</strong> <code>depositEscrowBatch</code> và <code>depositEscrow</code> dùng chung <code>_acceptQuote</code>, nên không có đường nạp nào kiểm tra yếu hơn. Lô là nguyên tử, tối đa <code>MAX_BATCH_SIZE</code> = 5 đơn (giới hạn của bản demo, có thể nâng sau khi đo gas), một token duy nhất; vòng lặp ghi đơn LOCKED ngay nên mã đơn trùng trong cùng lô bị từ chối (nếu chỉ kiểm tra trước rồi ghi sau thì hai báo giá cùng mã đơn sẽ bị thu tiền hai lần nhưng chỉ ghi một đơn, làm sai bất biến số dư). Tiền được thu một lần ở cuối.</li>
+    <li><strong>Độc lập sau khi nạp:</strong> mỗi đơn trong lô có trạng thái, thời hạn, phí và Merchant riêng; mọi hàm sau nạp thao tác trên một <code>orderId</code>, không có hàm nào chạm đơn khác.</li>
+    <li><strong>Hủy đơn bởi Merchant, hoàn một phần:</strong> ngoài phạm vi MVP. Một đơn on-chain luôn gắn đúng một Merchant; giỏ nhiều shop dùng nạp gom (BR-11).</li>
+  </ul>
+
+  <h2>10.2. Cấu hình Foundry (<code>foundry.toml</code>)</h2>
+  <pre><code>[profile.default]
+src = "src"
+out = "out"
+test = "test"
+libs = ["lib"]
+solc_version = "0.8.20"
+optimizer = true
+optimizer_runs = 200
+via_ir = true
+remappings = [
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/"
+]</code></pre>
+  <pre><code># Cài thư viện (khóa phiên bản OpenZeppelin để khớp solc 0.8.20)
+forge install foundry-rs/forge-std
+forge install OpenZeppelin/openzeppelin-contracts@v5.0.2
+
+forge build
+forge test -vvv --gas-report
+forge coverage            # mục tiêu từ 90% dòng lệnh
+anvil --block-time 2      # chainId 31337, block đều đặn để đồng hồ chuỗi không bị kẹt</code></pre>
+  <ul>
+    <li><code>via_ir = true</code> xử lý lỗi "stack too deep" với struct nhiều trường (<code>Order</code>, <code>Quote</code>); đổi lại thời gian biên dịch lâu hơn, nên chỉ chạy <code>forge build</code> đầy đủ khi cần.</li>
+    <li>Cần khóa phiên bản OpenZeppelin (ví dụ v5.0.2) vì một số bản mới hơn yêu cầu trình biên dịch cao hơn 0.8.20; nếu nâng OpenZeppelin thì nâng <code>solc_version</code> tương ứng và chạy lại toàn bộ test.</li>
+    <li>Trong test dùng <code>vm.warp</code> để tua thời gian; trong kiểm thử tích hợp trên Anvil dùng <code>evm_increaseTime</code> rồi <code>evm_mine</code>.</li>
+  </ul>
+
+  <h1>11. KẾ HOẠCH BÀN GIAO 10 TUẦN (DELIVERY ROADMAP)</h1>
+  <p>Bốn làn công việc: <strong>[C]</strong> Smart Contract, <strong>[B]</strong> Backend và Indexer, <strong>[F]</strong> Frontend, <strong>[Q]</strong> Kiểm thử và tài liệu. Nhóm có 3 thành viên nên mỗi người đảm nhận một làn chính, làn [Q] chia đều, và có dự phòng chéo như bảng dưới.</p>
+  <table>
+    <tr><th style="width:20%">Thành viên</th><th>Phụ trách chính</th><th style="width:16%">Dự phòng cho</th><th style="width:34%">Ghi chú</th></tr>
+    <tr><td><strong>A</strong> (Contract và bảo mật)</td><td>[C] toàn bộ; [Q] kiểm thử contract, rà soát bảo mật</td><td>B (phần ký EIP-712, relayer)</td><td>Xong M1 (cuối tuần 2) thì chuyển sang hỗ trợ: tuần 3-4 viết thư viện ký EIP-712 và relayer cùng B, đồng thời nhận phần còn lại của Giai đoạn 0 (mục 15.3); từ tuần 5 nhận màn hình Shipper và Admin của [F].</td></tr>
+    <tr><td><strong>B</strong> (Backend và Indexer)</td><td>[B] toàn bộ; [Q] kiểm thử API, indexer, đối soát</td><td>A (contract, ký số)</td><td>Tuần 3-6 là điểm nghẽn của cả nhóm; ưu tiên hoàn thành báo giá và indexer trước.</td></tr>
+    <tr><td><strong>C</strong> (Giao diện và tài liệu)</td><td>[F] toàn bộ; [Q] kiểm thử end-to-end, tài liệu, demo</td><td>B (API đơn giản, tài liệu)</td><td>Tuần 1-3 dựng giao diện với dữ liệu giả (mock API) để không chờ backend; tích hợp thật từ tuần 4.</td></tr>
+  </table>
+  <div class="note-box"><strong>Giai đoạn 0 (mục 15).</strong> Lớp xác thực và phân quyền của Slopee chưa tồn tại; bước 1 và 2 phải xong trước UC-00 (tuần 3) và bắt đầu ngay tuần 1. Nếu trễ, cắt tính năng phụ theo quy tắc dưới đây, không cắt Giai đoạn 0.</div>
+  <p><strong>Quy tắc vận hành:</strong> mỗi thay đổi được một thành viên khác xem lại trước khi gộp; họp ngắn 2 lần mỗi tuần để chốt vướng mắc. Nếu M2 trễ quá 3 ngày thì cắt tính năng phụ (giao diện rút khoản chờ rút, màn hình Merchant nâng cao, giao diện ETH) trước khi cắt luồng chính.</p>
+  <table>
+    <tr><th style="width:8%">Tuần</th><th>Công việc</th><th style="width:30%">Kết quả đầu ra / Tiêu chí hoàn thành</th></tr>
+    <tr>
+      <td><strong>1</strong></td>
+      <td>[C] Khung dự án Foundry (cấu hình ở mục 10.2), MockUSD, <code>depositEscrow</code> với báo giá, <code>confirmDelivery</code>, giải ngân, hủy quá hạn. [B] Script khởi tạo môi trường một lệnh (Anvil, triển khai, cấp vai trò). [B] Giai đoạn 0, bước 1 và 2 (mục 15): lớp xác thực và sửa lỗi S-01 đến S-04. [B] [F] P0-07 chuyển Slopee sang VND. [F] Client API chung có token, route guard, hàm định dạng VND (P0-07); dựng khung ví với ethers và kết nối MetaMask thử nghiệm. [Q] Chốt thư viện định nghĩa kiểu EIP-712 dùng chung.</td>
+      <td>Contract biên dịch được, test happy path đầu tiên đạt; môi trường chạy lại bằng một lệnh; mọi endpoint hiện có yêu cầu token và kiểm quyền (test A-01 đến A-04 đạt).</td>
+    </tr>
+    <tr>
+      <td><strong>2</strong></td>
+      <td>[C] Khiếu nại, <code>resolveDispute</code>, <code>arbitratorForceResolve</code>, <code>depositEscrowBatch</code>, pull-payment, hàm quản trị; hoàn thiện bộ test (mục 12), xuất ABI. [B] Thiết kế và viết migration CSDL (mục 9). [Q] Test chéo ngôn ngữ cho băm EIP-712.</td>
+      <td><strong>M1:</strong> test contract đạt toàn bộ, độ phủ dòng lệnh từ 90%; đóng băng giao diện hàm (chỉ sửa lỗi sau tuần này).</td>
+    </tr>
+    <tr>
+      <td><strong>3</strong></td>
+      <td>[B] Liên kết ví (UC-00), tạo đơn và phát hành báo giá (UC-01), cấu hình tham số và chính sách nhóm hàng (<code>category_policies</code>); khung Indexer. [F] Màn hình liên kết ví.</td>
+      <td>Liên kết ví và nhận báo giá đúng chuẩn; contract chấp nhận báo giá do Backend ký.</td>
+    </tr>
+    <tr>
+      <td><strong>4</strong></td>
+      <td>[B] Indexer hoàn chỉnh: idempotent, con trỏ block, đối chiếu <code>OrderCreated</code>. [F] Thanh toán Web3 (approve + deposit), hiển thị trạng thái đơn qua polling. [Q] Kịch bản kiểm thử end-to-end đầu tiên.</td>
+      <td><strong>M2 - lát cắt end-to-end thô:</strong> liên kết ví &rarr; đặt hàng &rarr; ký quỹ &rarr; indexer &rarr; trạng thái <code>LOCKED</code> trên giao diện. Nếu chậm, các tuần sau giảm phạm vi thay vì dời cột mốc.</td>
+    </tr>
+    <tr>
+      <td><strong>5</strong></td>
+      <td>[B] Cổng Shipper và relayer (UC-03), tác vụ nền (quét báo giá hết hạn, nhắc hạn), script đối soát. [F] Màn hình Shipper, Buyer: đồng hồ kiểm tra, "Đã nhận hàng". [Q] Test tích hợp luồng giải ngân.</td>
+      <td>Luồng thành công (giao hàng, mở khóa sớm, hết hạn kiểm tra) chạy trọn vẹn; đối soát số dư khớp.</td>
+    </tr>
+    <tr>
+      <td><strong>6</strong></td>
+      <td>[B] API đề xuất phán quyết, lưu và xác minh chữ ký, nộp <code>resolveDispute</code> (UC-06). [F] Màn hình Admin xử lý khiếu nại; Buyer và Merchant ký EIP-712.</td>
+      <td>Luồng tranh chấp có 2 chữ ký chạy trọn vẹn cả hai hướng (hoàn tiền, giải ngân).</td>
+    </tr>
+    <tr>
+      <td><strong>7</strong></td>
+      <td>[F] Màn hình Merchant, rút khoản chờ rút, nút hủy khi quá hạn, xử lý lỗi và thông báo. [B] Timeout (UC-07), nhật ký và cảnh báo bất thường. [Q] Test các luồng lỗi và ca âm.</td>
+      <td><strong>M3:</strong> đủ chức năng của 4 vai trò.</td>
+    </tr>
+    <tr>
+      <td><strong>8</strong></td>
+      <td>Đóng băng tính năng. Kiểm thử tích hợp toàn bộ, sửa lỗi. Giao diện ETH và các cải tiến chỉ làm nếu <strong>đã đạt M3 và còn thời gian</strong>. [Q] Rà soát bảo mật theo checklist (reentrancy, replay, phân quyền, khóa).</td>
+      <td><strong>M4:</strong> không còn lỗi mức cao/nghiêm trọng; AC-01 đến AC-11 được rà soát.</td>
+    </tr>
+    <tr>
+      <td><strong>9</strong></td>
+      <td>Chỉ kiểm thử, sửa lỗi, tài liệu: hướng dẫn cài đặt, hướng dẫn vận hành, kịch bản demo; chạy thử toàn bộ 3 lần liên tiếp.</td>
+      <td>Tài liệu hoàn chỉnh; demo ổn định trên máy của ít nhất hai thành viên.</td>
+    </tr>
+    <tr>
+      <td><strong>10</strong></td>
+      <td>Chuẩn bị slide, tập dượt bảo vệ, quay sẵn video demo dự phòng, trả lời các câu hỏi dự kiến (mô hình tin cậy, vì sao cần sàn làm Trọng tài, quy đổi tiền, giới hạn pháp lý).</td>
+      <td><strong>M5:</strong> sẵn sàng bảo vệ.</td>
+    </tr>
+  </table>
+
+  <h1>12. KẾ HOẠCH KIỂM THỬ</h1>
+  <h2>12.1. Ma trận kiểm thử Smart Contract (tối thiểu)</h2>
+  <table>
+    <tr><th style="width:8%">Mã</th><th>Ca kiểm thử</th><th style="width:16%">Kết quả mong đợi</th><th style="width:12%">Quy tắc</th></tr>
+    <tr><td>T-01</td><td>Nạp tiền với báo giá hợp lệ (ERC-20 và ETH)</td><td>Thành công, <code>LOCKED</code></td><td>BR-06</td></tr>
+    <tr><td>T-02</td><td>Báo giá hết hạn; sai người nạp; sai chữ ký; ký bởi địa chỉ không có vai trò</td><td>Revert</td><td>BR-06</td></tr>
+    <tr><td>T-03</td><td>Dùng lại mã đơn đã tồn tại; giá trị ETH khác số tiền; token kèm ETH; thiếu allowance</td><td>Revert</td><td>BR-06</td></tr>
+    <tr><td>T-04</td><td>Merchant trùng Buyer; Trọng tài làm Buyer hoặc Merchant; thời gian kiểm tra ngoài [1 giờ, 30 ngày]</td><td>Revert</td><td>BR-03, 04</td></tr>
+    <tr><td>T-05</td><td><code>confirmDelivery</code> bởi người không có vai trò; khi đơn không <code>LOCKED</code></td><td>Revert</td><td>BR-03</td></tr>
+    <tr><td>T-06</td><td>Mở khóa sớm bởi Buyer; bởi người khác</td><td>Thành công / Revert</td><td>BR-03</td></tr>
+    <tr><td>T-07</td><td>Giải ngân sau hết hạn (đúng thời điểm biên và trước 1 giây)</td><td>Thành công / Revert</td><td>BR-03</td></tr>
+    <tr><td>T-08</td><td>Chia phí với <code>feeBps</code> = 0, 300, 1000; số tiền nhỏ (làm tròn); phí lấy từ báo giá và bằng <code>feeBps</code> trong <code>OrderCreated</code>; đổi <code>defaultFeeBps</code> sau khi nạp không ảnh hưởng đơn cũ</td><td>Đúng công thức</td><td>BR-02</td></tr>
+    <tr><td>T-09</td><td><code>setDefaultFeeBps</code> vượt 1.000; bởi người không phải Admin</td><td>Revert</td><td>BR-02</td></tr>
+    <tr><td>T-10</td><td>Khiếu nại trong hạn; sau hạn; bởi người khác Buyer</td><td>Thành công / Revert</td><td>BR-03</td></tr>
+    <tr><td>T-11</td><td><code>resolveDispute</code> với Arbitrator + Buyer (hoàn tiền) và Arbitrator + Merchant (giải ngân)</td><td>Thành công, đúng số tiền</td><td>BR-04</td></tr>
+    <tr><td>T-12</td><td>Hai chữ ký cùng một bên; hai địa chỉ cùng vai Trọng tài; chữ ký người ngoài; chữ ký hết hạn; sai nonce, sai số tiền, sai <code>payoutTo</code></td><td>Revert</td><td>BR-04</td></tr>
+    <tr><td>T-13</td><td>Nộp lại chữ ký đã dùng sau khi đơn kết thúc</td><td>Revert</td><td>BR-04</td></tr>
+    <tr><td>T-14</td><td><code>cancelIfUnfulfilled</code> trước và sau 14 ngày; bởi Buyer, Admin, người lạ</td><td>Revert / Thành công / Revert</td><td>BR-05</td></tr>
+    <tr><td>T-15</td><td><code>arbitratorForceResolve</code> trước và sau <code>disputeTimeout</code> của đơn (thử 7, 30 và 90 ngày); bởi người không phải Trọng tài; <code>payoutTo</code> lạ. Ca biên: tại mốc trừ 1 giây thì <code>arbitratorForceResolve</code> revert và <code>resolveDispute</code> (deadline = mốc trừ 1) thành công; tại đúng mốc thì ngược lại</td><td>Revert / Thành công / Revert</td><td>BR-05</td></tr>
+    <tr><td>T-16</td><td>Merchant là contract từ chối nhận ETH: giải ngân vẫn hoàn tất, ghi sổ chờ rút; <code>claimPending</code> đúng người, rút lần hai</td><td>Thành công, không kẹt</td><td>BR-05</td></tr>
+    <tr><td>T-17</td><td>Tấn công reentrancy qua ví nhận ETH và token giả mạo</td><td>Bị chặn</td><td>An toàn</td></tr>
+    <tr><td>T-18</td><td>Bất biến: số dư contract bằng tổng số tiền các đơn chưa kết thúc cộng sổ chờ rút (fuzz/invariant)</td><td>Luôn đúng</td><td>G-01</td></tr>
+    <tr><td>T-19</td><td>Mọi cặp (trạng thái, hàm) không hợp lệ trong bảng mục 5</td><td>Revert</td><td>Máy trạng thái</td></tr>
+    <tr><td>T-20</td><td>Báo giá có <code>disputeTimeout</code> dưới 7 ngày hoặc trên 90 ngày; giá trị biên đúng 7 và đúng 90 ngày</td><td>Revert / Thành công</td><td>BR-10</td></tr>
+    <tr><td>T-21</td><td>Hai đơn có <code>disputeTimeout</code> khác nhau chạy song song: đơn 7 ngày xử được ở ngày thứ 8, đơn 45 ngày cùng lúc vẫn revert; sửa <code>disputeTimeout</code>, <code>feeBps</code> hoặc <code>buyer</code> trong báo giá sau khi ký thì bị từ chối</td><td>Độc lập / "Bad quote signature"</td><td>BR-10, BR-06</td></tr>
+    <tr><td>T-22</td><td>Báo giá có <code>feeBps</code> lớn hơn <code>defaultFeeBps</code>; bằng đúng trần; Admin hạ trần sau khi ký thì báo giá cũ bị từ chối còn báo giá mới được chấp nhận</td><td>Revert / Thành công / Revert rồi thành công</td><td>BR-02, BR-06</td></tr>
+    <tr><td>T-23</td><td><code>q.buyer</code> khác <code>msg.sender</code></td><td>Revert</td><td>BR-06</td></tr>
+    <tr><td>T-24</td><td><code>resolveDispute</code> với <code>deadline</code> bằng hoặc lớn hơn <code>disputedAt + disputeTimeout</code>; bằng mốc trừ 1 giây</td><td>Revert / Thành công</td><td>BR-04, BR-05</td></tr>
+    <tr><td>T-25</td><td>Nạp gom 3 đơn của 3 Merchant: đúng một lần <code>transferFrom</code>; số dư contract tăng đúng tổng; 3 sự kiện <code>OrderCreated</code>; cả 3 đơn <code>LOCKED</code> với số tiền, phí, thời hạn riêng</td><td>Thành công</td><td>BR-11</td></tr>
+    <tr><td>T-26</td><td>Lô rỗng; lô quá 5 đơn; số báo giá khác số chữ ký</td><td>Revert</td><td>BR-11</td></tr>
+    <tr><td>T-27</td><td>Hai báo giá cùng <code>orderId</code> trong một lô</td><td>Revert, số dư không đổi</td><td>BR-11, G-01</td></tr>
+    <tr><td>T-28</td><td>Một báo giá trong lô hết hạn, sai chữ ký, phí vượt trần hoặc <code>buyer</code> khác người gửi</td><td>Cả lô revert, không đơn nào được tạo</td><td>BR-11, BR-06</td></tr>
+    <tr><td>T-29</td><td>Lô gồm nhiều loại token; ETH sai tổng <code>msg.value</code>; token kèm ETH</td><td>Revert</td><td>BR-11</td></tr>
+    <tr><td>T-30</td><td>Mọi kiểm tra của <code>depositEscrow</code> áp dụng cho từng phần tử lô: Merchant trùng Buyer, Trọng tài làm Merchant, thời hạn kiểm tra hoặc tranh chấp ngoài khoảng, số tiền 0</td><td>Revert</td><td>BR-06, BR-11</td></tr>
+    <tr><td>T-31</td><td>Độc lập: lô 3 đơn, đơn A mở khóa sớm, đơn B khiếu nại rồi hoàn tiền, đơn C hết hạn tự giải ngân</td><td>Mỗi đơn đúng số tiền và phí, không ảnh hưởng nhau</td><td>BR-11</td></tr>
+    <tr><td>T-32</td><td>Lô đúng 5 đơn thành công; ghi lại gas tiêu thụ (mục tiêu dưới 3 triệu gas)</td><td>Thành công</td><td>BR-11</td></tr>
+    <tr><td>T-33</td><td>Fuzz và invariant: handler gọi cả <code>depositEscrowBatch</code>; INV-01 đến INV-07 luôn đúng</td><td>Luôn đúng</td><td>G-01</td></tr>
+    <tr><td>T-34</td><td><code>depositEscrow</code> đơn lẻ và <code>depositEscrowBatch</code> một phần tử cho cùng trạng thái và sự kiện</td><td>Giống hệt</td><td>BR-11</td></tr>
+  </table>
+
+  <h2>12.2. Kiểm thử tích hợp và end-to-end</h2>
+  <table>
+    <tr><th style="width:8%">Mã</th><th>Kịch bản</th><th style="width:14%">Tiêu chí</th></tr>
+    <tr><td>I-01</td><td>Liên kết ví: thành công; nonce dùng lại; nonce hết hạn; chữ ký sai; ví đã thuộc tài khoản khác</td><td>AC-01</td></tr>
+    <tr><td>I-02</td><td>Báo giá: giá VND quy đổi đúng, chữ ký Python được contract chấp nhận; hết hạn thì <code>EXPIRED</code></td><td>AC-01, 02</td></tr>
+    <tr><td>I-03</td><td>Indexer: xử lý trùng sự kiện, khởi động lại giữa chừng, replay từ đầu, sự kiện lệch dữ liệu sàn</td><td>AC-08</td></tr>
+    <tr><td>I-04</td><td>Chính sách nhóm hàng: sản phẩm thuộc từng nhóm nhận đúng <code>inspectionDuration</code> và <code>disputeTimeout</code> trong báo giá; đơn nhiều nhóm lấy giá trị lớn nhất; đổi chính sách không ảnh hưởng đơn đã tạo; indexer cảnh báo khi giá trị on-chain lệch bảng chính sách</td><td>AC-12</td></tr>
+    <tr><td>I-05</td><td>Đồng hồ: sau <code>evm_increaseTime</code>, báo giá ký bằng <code>now_chain</code> được contract chấp nhận; Anvil chạy <code>--block-time 2</code>; <code>server_time</code> khớp <code>now_chain</code></td><td>AC-02</td></tr>
+    <tr><td>I-06</td><td>Đồng bộ ngược: mỗi chuyển trạng thái Web3 cập nhật đúng <code>orders.status</code> cũ trong cùng giao dịch; <code>PUT /api/payments/orders/:id</code> từ chối đơn Web3; replay đặt lại cả hai bảng và khớp 100% với chuỗi</td><td>AC-08</td></tr>
+    <tr><td>A-01</td><td>Mọi endpoint yêu cầu xác thực: không có token hoặc token hết hạn thì 401</td><td>Mục 15</td></tr>
+    <tr><td>A-02</td><td>Sai vai trò: user hoặc seller gọi API admin thì 403; shipper chỉ thấy đơn được gán</td><td>Mục 15</td></tr>
+    <tr><td>A-03</td><td>Truy cập đơn, giỏ, phương thức thanh toán, shop hay sản phẩm của người khác thì 403 hoặc 404</td><td>Mục 15</td></tr>
+    <tr><td>A-04</td><td>Đăng ký với <code>role = admin</code> hoặc <code>shipper</code> bị từ chối; chỉ chấp nhận <code>user</code> và <code>seller</code></td><td>Mục 15</td></tr>
+    <tr><td>A-05</td><td>Hai yêu cầu thanh toán song song cùng mua hết tồn kho: đúng một yêu cầu thành công, tồn kho không âm</td><td>Mục 15</td></tr>
+    <tr><td>A-06</td><td>Nhập sai PIN hoặc mật khẩu quá 5 lần thì bị khóa tạm thời</td><td>Mục 15</td></tr>
+    <tr><td>A-07</td><td>Route migration qua HTTP không còn tồn tại; không có endpoint nào cấp số dư giả lập cho người dùng</td><td>Mục 15</td></tr>
+    <tr><td>I-07</td><td>Giỏ 3 shop: tạo đúng 3 đơn và một lô; <code>total_amount_raw</code> bằng tổng số token làm tròn lên của từng shop; cấp lại báo giá cả lô; hết hạn thì cả lô <code>EXPIRED</code> và hoàn tồn kho; Indexer xử lý 3 <code>OrderCreated</code> cùng giao dịch và xóa đúng các mặt hàng khỏi giỏ</td><td>AC-14</td></tr>
+    <tr><td>F-01</td><td>Hàm định dạng VND: số nguyên, làm tròn, giá trị 0, số lớn; không còn ký hiệu $ ở các trang</td><td>P0-07</td></tr>
+    <tr><td>F-02</td><td>Máy trạng thái nạp tiền (CHECK_NETWORK đến WAITING_INDEXER) viết thành hàm thuần (reducer): đủ allowance thì bỏ APPROVING, người dùng từ chối (4001), báo giá hết hạn, revert, quá 30 giây chờ Indexer</td><td>AC-14</td></tr>
+    <tr><td>F-03</td><td>Ánh xạ lỗi contract và API sang thông báo tiếng Việt, gồm <code>Invalid batch size</code>, <code>FEE_CAP_CHANGED</code></td><td>AC-02, 13</td></tr>
+    <tr><td>F-04</td><td>Client API: gắn <code>Authorization</code>; gặp 401 thì xóa token và chuyển về đăng nhập; route guard chặn sai vai trò</td><td>Mục 15</td></tr>
+    <tr><td>F-05</td><td><code>usePolling</code>: dừng khi rời trang, không chồng lệnh gọi, dừng khi đạt trạng thái cuối</td><td>AC-14</td></tr>
+    <tr><td>F-06</td><td>Đồng hồ đếm ngược kiểm tra dùng <code>server_time</code>, không dùng đồng hồ máy khách</td><td>AC-04</td></tr>
+    <tr><td>E-01</td><td>Luồng thành công: liên kết ví &rarr; đặt hàng &rarr; ký quỹ &rarr; giao hàng &rarr; mở khóa sớm</td><td>AC-01, 03, 04</td></tr>
+    <tr><td>E-02</td><td>Luồng hết hạn kiểm tra (tua thời gian Anvil)</td><td>AC-04</td></tr>
+    <tr><td>E-03</td><td>Luồng tranh chấp: khiếu nại &rarr; đề xuất &rarr; hai bên ký &rarr; nộp &rarr; hoàn tiền (và biến thể giải ngân)</td><td>AC-05, 06</td></tr>
+    <tr><td>E-04</td><td>Luồng timeout giao hàng và timeout tranh chấp</td><td>AC-07</td></tr>
+    <tr><td>E-05</td><td>Quét kiểm tra khóa: không có private key người dùng trong mã nguồn, CSDL, log</td><td>AC-09</td></tr>
+    <tr><td>E-06</td><td>Đối soát số dư contract sau mỗi kịch bản trên</td><td>AC-10</td></tr>
+    <tr><td>E-07</td><td>Giỏ 3 shop: đúng 2 lần xác nhận ví; shop A mở khóa sớm, shop B khiếu nại và hoàn tiền, shop C hết hạn tự giải ngân; đối soát khớp</td><td>AC-14</td></tr>
+  </table>
+
+  <h2>12.3. Chuyển đổi bộ kiểm thử sẵn có và CI</h2>
+  <p>Repo Slopee hiện có: pytest với mock con trỏ CSDL (5 tệp), Vitest cho Home, Navbar và logic Tetris, Playwright chỉ trên Firefox (đăng ký và Tetris, dọn dữ liệu bằng kết nối MySQL trực tiếp), và CI GitHub Actions đã có dịch vụ MySQL.</p>
+  <table>
+    <tr><th style="width:26%">Test hiện có</th><th>Thay đổi bắt buộc</th><th style="width:14%">Nguyên nhân</th></tr>
+    <tr><td><code>test_checkout.py</code></td><td>Viết lại: gửi token thay <code>userId</code>, giá VND số nguyên, các ca race tồn kho và trừ số dư chạy trên MySQL thật vì mock không kiểm chứng được</td><td>P0-01, 05, 07</td></tr>
+    <tr><td><code>test_cart.py</code>, <code>test_products.py</code>, integration</td><td>Thêm token và ca 401, 403; bỏ <code>userId</code> khỏi thân</td><td>P0-01, 03</td></tr>
+    <tr><td><code>auth_test.py</code></td><td>Đăng ký chỉ nhận <code>user</code> và <code>seller</code>; đăng nhập trả token; giới hạn số lần thử</td><td>P0-01, 02, 05</td></tr>
+    <tr><td><code>Home.test.jsx</code>, <code>Navbar.test.jsx</code></td><td>Giá hiển thị theo VND; Navbar có nút ví; mock <code>fetch</code> qua client chung</td><td>P0-07, UC-00</td></tr>
+    <tr><td><code>auth-flow.spec.js</code></td><td>Theo luồng token; dọn dữ liệu qua hàm tiện ích dùng chung</td><td>P0-01</td></tr>
+    <tr><td><code>tetris-flow.spec.js</code>, <code>tetrisLogic.test.js</code></td><td>Giữ nguyên, chỉ thêm đăng nhập bằng token nếu route yêu cầu</td><td>-</td></tr>
+  </table>
+  <p><strong>Nguyên tắc.</strong> Mock con trỏ CSDL chỉ dùng cho logic thuần. Mọi đường đi liên quan tiền, tồn kho, trạng thái đơn và phân quyền chạy trên MySQL thật (dịch vụ MySQL của CI) kèm một fixture tạo người dùng và token. Các test A-01 đến A-07 và I-06 nằm trong nhóm này.</p>
+  <p><strong>Bộ test Web3 mới.</strong> (1) Foundry: <code>forge test</code>, độ phủ và Slither cho contract. (2) Kiểm thử chéo ngôn ngữ: pytest, Vitest và Foundry cùng đọc <code>shared/eip712/vectors.json</code>. (3) E2E: MetaMask thật không tự động hóa được trong CI, nên Playwright tiêm một nhà cung cấp ví <code>window.ethereum</code> (EIP-1193) chạy bằng khóa thử của Anvil, chỉ nạp trong môi trường kiểm thử; bản demo thủ công vẫn dùng MetaMask.</p>
+  <table>
+    <tr><th style="width:20%">Công việc CI</th><th>Nội dung</th></tr>
+    <tr><td>backend</td><td>Có sẵn: pytest với dịch vụ MySQL; thêm các test A-xx trên MySQL thật</td></tr>
+    <tr><td>frontend</td><td>Thêm: <code>npm run lint</code>, <code>npm test</code> (Vitest, gồm F-01 đến F-06)</td></tr>
+    <tr><td>contracts</td><td>Mới: <code>forge test</code>, <code>forge coverage</code> (từ 90%), Slither</td></tr>
+    <tr><td>web3-integration</td><td>Mới: Anvil, triển khai, Indexer, backend, kiểm thử I-xx và chéo ngôn ngữ</td></tr>
+    <tr><td>e2e</td><td>Mới: Anvil, backend, frontend, Playwright với ví thử nghiệm (E-01 đến E-07)</td></tr>
+  </table>
+
+  <h1>13. YÊU CẦU PHI CHỨC NĂNG</h1>
+  <table>
+    <tr><th style="width:18%">Nhóm</th><th>Yêu cầu</th></tr>
+    <tr><td>Bảo mật</td><td>Không lưu khóa người dùng; khóa sàn tách theo vai trò, nạp từ môi trường; mọi chữ ký có hạn dùng; token phiên ký có hạn, xác thực và phân quyền mọi API, kiểm tra quyền sở hữu tài nguyên, không có route thay đổi lược đồ qua HTTP; kiểm tra đầu vào (địa chỉ, số tiền, chữ ký); không ghi chữ ký hoặc khóa vào log.</td></tr>
+    <tr><td>Hiệu năng</td><td>Trạng thái đơn xuất hiện trên giao diện trong vòng 10 giây kể từ khi giao dịch được xác nhận (chu kỳ polling Indexer không quá 2 giây trên Anvil).</td></tr>
+    <tr><td>Độ tin cậy</td><td>Indexer khởi động lại không mất và không ghi đôi sự kiện; có chế độ replay; mọi thay đổi trạng thái đơn đều truy vết được tới <code>chain_events</code>.</td></tr>
+    <tr><td>Khả năng mở rộng</td><td>Trường <code>payment_method</code> và giao diện cổng thanh toán cho phép thêm FIAT, COD, SPayLater mà không đổi bảng <code>orders</code> (cột Web3 nằm ở <code>order_web3</code>).</td></tr>
+    <tr><td>Khả năng vận hành</td><td>Một lệnh dựng môi trường (Anvil, triển khai, cấp vai trò, nạp token thử); tệp cấu hình mẫu; nhật ký có cấp độ; script đối soát.</td></tr>
+    <tr><td>Kiểm thử được</td><td>Có thể tua thời gian trên Anvil (<code>evm_increaseTime</code>) để kiểm thử các hạn kiểm tra và timeout; mọi hạn so với <code>block.timestamp</code> tính bằng <code>now_chain</code>.</td></tr>
+    <tr><td>Chất lượng mã</td><td>Độ phủ dòng lệnh contract từ 90%; tài liệu hóa các hàm công khai; kiểm tra tĩnh (ví dụ Slither) không còn cảnh báo mức cao chưa được giải thích.</td></tr>
+  </table>
+
+  <h1>14. MA TRẬN TRUY VẾT YÊU CẦU</h1>
+  <table>
+    <tr><th style="width:10%">BRD</th><th>Use case</th><th>Hàm contract / API chính</th><th style="width:16%">Kiểm thử / Nghiệm thu</th></tr>
+    <tr><td>BR-01</td><td>UC-00, UC-02, UC-06</td><td>Ký ở ví người dùng; khóa sàn ở môi trường</td><td>E-05 / AC-09</td></tr>
+    <tr><td>BR-02</td><td>UC-04, UC-09</td><td><code>_executePayout</code>, <code>setDefaultFeeBps</code></td><td>T-08, T-09, T-22 / AC-04, 13</td></tr>
+    <tr><td>BR-03</td><td>UC-03, UC-04, UC-05</td><td><code>confirmDelivery</code>, <code>earlyRelease</code>, <code>releaseAfterInspection</code>, <code>raiseDispute</code></td><td>T-05 đến T-07, T-10 / AC-03, 04, 05</td></tr>
+    <tr><td>BR-04</td><td>UC-06</td><td><code>resolveDispute</code>, <code>_partyOf</code></td><td>T-11 đến T-13, T-24 / AC-06</td></tr>
+    <tr><td>BR-05</td><td>UC-07</td><td><code>cancelIfUnfulfilled</code>, <code>arbitratorForceResolve</code>, <code>claimPending</code></td><td>T-14 đến T-16, T-20, T-21, T-24, I-05 / AC-07, 12</td></tr>
+    <tr><td>BR-06</td><td>UC-01, UC-02</td><td><code>depositEscrow</code>, <code>_verifyQuote</code>, <code>POST /api/orders</code></td><td>T-01 đến T-04, T-22, T-23, T-28, T-30, I-02 / AC-02, 13</td></tr>
+    <tr><td>BR-07</td><td>UC-00</td><td><code>/api/wallet/*</code></td><td>I-01, A-01 đến A-04 / AC-01</td></tr>
+    <tr><td>BR-08</td><td>UC-01</td><td>Quy đổi trong <code>POST /api/orders</code>, <code>platform_settings</code></td><td>I-02 / AC-01</td></tr>
+    <tr><td>BR-09</td><td>UC-08</td><td>Indexer, <code>chain_events</code>, <code>indexer_cursor</code></td><td>I-03, I-06, E-06 / AC-08, 10</td></tr>
+    <tr><td>BR-10</td><td>UC-01, UC-06, UC-07</td><td><code>category_policies</code>, <code>OrderQuote.disputeTimeout</code>, <code>arbitratorForceResolve</code></td><td>T-15, T-20, T-21, I-04 / AC-12</td></tr>
+    <tr><td>BR-11</td><td>UC-01, UC-02</td><td><code>depositEscrowBatch</code>, <code>_acceptQuote</code>, <code>checkout_groups</code>, <code>POST /api/orders</code></td><td>T-25 đến T-34, I-07, E-07 / AC-14</td></tr>
+  </table>
+
+  <h1>15. ĐIỀU KIỆN NỀN TẢNG: HIỆN TRẠNG SLOPEE VÀ GIAI ĐOẠN 0</h1>
+  <p>Mục này dựa trên việc đọc <code>backend/</code> của repo Slopee (schema, <code>app.py</code>, <code>init_db.py</code> và các tệp routes). Chưa chạy thử mã; điểm nào cần kiểm chứng được ghi rõ.</p>
+
+  <h2>15.1. Hiện trạng so với giả định của tài liệu này</h2>
+  <table>
+    <tr><th style="width:16%">Chủ đề</th><th style="width:26%">Giả định ban đầu</th><th>Thực tế trong Slopee</th><th style="width:22%">Xử lý</th></tr>
+    <tr><td>Xác thực</td><td>Có phiên đăng nhập</td><td>Không có phiên hay token. Đăng nhập chỉ trả JSON người dùng, frontend lưu ở <code>localStorage</code>, backend tin <code>userId</code> do client gửi.</td><td>Giai đoạn 0 (15.3)</td></tr>
+    <tr><td>Khóa chính</td><td><code>INT</code></td><td><code>VARCHAR(36)</code> UUID cho <code>users</code>, <code>orders</code>, <code>shops</code></td><td>Mục 9</td></tr>
+    <tr><td>Trạng thái đơn</td><td>Viết hoa</td><td><code>pending, paid, shipped, cancelled, received</code></td><td>Mục 5.1</td></tr>
+    <tr><td>Shipper</td><td>Có vai trò và vận đơn</td><td><code>users.role</code> chỉ có <code>admin, seller, user</code>; không có vận đơn</td><td>Mục 9 (bảng 0, 15)</td></tr>
+    <tr><td>Nhóm hàng</td><td>Có mã nhóm</td><td><code>categories(id, name)</code></td><td>Mục 9 (bảng 11)</td></tr>
+    <tr><td>Merchant của đơn</td><td>Một đơn một Merchant</td><td><code>orders</code> không có merchant; một đơn có thể gồm nhiều shop</td><td>Nạp gom, tách đơn theo shop (BR-11)</td></tr>
+    <tr><td>Tiền</td><td>VND số nguyên</td><td><code>DECIMAL(11,2)</code> hiển thị bằng ký hiệu $ (USD), tính bằng <code>float</code>; số dư giả lập; tiền bán hàng cộng ngay cho người bán</td><td>Chuyển toàn bộ sang VND số nguyên (P0-07)</td></tr>
+    <tr><td>Migration</td><td>Tệp SQL đánh số</td><td><code>init_db.py</code> tách <code>schema.sql</code> bằng dấu chấm phẩy; có route HTTP <code>/api/shops/migrate</code></td><td>Bộ chạy migration riêng (15.3)</td></tr>
+  </table>
+
+  <h2>15.2. Lỗi bảo mật phát hiện</h2>
+  <table>
+    <tr><th style="width:7%">Mã</th><th style="width:11%">Mức</th><th style="width:20%">Vị trí</th><th>Vấn đề</th></tr>
+    <tr><td>S-01</td><td>Nghiêm trọng</td><td>Toàn bộ routes</td><td>Không endpoint nào xác thực; <code>userId</code> lấy từ thân yêu cầu hoặc đường dẫn nên ai cũng đọc được phương thức thanh toán (số tài khoản, số dư), đơn hàng, giỏ hàng của người khác.</td></tr>
+    <tr><td>S-02</td><td>Nghiêm trọng</td><td><code>auth.py</code> đăng ký</td><td><code>role</code> lấy thẳng từ client và ENUM cho phép <code>admin</code>, nên ai cũng tạo được tài khoản admin.</td></tr>
+    <tr><td>S-03</td><td>Nghiêm trọng</td><td><code>admin.py</code></td><td>Không kiểm quyền: liệt kê người dùng (email, điện thoại), xóa người dùng, sửa danh mục.</td></tr>
+    <tr><td>S-04</td><td>Nghiêm trọng</td><td><code>payments.py</code> thêm phương thức</td><td>Mỗi lần gọi cấp 10.000 số dư giả lập cho <code>userId</code> tùy ý, nên tạo tiền vô hạn.</td></tr>
+    <tr><td>S-05</td><td>Cao</td><td><code>payments.py</code> cập nhật đơn</td><td>Không kiểm chủ đơn và trạng thái hiện tại; hủy đơn không hoàn tiền hay tồn kho. Đây là đường ghi <code>orders.status</code> mà Web3 phải chặn.</td></tr>
+    <tr><td>S-06</td><td>Cao</td><td><code>shops.py</code></td><td>Sửa giá, tồn kho, xóa sản phẩm, thêm ảnh và biến thể không kiểm chủ shop; thêm sản phẩm vào shop bất kỳ.</td></tr>
+    <tr><td>S-07</td><td>Cao</td><td><code>shops.py</code> <code>/migrate</code></td><td>Route GET không xác thực chạy <code>ALTER TABLE</code>, hardcode tên schema.</td></tr>
+    <tr><td>S-08</td><td>Cao</td><td><code>payments.py</code> thanh toán</td><td>Kiểm kho rồi trừ kho không khóa và không điều kiện (race, bán lố); tiền tính bằng <code>float</code>; trừ số dư không điều kiện; không có <code>SELECT ... FOR UPDATE</code>. Tài khoản không có PIN (như admin) gây lỗi 500: <code>check_password_hash(None, ...)</code> ném <code>AttributeError</code> (đã chạy thử) và API trả thông báo lỗi nội bộ cho client.</td></tr>
+    <tr><td>S-09</td><td>Trung bình</td><td>Đăng nhập, PIN 6 số</td><td>Không giới hạn số lần thử, nên dò mật khẩu và PIN được.</td></tr>
+    <tr><td>S-10</td><td>Trung bình</td><td><code>app.py</code>, <code>config.py</code>, <code>init_db.py</code></td><td><code>debug=True</code>, <code>SECRET_KEY</code> mặc định, admin/admin ghi sẵn trong mã và README, trả <code>str(e)</code> cho client.</td></tr>
+    <tr><td>S-11</td><td>Trung bình</td><td><code>auth.py</code></td><td>Đổi tên đăng nhập và tiểu sử không cần xác thực hay mật khẩu.</td></tr>
+    <tr><td>S-12</td><td>Thấp</td><td>Frontend</td><td>Phân quyền chỉ ở phía client (route <code>/admin</code>, vai trò đọc từ <code>localStorage</code>).</td></tr>
+    <tr><td>S-13</td><td>Thấp</td><td><code>schema.sql</code></td><td><code>reviews</code> và <code>reviewImages</code> khai báo hai lần khác nhau, bản đầu thắng do <code>IF NOT EXISTS</code>; bản đầu của <code>reviewImages</code> có <code>id VARCHAR(36)</code> không tự sinh trong khi <code>reviews.py</code> chèn không cung cấp <code>id</code>, nên thêm ảnh đánh giá gặp lỗi 1364 ở chế độ strict mặc định của MySQL; bản đầu của <code>reviews</code> cũng thiếu <code>UNIQUE(userId, productId)</code> của bản sau.</td></tr>
+    <tr><td>S-14</td><td>Thấp</td><td>Nhiều route</td><td><code>request.json</code> có thể là <code>None</code>; URL ảnh không được kiểm tra; <code>int()</code> trên đầu vào không bắt lỗi.</td></tr>
+  </table>
+  <p>Liên quan trực tiếp tới Web3: nếu không sửa S-01 thì bước liên kết ví (BR-07) vô nghĩa, vì kẻ tấn công có thể liên kết ví của mình với tài khoản người bán rồi nhận tiền; S-05 cho phép đổi trạng thái chiếu của đơn Web3; S-02 và S-03 cho phép chiếm quyền Admin, tức quyền tạo đề xuất phán quyết.</p>
+
+  <h2>15.3. Giai đoạn 0: yêu cầu bắt buộc trước khi tích hợp</h2>
+  <table>
+    <tr><th style="width:8%">Mã</th><th>Yêu cầu</th><th style="width:16%">Xử lý lỗi</th><th style="width:14%">Kiểm thử</th></tr>
+    <tr><td>P0-01</td><td>Lớp xác thực: đăng nhập trả token ký có hạn (<code>itsdangerous</code>, <code>SECRET_KEY</code> bắt buộc từ môi trường, hết hạn theo <code>AUTH_TOKEN_TTL_SECONDS</code>); frontend gửi qua header <code>Authorization</code>; decorator <code>require_auth(roles)</code> đặt người dùng hiện tại; mọi <code>userId</code> trong thân hoặc đường dẫn bị bỏ và lấy từ token. Rủi ro XSS đối với token ở bộ nhớ trình duyệt được chấp nhận ở mức đồ án.</td><td>S-01, S-12</td><td>A-01, A-02</td></tr>
+    <tr><td>P0-02</td><td>Đăng ký chỉ nhận <code>user</code> và <code>seller</code>; <code>admin</code> tạo bằng lệnh cài đặt với mật khẩu đặt khi cài; <code>shipper</code> do Admin cấp; bảo vệ toàn bộ <code>admin_bp</code> bằng vai trò admin; bỏ cấp số dư giả lập cho người dùng (chỉ seed hoặc Admin).</td><td>S-02, S-03, S-04, S-10</td><td>A-02, A-04, A-07</td></tr>
+    <tr><td>P0-03</td><td>Kiểm quyền sở hữu: đơn thuộc người mua, giỏ hàng thuộc chủ giỏ, phương thức thanh toán thuộc chủ, shop và sản phẩm thuộc người bán; cập nhật đơn kiểm trạng thái hợp lệ và từ chối đơn Web3.</td><td>S-05, S-06, S-11</td><td>A-03, I-06</td></tr>
+    <tr><td>P0-04</td><td>Loại bỏ <code>/api/shops/migrate</code>; thay bằng bộ chạy migration số thứ tự ghi <code>schema_migrations</code>, không dùng HTTP; gộp khai báo trùng của <code>reviews</code> và <code>reviewImages</code>, giữ <code>UNIQUE(userId, productId)</code> và dùng <code>reviewImages.id</code> tự tăng (hoặc UUID sinh ở backend).</td><td>S-07, S-13</td><td>A-07</td></tr>
+    <tr><td>P0-05</td><td>Thanh toán an toàn: giao dịch với <code>SELECT ... FOR UPDATE</code>; <code>UPDATE ... WHERE inStock &gt;= :qty</code>; tính tiền bằng số nguyên VND hoặc <code>Decimal</code>, không dùng <code>float</code>; kiểm tra PIN chưa thiết lập trả 401 thay vì lỗi 500; giới hạn số lần thử đăng nhập và PIN (khóa tạm sau 5 lần).</td><td>S-08, S-09</td><td>A-05, A-06</td></tr>
+    <tr><td>P0-06</td><td>Cấu hình: tắt <code>debug</code> theo môi trường; lỗi chung cho client, chi tiết vào nhật ký; kiểm tra <code>request.json</code> và đầu vào.</td><td>S-10, S-14</td><td>A-01</td></tr>
+    <tr><td>P0-07</td><td>Chuyển Slopee sang VND: đổi bốn cột tiền (<code>products.unitPrice</code>, <code>orderLines.unitPrice</code>, <code>orders.totalAmount</code>, <code>paymentMethods.balance</code>) sang <code>DECIMAL(15,0)</code> (dữ liệu cũ nhân với <code>FX_VND_PER_TOKEN</code>); thay mọi ký hiệu <code>$</code> và <code>toFixed(2)</code> ở frontend (Navbar, Home, ProductView, Cart, Checkout, MyOrders, SellerDashboard) bằng một hàm định dạng VND duy nhất (<code>Intl.NumberFormat</code> với <code>vi-VN</code> và <code>VND</code>); ô nhập giá của người bán chỉ nhận số nguyên không âm; thông báo của backend và số dư giả lập ban đầu đổi sang VND.</td><td>Đơn vị tiền</td><td>I-02, I-07</td></tr>
+    <tr><td>P0-08</td><td>Chuyển bộ kiểm thử sẵn có theo mục 12.3: cập nhật các test cũ theo token và VND, chạy các đường tiền, tồn kho và phân quyền trên MySQL thật trong CI, thêm client API chung và route guard ở frontend kèm F-01, F-04.</td><td>Chất lượng</td><td>A-01 đến A-07, F-01, F-04</td></tr>
+  </table>
+  <div class="note-box">P0-01 và P0-02 phải xong trước UC-00 (tuần 3) và nên bắt đầu ngay tuần 1 bởi thành viên B vì mọi API Web3 phụ thuộc vào đó; P0-03 đến P0-06 chia cho thành viên A sau M1, P0-07 và P0-08 chia cho [B] và [F] trong tuần 1-2 (xem mục 11). Các test A-01 đến A-07 chạy trong CI hiện có của Slopee (pytest, GitHub Actions).</div>
+
+</body>
+</html>

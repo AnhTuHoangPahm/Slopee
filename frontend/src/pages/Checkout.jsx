@@ -2,11 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { fetchPaymentMethodsAPI, addPaymentMethodAPI, checkoutAPI } from '../api/payments';
+import { getUser } from '../api/http';
+import { formatVND } from '../utils/formatVND';
+import Web3CheckoutPanel from '../components/Web3CheckoutPanel';
+import { fetchWeb3EligibilityAPI } from '../api/web3';
+
+const WEB3_METHOD = 'WEB3_ESCROW'; // không phải id trong bảng paymentMethods: chọn mục này thì dùng luồng ký quỹ Web3
 
 export default function Checkout() {
     const location = useLocation();
     const navigate = useNavigate();
-    const user = JSON.parse(localStorage.getItem('user'));
+    const user = getUser();
 
     // Items passed directly from Cart via Router state extraction securely
     const checkoutItems = location.state?.items || [];
@@ -15,6 +21,9 @@ export default function Checkout() {
     const [selectedMethodId, setSelectedMethodId] = useState('');
     const [passPhrase, setPassPhrase] = useState('');
     const [loading, setLoading] = useState(false);
+    // Điều kiện dùng Web3 (BR-07): mọi shop trong đơn phải đã liên kết ví nhận tiền.
+    // status: 'checking' | 'ok' | 'blocked' (có shop chưa liên kết) | 'unavailable' (máy chủ chưa cấu hình Web3) | 'unknown' (không hỏi được: không chặn, panel sẽ báo lỗi thật)
+    const [web3Gate, setWeb3Gate] = useState({ status: 'checking', unlinkedShops: [] });
 
     // Add Method Form State
     const [showAddForm, setShowAddForm] = useState(false);
@@ -26,11 +35,22 @@ export default function Checkout() {
             return;
         }
         loadMethods();
+        let cancelled = false;
+        fetchWeb3EligibilityAPI(checkoutItems.map(i => i.cartItemId))
+            .then((r) => { if (!cancelled) setWeb3Gate({ status: r.all_linked ? 'ok' : 'blocked', unlinkedShops: (r.shops || []).filter(s => !s.wallet_linked) }); })
+            .catch((e) => { if (!cancelled) setWeb3Gate({ status: e?.code === 'WEB3_NOT_CONFIGURED' ? 'unavailable' : 'unknown', unlinkedShops: [] }); });
+        return () => { cancelled = true; };
     }, []);
+
+    const web3Disabled = web3Gate.status === 'blocked' || web3Gate.status === 'unavailable';
+    // Đã lỡ chọn Web3 trước khi biết kết quả: chuyển về phương thức khác để không kẹt ở ngõ cụt
+    useEffect(() => {
+        if (web3Disabled && selectedMethodId === WEB3_METHOD) setSelectedMethodId(methods[0]?.id || 'CASH_ON_DELIVERY');
+    }, [web3Disabled, selectedMethodId, methods]);
 
     const loadMethods = async () => {
         try {
-            const data = await fetchPaymentMethodsAPI(user.id);
+            const data = await fetchPaymentMethodsAPI();
             setMethods(data.methods);
             if (data.methods.length > 0 && !selectedMethodId) setSelectedMethodId(data.methods[0].id);
         } catch (err) { console.error(err); }
@@ -40,7 +60,6 @@ export default function Checkout() {
         e.preventDefault();
         try {
             await addPaymentMethodAPI({
-                userId: user.id,
                 methodType: 'bank',
                 providerName: newMethodName,
                 accountNumber: 'xxxx-' + Math.floor(1000 + Math.random() * 9000)
@@ -48,7 +67,7 @@ export default function Checkout() {
             setShowAddForm(false);
             setNewMethodName('');
             loadMethods();
-            alert("Bank Account successfully linked! You have $10,000 in your account.");
+            alert("Bank Account successfully linked!");
         } catch (err) { alert(err.message); }
     };
 
@@ -60,7 +79,6 @@ export default function Checkout() {
         try {
             const ids = checkoutItems.map(i => i.cartItemId);
             await checkoutAPI({
-                userId: user.id,
                 paymentMethodId: selectedMethodId,
                 passPhrase: passPhrase,
                 cartItemIds: ids
@@ -96,12 +114,12 @@ export default function Checkout() {
                                 )}
                             </div>
                             <div style={{ color: '#ee4d2d', fontWeight: '500' }}>
-                                ${(it.unitPrice * it.quantity).toFixed(2)}
+                                {formatVND(it.unitPrice * it.quantity)}
                             </div>
                         </div>
                     ))}
                     <div style={{ textAlign: 'right', marginTop: '20px', fontSize: '18px' }}>
-                        Gross Cost Assessment: <span style={{ color: '#ee4d2d', fontWeight: 'bold' }}>${totalSum.toFixed(2)}</span>
+                        Gross Cost Assessment: <span style={{ color: '#ee4d2d', fontWeight: 'bold' }}>{formatVND(totalSum)}</span>
                     </div>
                 </div>
 
@@ -129,7 +147,7 @@ export default function Checkout() {
                                 <div>
                                     <div style={{ fontWeight: '500', fontSize: '15px' }}>{m.providerName} (...{m.accountNumber.slice(-4)})</div>
                                     <div style={{ fontSize: '12px', color: m.balance >= totalSum ? '#4caf50' : '#d32f2f', marginTop: '2px' }}>
-                                        Balance: ${m.balance} {m.balance < totalSum && "(Insufficient Funds!)"}
+                                        Balance: {formatVND(m.balance)} {m.balance < totalSum && "(Insufficient Funds!)"}
                                     </div>
                                 </div>
                             </label>
@@ -144,10 +162,37 @@ export default function Checkout() {
                                 </div>
                             </div>
                         </label>
+                        <label data-testid="web3-method" aria-disabled={web3Disabled} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', border: selectedMethodId === WEB3_METHOD ? '2px solid #ee4d2d' : '1px solid #ddd', borderRadius: '4px', marginBottom: '10px', cursor: web3Disabled ? 'not-allowed' : 'pointer', opacity: web3Disabled ? 0.5 : 1, transition: 'all 0.2s ease-in-out' }}>
+                            <input type="radio" name="paymentMethod" disabled={web3Disabled} checked={selectedMethodId === WEB3_METHOD} onChange={() => setSelectedMethodId(WEB3_METHOD)} style={{ transform: 'scale(1.2)' }} />
+                            <div>
+                                <div style={{ fontWeight: '500', fontSize: '15px' }}>🦊 Thanh toán Web3 (ký quỹ mUSD)</div>
+                                <div style={{ fontSize: '12px', color: '#4caf50', marginTop: '2px' }}>
+                                    Tiền được giữ trong hợp đồng ký quỹ tới khi bạn nhận hàng. Mạng thử, không dùng tiền thật.
+                                </div>
+                            </div>
+                        </label>
+                        {web3Gate.status === 'blocked' && (
+                            <div data-testid="web3-unavailable" role="status" style={{ fontSize: '13px', color: '#b26a00', background: '#fff8e1', border: '1px solid #ffe0a3', borderRadius: '4px', padding: '10px 12px' }}>
+                                Phương thức Thanh toán Web3 tạm thời không khả dụng vì có cửa hàng trong đơn hàng chưa liên kết ví nhận tiền.
+                                {web3Gate.unlinkedShops.length > 0 && (
+                                    <div style={{ marginTop: '4px' }}>Cửa hàng chưa liên kết: {web3Gate.unlinkedShops.map(s => s.shop_name).join(', ')}.</div>
+                                )}
+                            </div>
+                        )}
+                        {web3Gate.status === 'unavailable' && (
+                            <div data-testid="web3-unavailable" role="status" style={{ fontSize: '13px', color: '#b26a00', background: '#fff8e1', border: '1px solid #ffe0a3', borderRadius: '4px', padding: '10px 12px' }}>
+                                Phương thức Thanh toán Web3 hiện chưa khả dụng trên máy chủ.
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                {/* Final Passphrase Validation Box */}
+                {selectedMethodId === WEB3_METHOD ? (
+                    <div style={{ background: '#fff', padding: '20px', borderRadius: '4px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                        <Web3CheckoutPanel cartItemIds={checkoutItems.map(i => i.cartItemId)} />
+                    </div>
+                ) : (
+                /* Final Passphrase Validation Box */
                 <div style={{ background: '#fff', padding: '20px', borderRadius: '4px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                         <span style={{ color: '#555' }}>Enter 6-Digit PIN:</span>
@@ -161,6 +206,7 @@ export default function Checkout() {
                         {loading ? "Checking..." : "PROCESS PAYMENT"}
                     </button>
                 </div>
+                )}
             </div>
         </div>
     );

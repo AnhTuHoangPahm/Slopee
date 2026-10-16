@@ -3,9 +3,10 @@ import { test, expect } from '@playwright/test';
 test.describe('Tetris Game Flow', () => {
 
   test.beforeEach(async ({ page }) => {
-    // Inject a fake logged-in user into localStorage so the app allows access
+    // Inject a fake session (user + token) into sessionStorage so the app allows access
     await page.addInitScript(() => {
-      window.localStorage.setItem('user', JSON.stringify({
+      window.sessionStorage.setItem('token', 'e2e-fake-token');
+      window.sessionStorage.setItem('user', JSON.stringify({
         id: 'test-user-id',
         name: 'Player One',
         role: 'buyer'

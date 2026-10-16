@@ -3,7 +3,13 @@ from routes.auth import get_db_connection
 import time
 import json
 
+from errors import register_blueprint_errors
+from validation import as_int
+
 products_bp = Blueprint('products', __name__)
+register_blueprint_errors(products_bp)
+
+MAX_SEARCH_LEN = 100
 
 @products_bp.route('/categories', methods=['GET'])
 def get_categories():
@@ -13,14 +19,12 @@ def get_categories():
             cursor.execute("SELECT id, name FROM categories ORDER BY name ASC")
             categories = cursor.fetchall()
             return jsonify({"categories": categories}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
 
 @products_bp.route('/', methods=['GET'])
 def search_products():
-    search_query = request.args.get('search', '')
+    search_query = request.args.get('search', '')[:MAX_SEARCH_LEN]
     
     conn = get_db_connection()
     try:
@@ -94,15 +98,13 @@ def get_product_details(product_id):
                 prod['variants'] = []
             
             return jsonify({"product": prod}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
 
 @products_bp.route('/<product_id>/reviews', methods=['GET'])
 def get_product_reviews(product_id):
-    offset = int(request.args.get('offset', 0))
-    limit = int(request.args.get('limit', 5))
+    offset = as_int(request.args.get('offset', 0), 'offset', minimum=0, maximum=100000)
+    limit = as_int(request.args.get('limit', 5), 'limit', minimum=1, maximum=50)
     
     conn = get_db_connection()
     try:
@@ -134,7 +136,5 @@ def get_product_reviews(product_id):
                     "total": stats['totalReviews']
                 }
             }), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
     finally:
         conn.close()

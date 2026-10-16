@@ -3,11 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { fetchProductDetailsAPI, fetchProductReviewsAPI, publishProductReviewAPI } from '../api/products';
 import { addToCartAPI } from '../api/carts';
 import Navbar from '../components/Navbar';
+import { getUser } from '../api/http';
+import { formatVND } from '../utils/formatVND';
 
 export default function ProductView() {
     const { id } = useParams();
     const navigate = useNavigate();
-    const user = JSON.parse(localStorage.getItem('user'));
+    const user = getUser();
 
     const [product, setProduct] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -108,7 +110,7 @@ export default function ProductView() {
         });
 
         try {
-            await addToCartAPI(user.id, product.id, 1, payloadVariants);
+            await addToCartAPI(product.id, 1, payloadVariants);
             alert("Successfully added to Cart!");
         } catch (err) {
             alert("Failed to add to cart: " + err.message);
@@ -120,7 +122,6 @@ export default function ProductView() {
         try {
             setWriteError('');
             await publishProductReviewAPI(product.id, {
-                userId: user.id,
                 rating: writeRating,
                 comment: writeComment,
                 images: [] // Future extension: uploading actual blobs to S3
@@ -190,7 +191,7 @@ export default function ProductView() {
                         </div>
 
                         <div style={{ background: '#fafafa', padding: '20px', display: 'flex', alignItems: 'center', marginBottom: '25px', borderRadius: '2px' }}>
-                            <span style={{ fontSize: '32px', color: '#ee4d2d', fontWeight: 'bold', marginRight: '15px' }}>${product.unitPrice}</span>
+                            <span style={{ fontSize: '32px', color: '#ee4d2d', fontWeight: 'bold', marginRight: '15px' }}>{formatVND(product.unitPrice)}</span>
                         </div>
 
                         {/* Variants Logic */}

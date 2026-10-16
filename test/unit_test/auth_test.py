@@ -15,74 +15,44 @@ def mock_db_cursor(mocker):
     return mock_cursor
 
 
-def test_login_success(client, mocker, mock_db_cursor):
-    """
-    UNIT TEST: Test that the login endpoint succeeds with correct credentials,
-    WITHOUT touching the actual MySQL database.
-    """
-    
-    # 2. MOCK THE DATABASE RESPONSE
-    # We define exactly what `cursor.fetchone()` should return for this specific test
-    fake_password = 'mypassword123'
-    fake_hash = generate_password_hash(fake_password) # Real hash so your real check_password_hash logic passes!
-    
-    mock_db_cursor.fetchone.return_value = {
-        'userId': 1,
-        'passwordHash': fake_hash, # Your login() function will compare against this
-        'role': 'user',
-        'name': 'Test User',
-        'email': 'test@slopee.com'
-    }
+def _user_row(password, user_id=1):
+    return {'userId': user_id, 'passwordHash': generate_password_hash(password),
+            'role': 'user', 'name': 'Test User', 'email': 'test@slopee.com'}
 
 
-    # 3. EXECUTE THE REQUEST
-    # We act like a frontend React client and send a JSON POST request
-    response = client.post('/api/auth/login', json={
-        "username": "testuser",
-        "password": fake_password
-    })
+def test_login_success(client, fake_db):
+    """Đăng nhập đúng trả token ký, KHÔNG chạm MySQL thật."""
+    cur = fake_db('backend.routes.auth')
+    cur.on("FROM credentials c", [_user_row('mypassword123')])
 
+    response = client.post('/api/auth/login', json={"username": "testuser", "password": "mypassword123"})
 
-    # 4. ASSERTIONS
-    # Verify the HTTP response is 200 OK
     assert response.status_code == 200
-    
-    # Verify the JSON payload has the correct data
     data = response.get_json()
     assert data['message'] == "Login successful"
     assert data['user']['name'] == "Test User"
     assert data['user']['role'] == "user"
-    
-    # ADVANCED ASSERTION: Verify the SQL query was actually executed with the correct username!
-    mock_db_cursor.execute.assert_called_once()
-    query_string = mock_db_cursor.execute.call_args[0][0]
-    query_params = mock_db_cursor.execute.call_args[0][1]
-    
-    assert "SELECT" in query_string
-    assert query_params == ("testuser",)
+
+    # P0-01: login phải trả token ký, giải mã ra đúng danh tính
+    from auth_utils import verify_token
+    assert verify_token(data['token']) == {'uid': 1, 'role': 'user'}
+    assert data['expiresIn'] > 0
+
+    # Câu SQL đầu tiên là truy vấn đăng nhập với đúng username
+    query, params = cur.calls[0]
+    assert "SELECT" in query and params == ("testuser",)
 
 
-def test_login_invalid_password(client, mocker, mock_db_cursor):
-    """Test that login fails with a 401 Unauthorized if password doesn't match hash."""
-    
-    # Database returns a valid user...
-    mock_db_cursor.fetchone.return_value = {
-        'userId': 1,
-        'passwordHash': generate_password_hash('correctpassword'),
-        'role': 'user',
-        'name': 'Test User',
-        'email': 'test@slopee.com'
-    }
+def test_login_invalid_password(client, fake_db):
+    """Sai mật khẩu -> 401 (P0-05: và được đếm để khóa tạm)."""
+    cur = fake_db('backend.routes.auth')
+    cur.on("FROM credentials c", [_user_row('correctpassword')])
 
-    # ...but we send the wrong password!
-    response = client.post('/api/auth/login', json={
-        "username": "testuser",
-        "password": "WRONG_PASSWORD"
-    })
+    response = client.post('/api/auth/login', json={"username": "testuser", "password": "WRONG_PASSWORD"})
 
-    # Assuming your login() returns 401 for bad passwords
     assert response.status_code == 401
     assert response.get_json()['error'] == "Invalid username or password"
+    assert cur.executed("UPDATE authAttempts")  # lần sai đã được ghi nhận
 
 def test_signup_success(client, mocker, mock_db_cursor):
     fake_role = "user"

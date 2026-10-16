@@ -1,0 +1,40 @@
+{
+  "$comment": "Nguồn sự thật DUY NHẤT cho kiểu EIP-712 của Slopee (SRS mục 6, SDD 8.1). Python (eth_account.encode_typed_data), JS (ethers v6 signTypedData) và Solidity (QUOTE_TYPEHASH/DISPUTE_TYPEHASH) phải khớp tệp này. KHÔNG đổi thứ tự trường: đổi là đổi typehash và phá chữ ký. Đã khóa ở tuần 1.",
+  "version": 1,
+  "domain": {
+    "name": "SlopeeEscrow",
+    "version": "1",
+    "chainIdSource": "deployments/local.json#chainId",
+    "verifyingContractSource": "deployments/local.json#escrow"
+  },
+  "types": {
+    "OrderQuote": [
+      { "name": "orderId", "type": "uint256" },
+      { "name": "buyer", "type": "address" },
+      { "name": "merchant", "type": "address" },
+      { "name": "token", "type": "address" },
+      { "name": "amount", "type": "uint256" },
+      { "name": "inspectionDuration", "type": "uint256" },
+      { "name": "disputeTimeout", "type": "uint256" },
+      { "name": "feeBps", "type": "uint256" },
+      { "name": "docHash", "type": "bytes32" },
+      { "name": "deadline", "type": "uint256" }
+    ],
+    "DisputeResolution": [
+      { "name": "orderId", "type": "uint256" },
+      { "name": "payoutTo", "type": "address" },
+      { "name": "amount", "type": "uint256" },
+      { "name": "nonce", "type": "uint256" },
+      { "name": "deadline", "type": "uint256" }
+    ]
+  },
+  "typeStrings": {
+    "OrderQuote": "OrderQuote(uint256 orderId,address buyer,address merchant,address token,uint256 amount,uint256 inspectionDuration,uint256 disputeTimeout,uint256 feeBps,bytes32 docHash,uint256 deadline)",
+    "DisputeResolution": "DisputeResolution(uint256 orderId,address payoutTo,uint256 amount,uint256 nonce,uint256 deadline)"
+  },
+  "docHash": {
+    "$comment": "SDD 5.3c: docHash = keccak256(canonical_json(summary)). Khóa sắp xếp tăng dần, không khoảng trắng thừa, UTF-8, chỉ số nguyên.",
+    "algorithm": "keccak256",
+    "canonicalJson": { "sortKeys": true, "separators": [",", ":"], "ensureAscii": false, "integersOnly": true }
+  }
+}
