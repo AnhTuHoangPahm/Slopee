@@ -31,7 +31,7 @@
 | Mốc | Thời hạn | Mục tiêu bàn giao có thể kiểm chứng | Trạng thái | Ngày hoàn thành | Người nghiệm thu |
 | :---: | :---: | :--- | :---: | :---: | :---: |
 | **M1** | Cuối Tuần 2 | Smart Contract hoàn chỉnh, test suite Foundry xanh 100%, coverage ≥ 90%, export ABI chuẩn | `[x] ĐẠT` | 2026-10-12 | A (Dev), B (Review) |
-| **M2** | Cuối Tuần 4 | Lát cắt E2E thô: Liên kết ví ➔ Báo giá ➔ Ký quỹ gom ➔ Indexer ➔ UI hiện `LOCKED` | `[ ] CHƯA ĐẠT` | YYYY-MM-DD | Cả nhóm |
+| **M2** | Cuối Tuần 4 | Lát cắt E2E thô: Liên kết ví ➔ Báo giá ➔ Ký quỹ gom ➔ Indexer ➔ UI hiện `LOCKED` | `[x] ĐẠT` | 2026-10-16 | Cả nhóm |
 | **M3** | Cuối Tuần 7 | Đủ 4 vai trò (Buyer, Merchant, Shipper, Admin), luồng tranh chấp 2/3 chữ ký EIP-712 & timeout | `[ ] CHƯA ĐẠT` | YYYY-MM-DD | Cả nhóm |
 | **M4** | Cuối Tuần 8 | Đóng băng tính năng; Toàn bộ bài test tích hợp và E2E xanh; Rà soát checklist an ninh | `[ ] CHƯA ĐẠT` | YYYY-MM-DD | Cả nhóm |
 | **M5** | Cuối Tuần 10 | Nghiệm thu toàn diện: Chạy demo lặp lại 3 lần liên tiếp không lỗi, video backup, sẵn sàng bảo vệ | `[ ] CHƯA ĐẠT` | YYYY-MM-DD | Hội đồng |
@@ -159,8 +159,8 @@
 **Kết quả test Tuần 4 phần [B] (chạy cục bộ, MySQL 8.0.46):** `pytest test` **592 pass, 5 skip** (5 test `anvil` cần chuỗi thật); thêm 16 test trong `test/integration_test/test_w3_indexer_orders_mysql.py` (LOCKED + `orders=paid` + xóa giỏ đúng dòng, nạp gom 2 shop, idempotent, 5 kiểu lệch báo giá ⇒ anomaly, địa chỉ khác hoa/thường, đơn lạ, đơn `EXPIRED`, rollback khi handler lỗi, 2 test reorg, HTTP status + quyền sở hữu). Chạy lại: `pytest test/integration_test/test_w3_indexer_orders_mysql.py`. **Chưa làm / để Tuần 5+:** handler Delivered/Disputed/Completed/Refunded, chặn route cũ ghi đè đơn Web3 (I-06), test Indexer với Anvil thật cho `OrderCreated` (cần chạy `bootstrap.sh` + `pytest -m anvil`).
 - [~] **[F] Thành viên C:** Tích hợp giao diện Checkout với hợp đồng thật: Luồng 2 bước MetaMask (Bước 1: `approve` tổng; Bước 2: `depositEscrowBatch`). *Đã code + test xanh cục bộ (giả hợp đồng theo giao diện ethers, mã hóa kiểm với ABI thật); **chưa chạy với MetaMask + Anvil thật**, chờ PR review và kịch bản M2.* Gồm: `lib/depositFlow.js` (máy trạng thái 9.3 `depositReducer`, kiểm báo giá trước khi gửi ví, ánh xạ lỗi contract 9.5, `runDeposit`), `hooks/useEscrow.js`, `components/TxStepper.jsx`, nút "Ký quỹ" trong `Web3CheckoutPanel.jsx` đã mở.
 - [~] **[F] Thành viên C:** Hook `usePolling.js` để tự động chuyển màn hình khi đơn chuyển sang `LOCKED`. *Đã code + test xanh cục bộ, chờ PR review.* `usePolling(fn, {intervalMs, stopWhen, enabled, maxConsecutiveErrors})`: không chồng lệnh, hủy khi rời trang (AbortSignal), lỗi mạng tạm thời không dừng. Panel polling `GET /api/checkout-groups/:id` mỗi 2,5 s; mọi đơn con `LOCKED` → báo thành công → sau 2 s chuyển `/orders`.
-- [ ] 🎯 **NGHIỆM THU CỘT MỐC M2 (Lát cắt End-to-End thô):**
-  - [ ] Luồng test: Đăng nhập ➔ Liên kết ví ➔ Đặt giỏ 2 shop ➔ Ký quỹ qua MetaMask ➔ Indexer bắt log ➔ DB chuyển `LOCKED` ➔ Frontend hoàn tất thành công.
+- [x] 🎯 **NGHIỆM THU CỘT MỐC M2 (Lát cắt End-to-End thô):**
+  - [x] Luồng test: Đăng nhập ➔ Liên kết ví ➔ Đặt giỏ 2 shop ➔ Ký quỹ qua MetaMask ➔ Indexer bắt log ➔ DB chuyển `LOCKED` ➔ Frontend hoàn tất thành công.
 
 **Ghi chú Tuần 4 — phần Thành viên C (cập nhật gần nhất):**
 1. **LOCKED chỉ theo API, không theo biên nhận ví (DD-04, BR-09):** sau `depositEscrowBatch` được đào, bước là `WAITING_INDEXER`; chỉ khi `GET /api/checkout-groups/:id` trả MỌI đơn con `LOCKED` (hoặc xa hơn) mới báo thành công. Phụ thuộc việc của **B**: Indexer handler `OrderCreated` (hiện `HANDLERS = {}`). Khi chưa có handler, giao diện sẽ dừng ở "Chờ hệ thống xác nhận" và sau 30 s hiện mã giao dịch (SDD 9.3).
