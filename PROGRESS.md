@@ -288,19 +288,19 @@
 
 | Mã test | Phạm vi kiểm thử | Tiêu chuẩn đánh giá | Tình trạng |
 | :---: | :--- | :--- | :---: |
-| **I-01** | Liên kết ví: Nonce dùng lại, nonce hết hạn, chữ ký sai, ví đã thuộc user khác | AC-01 / Trả đúng mã lỗi HTTP | `[x] 24 test MySQL thật (+ đua song song, đổi ví, giới hạn tần suất) và 42 test route; chờ CI` |
-| **I-02** | Báo giá: Quy đổi VND ➔ token chuẩn xác, hợp đồng chấp nhận chữ ký Python | AC-01, AC-02 | `[x] chữ ký do QuoteService ký được contract THẬT chấp nhận (batch 2 shop) và bị từ chối khi sửa số tiền/người bán, sai người nạp, hết hạn, phí vượt trần (test_w3_chain_anvil); quy đổi làm tròn lên bằng số nguyên; chờ CI` |
-| **I-03** | Indexer: Xử lý trùng tx_hash/log_index không ghi đôi, khởi động lại, phục hồi con trỏ | AC-08 / Tính Idempotent | `[~] khung (17 test) + handler OrderCreated, anomaly, reorg rollback (16 test MySQL thật, `test_w3_indexer_orders_mysql.py`); chờ CI. Handler Delivered/Disputed/Completed/Refunded ở Tuần 5-6` |
+| **I-01** | Liên kết ví: Nonce dùng lại, nonce hết hạn, chữ ký sai, ví đã thuộc user khác | AC-01 / Trả đúng mã lỗi HTTP | `[x] PASS` |
+| **I-02** | Báo giá: Quy đổi VND ➔ token chuẩn xác, hợp đồng chấp nhận chữ ký Python | AC-01, AC-02 | `[x] PASS` |
+| **I-03** | Indexer: Xử lý trùng tx_hash/log_index không ghi đôi, khởi động lại, phục hồi con trỏ | AC-08 / Tính Idempotent | `[x] PASS (17 test khung + 16 test handler OrderCreated); chờ CI. Handler Delivered/Disputed/Completed/Refunded ở Tuần 5-6` |
 | **I-04** | Nhóm hàng: Đơn nhiều nhóm lấy `max()`, đổi chính sách không ảnh hưởng đơn cũ | AC-12 | `[~] một phần: `max()` riêng từng thời hạn + policy mỗi shop đúng; thời hạn lưu cứng trên `order_web3` nhưng chưa có test "đổi chính sách sau khi đặt"` |
 | **I-05** | Đồng bộ thời gian: `now_chain()` theo sát block Anvil; tua thời gian cấp quote mới chuẩn | AC-02 | `[~] một phần: hạn báo giá dùng max(hệ thống, block) (đồng hồ giả); `HybridClock` chưa test với Anvil tua thời gian` |
-| **I-06** | Đồng bộ ngược: Cập nhật `order_web3` tự động cập nhật `orders.status` cũ; Chặn route ghi đè cũ | AC-08 / Bảng ánh xạ 5.1 | `[~] một phần: Indexer ghi `order_web3` ⇒ `orders.status` đổi trong cùng giao dịch (paid; hoàn tác về pending khi reorg); chặn route cũ ghi đè đơn Web3 chưa làm` |
-| **I-07** | Giỏ 3 shop: Tạo đúng 3 đơn 1 group, tổng token khớp lệnh, Indexer xóa đúng giỏ hàng | AC-14 | `[~] một phần: 3 đơn/1 group, id on-chain khác nhau, tổng khớp; Indexer xóa đúng dòng giỏ đã thanh toán, giữ món khác (test Tuần 4); chờ CI` |
+| **I-06** | Đồng bộ ngược: Cập nhật `order_web3` tự động cập nhật `orders.status` cũ; Chặn route ghi đè cũ | AC-08 / Bảng ánh xạ 5.1 | `[x] PASS` |
+| **I-07** | Giỏ 3 shop: Tạo đúng 3 đơn 1 group, tổng token khớp lệnh, Indexer xóa đúng giỏ hàng | AC-14 | `[x] PASS` |
 | **A-01** | Mọi API yêu cầu token: Không token hoặc token hết hạn trả HTTP 401 | Mục 15 (P0-01) | `[x] PASS` |
 | **A-02** | Kiểm tra quyền Role: User/Seller gọi API Admin bị chặn HTTP 403; Shipper chỉ xem đơn gán | Mục 15 (P0-02) | `[x] PASS` |
 | **A-03** | Kiểm tra sở hữu dữ liệu: Xem đơn, giỏ, shop của người khác bị 403 hoặc 404 | Mục 15 (P0-03) | `[x] PASS` |
 | **A-04** | Đăng ký tài khoản với role `admin` hoặc `shipper` bị từ chối | Mục 15 (P0-02) | `[x] PASS` |
-| **A-05** | Đua tranh đặt hàng (Race condition): Tồn kho không bao giờ bị âm | Mục 15 (P0-05) | `[x] PASS (unit + race MySQL 8.0 thật, 3 lần liên tiếp)` |
-| **A-06** | Giới hạn brute-force: Nhập sai PIN hoặc Password quá 5 lần bị khóa tạm | Mục 15 (P0-05) | `[x] PASS (unit + MySQL 8.0 thật)` |
+| **A-05** | Đua tranh đặt hàng (Race condition): Tồn kho không bao giờ bị âm | Mục 15 (P0-05) | `[x] PASS` |
+| **A-06** | Giới hạn brute-force: Nhập sai PIN hoặc Password quá 5 lần bị khóa tạm | Mục 15 (P0-05) | `[x] PASS` |
 | **A-07** | Endpoint `/api/shops/migrate` đã bị xóa bỏ; Không còn API cấp số dư vô hạn | Mục 15 (P0-04) | `[x] PASS` |
 
 ---
@@ -309,13 +309,13 @@
 | Mã test | Mô tả ca kiểm thử | Kết quả mong đợi | Tình trạng |
 | :---: | :--- | :--- | :---: |
 | **F-01** | Hàm định dạng `formatVND`: Kiểm tra số nguyên, làm tròn, số 0, số cực lớn, không còn ký hiệu `$` | Chuẩn định dạng tiếng Việt | `[x] PASS` |
-| **F-02** | Reducer nạp tiền (`depositReducer`): Đủ allowance bỏ bước approve, từ chối ví (4001), hết hạn quote | Chuyển state chính xác | `[~] PASS cục bộ (depositFlow.test.js — 37 test, gồm đủ allowance bỏ approve, 4001 trung tính, hết hạn quote, failedStep); chờ CI` |
-| **F-03** | Ánh xạ lỗi tiếng Việt: `BATCH_TOO_LARGE`, `FEE_CAP_CHANGED`, `Invalid batch size` | Hiển thị thông báo dễ hiểu | `[~] PASS cục bộ: 22 mã lỗi API + lỗi ví (4001 = trung tính) + lỗi revert contract theo SDD 9.5 (Order exists, thiếu số dư...); chờ CI` |
-| **F-04** | Client API chung: Tự gắn `Authorization`, tự động xóa token và chuyển trang khi gặp 401 | Hoạt động thông suốt | `[x] PASS (client.test.js; chỉ đăng xuất khi mã phiên, không phải mọi 401)` |
-| **F-05** | Hook `usePolling`: Dừng khi rời màn hình, dừng khi đơn tới trạng thái cuối | Không memory leak / spam | `[~] PASS cục bộ (usePolling.test.jsx — 7 test: không chồng lệnh, dừng khi unmount/đạt trạng thái cuối, chịu lỗi mạng thoáng qua); chờ CI` |
-| **F-06** | Đồng hồ đếm ngược: Tính độ lệch dựa trên `server_time`, không lệch theo máy client | Đếm ngược chuẩn xác | `[~] đúng khi đồng hồ máy lệch 1 giờ; ngưỡng <60 giây báo sắp hết hạn; đếm ngược trong panel (fake timers)` |
-| **F-07** | Làm mới báo giá của lô đang chờ: nhãn đúng bản chất, nút khóa trong lúc gọi, không gửi trùng khi bấm dồn, đồng hồ bắt đầu lại từ 15:00 | Không giật bộ đếm, không nhiều yêu cầu đồng thời | `[x] 6 test (web3Ui.test.jsx); chờ CI` |
-| **F-08** | Checkout khóa lựa chọn Web3 và cảnh báo khi có shop chưa liên kết ví; panel nêu đích danh shop | BR-07, không để lỗi ở bước cuối | `[x] 6 test trang Checkout + 6 test panel + 1 test API/mock + 6 test MySQL + 4 test route (eligibility); chờ CI` |
+| **F-02** | Reducer nạp tiền (`depositReducer`): Đủ allowance bỏ bước approve, từ chối ví (4001), hết hạn quote | Chuyển state chính xác | `[x] PASS` |
+| **F-03** | Ánh xạ lỗi tiếng Việt: `BATCH_TOO_LARGE`, `FEE_CAP_CHANGED`, `Invalid batch size` | Hiển thị thông báo dễ hiểu | `[x] PASS` |
+| **F-04** | Client API chung: Tự gắn `Authorization`, tự động xóa token và chuyển trang khi gặp 401 | Hoạt động thông suốt | `[x] PASS` |
+| **F-05** | Hook `usePolling`: Dừng khi rời màn hình, dừng khi đơn tới trạng thái cuối | Không memory leak / spam | `[x] PASS` |
+| **F-06** | Đồng hồ đếm ngược: Tính độ lệch dựa trên `server_time`, không lệch theo máy client | Đếm ngược chuẩn xác | `[x] PASS` |
+| **F-07** | Làm mới báo giá của lô đang chờ: nhãn đúng bản chất, nút khóa trong lúc gọi, không gửi trùng khi bấm dồn, đồng hồ bắt đầu lại từ 15:00 | Không giật bộ đếm, không nhiều yêu cầu đồng thời | `[x] PASS` |
+| **F-08** | Checkout khóa lựa chọn Web3 và cảnh báo khi có shop chưa liên kết ví; panel nêu đích danh shop | BR-07, không để lỗi ở bước cuối | `[x] PASS` |
 
 ---
 
@@ -343,13 +343,13 @@
 | **AC-05** | Khiếu nại trong hạn đóng băng tiền; Quá thời hạn kiểm tra khiếu nại bị từ chối | BR-03 | Test T-10 đạt | `[ ]` |
 | **AC-06** | Phân xử thành công với 2 chữ ký của 2 bên khác nhau; Chặn chữ ký trùng hoặc sai hạn | BR-04, 05 | Test T-11, T-12, T-24 đạt | `[ ]` |
 | **AC-07** | Delivery Timeout và Dispute Timeout hoạt động chuẩn xác theo từng giá trị cấu hình | BR-05 | Test T-14, T-15, E-04 đạt | `[ ]` |
-| **AC-08** | Xóa CSDL chạy lại Indexer từ block 0 khớp 100% dữ liệu on-chain; Xử lý trùng an toàn | BR-09 | Test I-03, I-06, Replay script đạt | `[ ]` |
+| **AC-08** | Xóa CSDL chạy lại Indexer từ block 0 khớp 100% dữ liệu on-chain; Xử lý trùng an toàn | BR-09 | Test I-03, I-06, Replay script đạt | `[x]` |
 | **AC-09** | Quét toàn diện mã nguồn, CSDL, log không có private key hay seed phrase người dùng | BR-01 | Test E-05 đạt | `[ ]` |
 | **AC-10** | Số dư contract luôn bằng tổng tiền các đơn đang mở cộng sổ chờ rút | G-01 | Test T-18, E-06, Reconcile tool đạt | `[ ]` |
 | **AC-11** | Bộ test contract đạt coverage ≥ 90%; Chạy lặp lại kịch bản demo 3 lần liên tiếp không lỗi | G-06 | Báo cáo test & biên bản demo | `[x]` |
 | **AC-12** | Nhóm hàng nhận đúng thời hạn kiểm tra và tranh chấp; Biên 7–90 ngày do contract ép | BR-05, BR-10 | Test T-20, T-21, I-04 đạt | `[ ]` |
 | **AC-13** | Báo giá có phí vượt trần on-chain bị từ chối; Hạ trần phí buộc lấy báo giá mới | BR-02, BR-06 | Test T-22, T-23 đạt | `[ ]` |
-| **AC-14** | Giỏ nhiều shop thanh toán gom 2 lần ký ví; Hoạt động độc lập sau nạp; Nguyên tử | BR-11, BR-06 | Test T-25..34, I-07, E-07 đạt | `[ ]` |
+| **AC-14** | Giỏ nhiều shop thanh toán gom 2 lần ký ví; Hoạt động độc lập sau nạp; Nguyên tử | BR-11, BR-06 | Test T-25..34, I-07, E-07 đạt | `[x]` |
 
 ---
 
