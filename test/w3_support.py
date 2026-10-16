@@ -14,6 +14,7 @@ from eth_account.messages import encode_defunct
 from slopee_web3.adapters.clock import FixedClock
 from slopee_web3.adapters.env_signer import EnvKeySigner, recover_personal_sign
 from slopee_web3.adapters.mysql_repos import MySqlUnitOfWork
+from slopee_web3.application.order_status_service import OrderStatusService
 from slopee_web3.application.quote_service import QuoteService
 from slopee_web3.application.wallet_service import WalletService
 from slopee_web3.ports.chain_port import ChainUnavailable
@@ -113,6 +114,7 @@ class Env:
         self.wallet = WalletService(self.uow, recover_personal_sign, wallet_domain=DOMAIN, chain_id=CHAIN_ID,
                                     max_nonces_per_minute=max_nonces)
         self.quote = QuoteService(self.uow, self.signer, self.chain, self.clock, token_address=TOKEN)
+        self.status = OrderStatusService(self.uow, self.clock)
 
 
 def sign_message(key_name, message):

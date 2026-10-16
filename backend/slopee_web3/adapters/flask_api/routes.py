@@ -121,6 +121,13 @@ def web3_eligibility():
     return jsonify(_container().quote_service().check_web3_eligibility(g.user_id, ids)), 200
 
 
+@orders_bp.route('/<order_code>/status', methods=['GET'])
+@require_auth(*BUYER_ROLES, 'admin')
+def order_status(order_code):
+    """Polling 2-3 giây (DD-04): trạng thái lấy từ MySQL do Indexer ghi, kèm server_time."""
+    return jsonify(_container().order_status_service().get_status(g.user_id, g.role, order_code)), 200
+
+
 @groups_bp.route('/<group_id>/quote', methods=['POST'])
 @require_auth(*BUYER_ROLES)
 def requote_group(group_id):

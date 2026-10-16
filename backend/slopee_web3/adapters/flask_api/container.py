@@ -6,6 +6,7 @@ Chưa cấu hình Web3 (chưa chạy bootstrap) -> WEB3_NOT_CONFIGURED 503, ứn
 import logging
 import threading
 
+from ...application.order_status_service import OrderStatusService
 from ...application.quote_service import QuoteService
 from ...application.wallet_service import WalletService
 from ...domain.errors import DomainError
@@ -28,6 +29,9 @@ class Web3Container:
         return WalletService(self.uow_factory, self.verifier, wallet_domain=self.settings.wallet_domain,
                              chain_id=self.settings.chain_id,
                              max_nonces_per_minute=self.settings.nonce_max_per_minute)
+
+    def order_status_service(self):
+        return OrderStatusService(self.uow_factory, self.clock)
 
     def quote_service(self):
         s = self.settings

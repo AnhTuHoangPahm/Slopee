@@ -270,6 +270,12 @@ class MySqlCheckoutRepo:
         row = self.cur.fetchone()
         return {'deadline': int(row['deadline'])} if row else None
 
+    def order_status_row(self, order_id):
+        self.cur.execute(
+            "SELECT order_id, buyer_user_id, merchant_user_id, status, delivered_at, inspection_duration, disputed_at, "
+            "dispute_timeout, anomaly_flag FROM order_web3 WHERE order_id=%s", (order_id,))
+        return self.cur.fetchone()
+
 
 class MySqlUnitOfWork:
     """Một kết nối + một transaction. Thoát khối `with` mà chưa `commit()` thì ROLLBACK (lỗi bất kỳ -> rollback cả lô)."""

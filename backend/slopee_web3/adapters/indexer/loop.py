@@ -7,7 +7,7 @@ import json
 import logging
 import time
 
-from .handlers import HANDLERS
+from .handlers import HANDLERS, rollback_orders_from_block
 
 log = logging.getLogger('slopee.indexer')
 
@@ -86,7 +86,7 @@ class Indexer:
             if self._chain.get_block(last_block)['hash'] != last_hash:
                 if self._reorg_depth <= 0:
                     raise ChainReset('Hash block tại con trỏ không khớp: chuỗi đã bị thay. Chạy bootstrap rồi replay.')
-                last_block = max(self._start, last_block - self._reorg_depth)   # TUẦN 4: kèm rollback dữ liệu dẫn xuất
+                last_block = self._rewind(conn, last_block)
 
         to_block = latest['number'] - self._confirmations
         start = last_block + 1
@@ -98,6 +98,27 @@ class Indexer:
             stats['last_block'] = end
             start = end + 1
         return stats
+
+    def _rewind(self, conn, last_block):
+        """Reorg (SDD 6.1): lùi con trỏ REORG_DEPTH block và hoàn tác dữ liệu dẫn xuất từ block đó, MỘT giao dịch.
+
+        Xóa chain_events >= block mới, đưa đơn bị ảnh hưởng về trạng thái suy ra từ các sự kiện còn lại, đặt lại con trỏ
+        theo hash block hiện hành. Sau đó các cửa sổ bình thường quét lại và áp dụng các log mới của nhánh chuỗi mới.
+        """
+        new_last = max(self._start, last_block - self._reorg_depth)
+        try:
+            with conn.cursor() as cur:
+                n = rollback_orders_from_block(cur, new_last + 1, self._handlers)
+                cur.execute(
+                    "INSERT INTO indexer_cursor (name, last_block, last_block_hash) VALUES (%s, %s, %s) "
+                    "ON DUPLICATE KEY UPDATE last_block=VALUES(last_block), last_block_hash=VALUES(last_block_hash)",
+                    (CURSOR_NAME, new_last, self._chain.get_block(new_last)['hash']))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        log.warning('Reorg: lùi con trỏ %s -> %s, hoàn tác %s đơn', last_block, new_last, n)
+        return new_last
 
     def _process_window(self, conn, start, end, stats):
         logs = self._chain.get_logs(start, end)
