@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useWallet } from '../hooks/useWallet';
-import { createWeb3OrderAPI, fetchLinkedWalletAPI, requoteGroupAPI } from '../api/web3';
+import { createWeb3OrderAPI, fetchCheckoutGroupAPI, fetchLinkedWalletAPI, requoteGroupAPI } from '../api/web3';
+import { useEscrow } from '../hooks/useEscrow';
+import { usePolling } from '../hooks/usePolling';
+import TxStepper from './TxStepper';
+import { FLOW_ERROR, INDEXER_SLOW_AFTER_MS, STEP, groupIsLocked } from '../lib/depositFlow';
 import { Web3ApiError, toUserMessage } from '../lib/errors';
 import { formatVND } from '../utils/formatVND';
 import { sameAddress } from '../lib/chain';
@@ -14,12 +18,20 @@ const box = { border: '1px solid #e5e5e5', borderRadius: 8, padding: 16, marginT
 const primary = { padding: '10px 18px', borderRadius: 6, border: 'none', background: '#ee4d2d', color: '#fff', cursor: 'pointer', fontWeight: 600 };
 const secondary = { ...primary, background: '#fff', color: '#ee4d2d', border: '1px solid #ee4d2d' };
 
+const POLL_INTERVAL_MS = 2500; // SDD 10.2: polling 2-3 giây
+const REDIRECT_DELAY_MS = 2000; // cho người dùng thấy dòng "đã khóa tiền" rồi mới chuyển màn hình
+
 /**
- * Khung thanh toán Web3 (Tuần 3, SDD 9.3): kiểm tra ví/mạng/liên kết -> tạo đơn + báo giá -> hiển thị từng shop,
- * tổng tiền token, đếm ngược hạn báo giá, lấy báo giá mới. Nút "Ký quỹ" CHƯA hoạt động (approve + nạp tiền: Tuần 4).
+ * Khung thanh toán Web3 (SDD 9.3): kiểm tra ví/mạng/liên kết -> tạo đơn + báo giá -> hiển thị từng shop, tổng tiền token,
+ * đếm ngược hạn báo giá -> (Tuần 4) hai bước ví: approve tổng, depositEscrowBatch -> chờ Indexer (polling lô) -> LOCKED -> /orders.
+ * Giao diện KHÔNG coi biên nhận của ví là LOCKED; chỉ API trả mọi đơn con LOCKED mới là bằng chứng (DD-04, BR-09).
+ * @param {{cartItemIds: string[], onLocked?: (group: object) => void, contractsFactory?: Function}} props
  */
-export default function Web3CheckoutPanel({ cartItemIds }) {
+export default function Web3CheckoutPanel({ cartItemIds, onLocked, contractsFactory }) {
     const w = useWallet();
+    const navigate = useNavigate();
+    const escrow = useEscrow(contractsFactory ? { contractsFactory } : undefined);
+    const [slow, setSlow] = useState(false);
     const [linked, setLinked] = useState(null);
     const [group, setGroup] = useState(null);
     const [receivedAt, setReceivedAt] = useState(0);
@@ -75,6 +87,43 @@ export default function Web3CheckoutPanel({ cartItemIds }) {
     const requote = () => run(() => requoteGroupAPI(group.checkout_group_id));
     // Lô đang chờ: KHÔNG khôi phục phiên cũ mà xin báo giá MỚI (chữ ký + hạn mới đủ thời hạn) cho chính lô đó, nên nhãn nút nói rõ là "làm mới"
 
+    // ---- Nạp tiền (Tuần 4)
+    const dep = escrow.state;
+    const depositing = escrow.busy; // CHECKING | APPROVING | DEPOSITING | WAITING_INDEXER
+    const settled = dep.step === STEP.LOCKED;
+
+    // Lỗi "Order exists" = lần nạp trước đã vào chuỗi: không nạp lại, chuyển sang chờ API xác nhận
+    useEffect(() => {
+        if (dep.step === STEP.FAILED && dep.error?.code === FLOW_ERROR.ORDER_EXISTS) escrow.dispatch({ type: 'RESUME_WAITING' });
+    }, [dep.step, dep.error, escrow]);
+
+    // Polling lô tới khi mọi đơn con LOCKED (usePolling: không chồng lệnh, dừng khi rời trang / đạt trạng thái cuối)
+    const groupId = group?.checkout_group_id;
+    const poll = usePolling(() => fetchCheckoutGroupAPI(groupId), {
+        intervalMs: POLL_INTERVAL_MS, enabled: dep.step === STEP.WAITING_INDEXER && Boolean(groupId), stopWhen: groupIsLocked,
+    });
+    useEffect(() => {
+        if (dep.step === STEP.WAITING_INDEXER && groupIsLocked(poll.data)) escrow.dispatch({ type: 'INDEXER_LOCKED' });
+    }, [dep.step, poll.data, escrow]);
+
+    // Chờ quá 30 giây: nhắc mã giao dịch (SDD 9.3)
+    useEffect(() => {
+        if (dep.step !== STEP.WAITING_INDEXER) { setSlow(false); return undefined; }
+        const t = setTimeout(() => setSlow(true), INDEXER_SLOW_AFTER_MS);
+        return () => clearTimeout(t);
+    }, [dep.step]);
+
+    // LOCKED: báo thành công rồi tự chuyển màn hình
+    useEffect(() => {
+        if (!settled) return undefined;
+        const t = setTimeout(() => (onLocked ? onLocked(poll.data) : navigate('/orders', { state: { lockedGroupId: groupId } })), REDIRECT_DELAY_MS);
+        return () => clearTimeout(t);
+    }, [settled]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const startDeposit = () => escrow.deposit(group, () => secondsRemaining({ deadline: group.deadline, serverTime: group.server_time, receivedAtMs: receivedAt, nowMs: Date.now() }));
+    const flowFailed = dep.step === STEP.FAILED && dep.error;
+    const needsFreshQuote = flowFailed && ['QUOTE_EXPIRING', 'QUOTE_MISMATCH'].includes(dep.error.code);
+
     // ---- cổng điều kiện (SDD 9.3: CHECK_WALLET -> CHECK_NETWORK -> đã liên kết)
     let gate = null;
     if (!w.hasProvider) gate = <p role="alert">Không tìm thấy ví. Hãy cài MetaMask rồi tải lại trang.</p>;
@@ -85,6 +134,8 @@ export default function Web3CheckoutPanel({ cartItemIds }) {
     else if (!sameAddress(linked.address, w.account)) {
         gate = <p role="alert">Ví đang kết nối ({shortAddress(w.account)}) khác ví đã liên kết ({shortAddress(linked.address)}). <Link to="/wallet">Đổi ví liên kết</Link></p>;
     }
+
+    const canDeposit = !gate && group && status !== 'expired' && !depositing && !settled && !busy;
 
     const pendingId = !group ? pendingGroupId : null;
     const walletError = error instanceof Web3ApiError && error.code === 'WALLET_NOT_LINKED';
@@ -147,13 +198,28 @@ export default function Web3CheckoutPanel({ cartItemIds }) {
                         {status === 'expiring' && ' — sắp hết hạn, hãy lấy báo giá mới.'}
                     </p>
 
-                    <div style={{ display: 'flex', gap: 8 }}>
-                        <button type="button" style={secondary} onClick={requote} disabled={busy}>Lấy báo giá mới</button>
-                        <button type="button" style={{ ...primary, opacity: 0.5, cursor: 'not-allowed' }} disabled
-                            title="Bước ký quỹ (approve + nạp tiền) sẽ có ở Tuần 4">
-                            Ký quỹ (sắp có)
-                        </button>
-                    </div>
+                    {dep.step !== STEP.IDLE && <TxStepper state={dep} slow={slow} />}
+
+                    {flowFailed && !dep.error.userRejected && (
+                        <p data-testid="deposit-error" role="alert" style={{ color: '#c0392b' }}>
+                            {dep.error.message}
+                            {dep.shortfall && <> Còn thiếu {formatTokenAmount(dep.shortfall, group.decimals, group.symbol)}.</>}
+                        </p>
+                    )}
+                    {flowFailed && dep.error.userRejected && <p data-testid="deposit-cancelled" role="status" style={{ color: '#666' }}>{dep.error.message} Bạn có thể bấm «Ký quỹ» để thử lại.</p>}
+                    {settled && <p data-testid="deposit-locked" role="status" style={{ color: '#2e7d32', fontWeight: 600 }}>Đã khóa tiền ký quỹ cho {group.orders.length} đơn. Đang chuyển tới đơn hàng của bạn…</p>}
+
+                    {!settled && (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <button type="button" style={secondary} onClick={requote} disabled={busy || depositing}>Lấy báo giá mới</button>
+                            <button type="button" data-testid="deposit-button" style={{ ...primary, opacity: canDeposit ? 1 : 0.5, cursor: canDeposit ? 'pointer' : 'not-allowed' }}
+                                disabled={!canDeposit} onClick={startDeposit}
+                                title={status === 'expired' ? 'Báo giá đã hết hạn, hãy lấy báo giá mới' : undefined}>
+                                {depositing ? 'Đang xử lý…' : flowFailed ? 'Thử lại ký quỹ' : 'Ký quỹ'}
+                            </button>
+                            {needsFreshQuote && <span style={{ alignSelf: 'center', color: '#b26a00', fontSize: 13 }}>Hãy bấm «Lấy báo giá mới» trước.</span>}
+                        </div>
+                    )}
                 </div>
             )}
         </div>

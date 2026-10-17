@@ -144,7 +144,7 @@ CREATE TABLE IF NOT EXISTS authAttempts (
 );
 
 -- =====================================================================================================
--- WEB3 ESCROW (migration 0006 .. 0020). Giữ KHỚP với migrations/: test_web3_migrations.py so sánh DB tạo từ file này
+-- WEB3 ESCROW (migration 0006 .. 0022). Giữ KHỚP với migrations/: test_web3_migrations.py so sánh DB tạo từ file này
 -- với DB nâng cấp bằng migrate.py. Sửa một bên thì phải sửa bên kia. Phần trên dấu mốc này là schema Slopee cũ.
 -- =====================================================================================================
 
@@ -349,4 +349,27 @@ CREATE TABLE IF NOT EXISTS shipper_assignments (
     INDEX idx_shipper (shipper_user_id),
     CONSTRAINT fk_sa_order FOREIGN KEY (order_id) REFERENCES order_web3(order_id),
     CONSTRAINT fk_sa_shipper FOREIGN KEY (shipper_user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id varchar(36) NOT NULL,
+    order_id VARCHAR(36) NOT NULL,
+    kind VARCHAR(40) NOT NULL COMMENT 'ORDER_DELIVERED, DELIVERY_TIMEOUT',
+    message VARCHAR(500) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    read_at TIMESTAMP NULL DEFAULT NULL,
+    UNIQUE KEY uk_notification (user_id, order_id, kind),
+    INDEX idx_notification_user (user_id, created_at),
+    CONSTRAINT fk_notification_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS dispute_notes (
+    order_id varchar(36) NOT NULL PRIMARY KEY,
+    buyer_user_id VARCHAR(36) NOT NULL COMMENT 'Buyer đã gửi (kiểm lúc ghi, lưu để truy vết)',
+    reason TEXT NOT NULL,
+    evidence_url VARCHAR(500) DEFAULT NULL COMMENT 'chỉ http/https',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_dispute_note_order FOREIGN KEY (order_id) REFERENCES order_web3(order_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

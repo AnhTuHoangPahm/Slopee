@@ -1,6 +1,8 @@
 """Khung Indexer (MOD-09) trên MySQL THẬT: GET_LOCK, con trỏ, idempotent, cửa sổ, rollback, phát hiện Anvil bị reset."""
 import json
 
+import time
+
 import pytest
 
 from slopee_web3.adapters.indexer import ChainReset, Indexer, IndexerLockBusy
@@ -202,7 +204,11 @@ def test_lock_is_released_when_connection_closes(conn):
     assert Indexer.acquire_lock(holder) is True
     assert Indexer.acquire_lock(conn) is False
     holder.close()                                                   # tiến trình chết -> MySQL tự nhả khóa
-    assert Indexer.acquire_lock(conn) is True
+    # MySQL dọn kết nối đã đóng BẤT ĐỒNG BỘ nên khóa nhả sau một khoảnh khắc (race có thật: ~1/40 lần đỏ nếu kiểm ngay)
+    deadline = time.monotonic() + 5
+    while not Indexer.acquire_lock(conn):
+        assert time.monotonic() < deadline, 'khóa không được nhả sau khi kết nối chủ đóng'
+        time.sleep(0.05)
     Indexer.release_lock(conn)
 
 

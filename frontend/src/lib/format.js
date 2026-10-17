@@ -15,3 +15,7 @@ export const shortAddress = (address) =>
     typeof address === 'string' && /^0x[0-9a-fA-F]{40}$/.test(address)
         ? `${address.slice(0, 6)}…${address.slice(-4)}`
         : (address ?? '');
+
+/** Rút gọn mã giao dịch (0x + 64 hex): 0x1234ab…cdef. Giữ nguyên nếu không đúng định dạng. */
+export const shortHash = (hash) =>
+    typeof hash === 'string' && /^0x[0-9a-fA-F]{64}$/.test(hash) ? `${hash.slice(0, 8)}…${hash.slice(-4)}` : (hash ?? '');

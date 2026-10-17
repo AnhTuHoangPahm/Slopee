@@ -29,6 +29,8 @@ export default function Login() {
 
             if (data.user.role === 'admin') {
                 navigate('/admin');
+            } else if (data.user.role === 'shipper') {
+                navigate('/shipper/orders');
             } else {
                 navigate('/');
             }

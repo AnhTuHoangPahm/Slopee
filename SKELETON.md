@@ -165,7 +165,7 @@ Mỗi file có `get_db_connection()` mở kết nối PyMySQL (trừ `products`,
 | `/admin` | `pages/AdminDashboard.jsx` | thống kê, quản lý user, quản lý danh mục | `getStatsAPI`, `getUsersAPI`, `deleteUserAPI`, `fetchAdminCategoriesAPI`, `addCategoryAPI`, `updateCategoryAPI`, `deleteCategoryAPI` |
 | `/play/tetris` | `pages/Tetris.jsx` | trò chơi Tetris (độc lập, không API) | — |
 | (mọi trang) | `components/Navbar.jsx` | thanh điều hướng, ô tìm kiếm (điều hướng `/?search=`), giỏ thu nhỏ, menu theo role; liên kết "🦊 Ví" → `/wallet` cho `user`/`seller` | `fetchCartAPI` |
-| (trong `/checkout`) ✅ | `components/Web3CheckoutPanel.jsx` | props `{cartItemIds}`. Cổng điều kiện (không có ví → chưa kết nối → sai mạng → đang kiểm tra liên kết → chưa liên kết → ví khác ví đã liên kết) rồi "Tạo báo giá"; bảng từng shop (giá VND, số token, phí, thời hạn), tổng, tỷ giá, đếm ngược theo `server_time` (<60 giây = sắp hết hạn), "Lấy báo giá mới", **"Làm mới báo giá cho lô này"** khi `PENDING_GROUP_EXISTS` (F-07: xin báo giá MỚI cho lô cũ, không khôi phục phiên; giữ lại khi lỗi tạm thời, bỏ khi `INVALID_STATE`/`GROUP_NOT_FOUND`). Mọi yêu cầu báo giá đi qua `run()` có cờ `inFlight` (ref) nên bấm dồn chỉ gửi một yêu cầu; nhận báo giá thì đặt `receivedAt` và `now` cùng lúc để đồng hồ bắt đầu đúng 15:00. `WALLET_NOT_LINKED` với `extra.party` = merchant (so không phân biệt hoa/thường) → nêu tên shop (`extra.shop_name`), không dẫn tới `/wallet`. **Nút "Ký quỹ" bị khóa — Tuần 4** | `createWeb3OrderAPI`, `requoteGroupAPI`, `fetchLinkedWalletAPI` |
+| (trong `/checkout`) ✅ | `components/Web3CheckoutPanel.jsx` | props `{cartItemIds}`. Cổng điều kiện (không có ví → chưa kết nối → sai mạng → đang kiểm tra liên kết → chưa liên kết → ví khác ví đã liên kết) rồi "Tạo báo giá"; bảng từng shop (giá VND, số token, phí, thời hạn), tổng, tỷ giá, đếm ngược theo `server_time` (<60 giây = sắp hết hạn), "Lấy báo giá mới", **"Làm mới báo giá cho lô này"** khi `PENDING_GROUP_EXISTS` (F-07: xin báo giá MỚI cho lô cũ, không khôi phục phiên; giữ lại khi lỗi tạm thời, bỏ khi `INVALID_STATE`/`GROUP_NOT_FOUND`). Mọi yêu cầu báo giá đi qua `run()` có cờ `inFlight` (ref) nên bấm dồn chỉ gửi một yêu cầu; nhận báo giá thì đặt `receivedAt` và `now` cùng lúc để đồng hồ bắt đầu đúng 15:00. `WALLET_NOT_LINKED` với `extra.party` = merchant (so không phân biệt hoa/thường) → nêu tên shop (`extra.shop_name`), không dẫn tới `/wallet`. **Nút "Ký quỹ" (Tuần 4) chạy approve tổng → `depositEscrowBatch` → chờ API `LOCKED` → chuyển `/orders`** | `createWeb3OrderAPI`, `requoteGroupAPI`, `fetchLinkedWalletAPI` |
 
 Route guard ✅ `components/RequireRole.jsx` bọc `/admin` (admin), `/seller` (seller), `/cart`, `/checkout`, `/orders`, `/settings` (chỉ cần đăng nhập): chưa đăng nhập → `/login`; sai role → thông báo. Chỉ là tiện lợi giao diện; quyền thật do backend kiểm. `WalletProvider` (`hooks/useWallet.js`) bọc toàn app.
 
@@ -242,7 +242,7 @@ Route guard ✅ `components/RequireRole.jsx` bọc `/admin` (admin), `/seller` (
 
 ---
 
-## 4. Mô-đun Web3 🟡 (tuần 3: ví, đơn, báo giá, khung Indexer ✅ — còn lại 🔲)
+## 4. Mô-đun Web3 🟡 (tuần 3–4: ví, đơn, báo giá, Indexer OrderCreated, đồng bộ legacy, polling status ✅ — còn lại 🔲)
 
 Nguồn: SRS mục 4–7, 9–10; SDD mục 3–8, 10. Đặt dưới `backend/slopee_web3/` (✅ = có trong repo, 🔲 = dự kiến). Cấu hình qua `settings.py` (`Web3Settings.from_env()` đọc `backend/.env.web3` do `bootstrap.sh` sinh; thêm `WALLET_LINK_DOMAIN` (mặc định `localhost:5173`), `WALLET_NONCE_MAX_PER_MINUTE`, `TOKEN_DECIMALS`).
 
@@ -264,6 +264,7 @@ Nguồn: SRS mục 4–7, 9–10; SDD mục 3–8, 10. Đặt dưới `backend/s
 | `SignerPort` ✅ (`signer_port.py`) | `sign_quote(quote) -> 0x…65 byte`, `sender_address(role)`, `keccak(bytes)`, `to_checksum(addr)` | `adapters/env_signer.py` ✅ `EnvKeySigner` (khóa chỉ trong thuộc tính riêng, `repr` không lộ, 3 khóa vai trò khác địa chỉ, `verify_against_chain`), `recover_personal_sign(message, signature)`. 🔲 `sign_dispute` |
 | `ClockPort` ✅ (`clock_port.py`) | `now_system()`, `now_chain()` | `adapters/clock.py` ✅ `HybridClock(chain)` (`max(hệ thống, block mới nhất)`), `FixedClock` cho test |
 | `Repositories` ✅ (`repositories.py`) | `WalletRepo`, `SettingsRepo`, `PolicyRepo`, `CheckoutRepo`, `UnitOfWork` (thoát `with` chưa `commit()` thì ROLLBACK), `DuplicateWallet` | `adapters/mysql_repos.py` ✅ (`MySqlUnitOfWork(connection_factory)`); SQL tham số hóa; thứ tự khóa `cartItems → products` và đọc khóa **trước** đọc thường (xem ghi chú tuần 3) |
+| (legacy sync) ✅ | `sync_legacy_status(conn, order_id, web3_status)` | `adapters/legacy_sync.py` ✅ (ghi `orders.status` theo bảng ánh xạ SRS 5.1: LOCKED→paid, PENDING_PAYMENT→pending khi reorg) |
 | `NotificationPort` 🔲 | `notify_buyer_delivered(order)` | ghi bảng thông báo |
 | (log) ✅ | `adapters/logging_filter.py`: `redact(text)`, `SensitiveDataFilter`, `install()` | che giá trị của trường `signature/private/key/mnemonic/seed/secret` và chữ ký 65 byte (không che tx hash) |
 
@@ -272,39 +273,44 @@ Nguồn: SRS mục 4–7, 9–10; SDD mục 3–8, 10. Đặt dưới `backend/s
 | --- | --- | --- |
 | `WalletService` ✅ | `issue_nonce(user_id, address) -> {nonce, message, expires_at}`, `link_wallet(user_id, address, signature, nonce=None) -> {address, linked_at}`, `get_wallet(user_id) -> {linked, address, linked_at}` | UC-00: nonce 32 hex một lần (300 giây, ≤ 5/phút/tài khoản), dựng lại thông điệp, `recover`, tiêu thụ nonce nguyên tử, `UNIQUE(address)`; đổi ví = ví cũ `is_active=0`; lỗi: `INVALID_ADDRESS`, `NONCE_INVALID`, `BAD_SIGNATURE`, `WALLET_TAKEN`, `RATE_LIMITED` |
 | `QuoteService` ✅ | `create_checkout(user_id, cart_item_ids) -> group`, `reissue_group_quotes(user_id, group_id) -> group`, `get_group(user_id, group_id)`, `check_web3_eligibility(user_id, cart_item_ids) -> {all_linked, shops[]}` (chỉ đọc) | UC-01: nhóm theo shop (≤ 5), cấp `onchain_order_id`, quy đổi, `docHash`, ký, ghi `checkout_groups`+`orders`+`orderLines`+`order_web3`+`order_quotes`, giữ chỗ kho, một transaction. Cấp lại: kiểm `NONE` trên chuỗi, giữ id/`docHash`/thời hạn, làm mới tỷ giá/phí/ví/hạn. Lỗi: `WALLET_NOT_LINKED` (`extra.party` = `buyer`\|`merchant`; merchant kèm `shop_id`, `shop_name`), `EMPTY_CART`, `CART_ITEM_NOT_FOUND`, `PRODUCT_UNAVAILABLE`, `OUT_OF_STOCK`, `SELF_PURCHASE`, `BATCH_TOO_LARGE`, `PENDING_GROUP_EXISTS`, `INVALID_AMOUNT`, `SETTING_INVALID`, `POLICY_*`, `CHAIN_UNAVAILABLE`, `GROUP_NOT_FOUND`, `INVALID_STATE` |
-| `OrderQueryService` 🔲 | `get_order(code, user)`, `get_status(code, user)` | trạng thái cho polling + `server_time` (Tuần 4) |
-| `ShipperService` 🔲 | `list_orders(shipper)`, `deliver(code, shipper)` | UC-03: đọc chuỗi, idempotent, gửi `confirmDelivery` qua relayer (hàng đợi một luồng, ghi `tx_outbox`) |
+| `OrderQueryService` ✅ | `get_status(user_id, role, order_code)` | trạng thái polling đơn Web3 cho Buyer, Merchant hoặc Admin; trả `status, delivered_at, inspection_duration, disputed_at, dispute_timeout, anomaly, server_time, order_id` (404 `ORDER_NOT_FOUND` nếu không thuộc quyền) |
+| `RelayerService` ✅ (tuần 5) | `confirm_delivery(order_id, onchain_order_id)` | UC-03 phần chuỗi: kiểm trạng thái 2 lần (trước + trong hàng đợi), gửi `confirmDelivery` bằng khóa `shipper` qua `SingleThreadQueue`, ghi `tx_outbox` PENDING→SENT→CONFIRMED/FAILED; trả `{outcome, tx_hash, outbox_id}`; ném `INVALID_STATE`, `CHAIN_TX_FAILED`, `ChainUnavailable`. `ShipperService` (B) gọi qua `container.relayer_service()` |
+| `ShipperService` ✅ | 	`list_orders(shipper_id)`, `deliver(shipper_id, order_code)`, `assign(admin_id, order_code, shipper_id)` | UC-03: kiểm gán, gọi `RelayerService.confirm_delivery`; lỗi `ORDER_NOT_FOUND`, `INVALID_STATE`, `INVALID_SHIPPER`, `CHAIN_TX_FAILED`, `CHAIN_UNAVAILABLE` |
+| `AutoRelease`, `QuoteExpirySweeper`, `DeliveryTimeoutReminder` ✅ | `run_once()` | 	MOD-10, chạy bởi `adapters/scheduler` |
 | `DisputeService` 🔲 | `propose(code, admin, payout_to)`, `add_signature(code, user, signature)`, `submit(code)`, `add_note(code, user, text)` | UC-05/06: đề xuất, ký Arbitrator, nhận chữ ký Buyer/Merchant, nộp `resolveDispute` |
 | `SettingsService` 🔲 | `set_fee(...)`, `set_category_policy(code, ...)`, `set_category_policy_map(category_id, policy_code)` | UC-09: tham số vận hành, ghi `updated_by` |
-| `ReconcileService` 🔲 | `snapshot() -> report` | AC-10: số dư contract = Σ đơn mở + sổ chờ rút |
+| `ReconcileService` ✅ | `run(deep=False)` | MOD-08, chỉ đọc |
+| `NotificationService` ✅ | `list_for_user(user_id)` | ghi bởi Indexer và tác vụ nền |
+
 
 ### 4.4. Indexer và tác vụ nền
 | Thành phần | Làm gì |
 | --- | --- |
-| `adapters/indexer/loop.py` ✅ (**khung**) | `Indexer(connection_factory, chain, start_block, confirmations, reorg_depth, handlers, window=500, poll_seconds)`: `acquire_lock/release_lock(conn)` (`GET_LOCK('slopee_indexer')`), `run_once(conn) -> {windows, events, new_events, last_block}`, `run_forever(stop)` (backoff 1→30 giây khi RPC lỗi). Mỗi cửa sổ ≤ 500 block là một transaction: `chain_events` (`INSERT IGNORE` trên `(tx_hash, log_index)`, thời gian lấy từ block, uint256 lớn lưu chuỗi) → handler → `indexer_cursor`. Lỗi `ChainReset` khi chuỗi ngắn hơn con trỏ / hash lệch (`reorg_depth=0`) |
-| `adapters/indexer/handlers.py` 🔲 | `HANDLERS = {}` **đang rỗng**. Tuần 4+: `on_order_created` (đối chiếu báo giá → `LOCKED`, đồng bộ `orders.status`, xóa `cartItems`), `on_order_delivered`, `on_order_disputed`, `on_order_completed`, `on_order_refunded`, `on_dispute_resolved`, `on_payout_deferred`, `on_pending_claimed`; sai chuyển trạng thái → `anomaly_flag` |
+| `adapters/indexer/loop.py` ✅ | `Indexer(...)`: `acquire_lock/release_lock(conn)` (`GET_LOCK('slopee_indexer')`), `run_once`, `run_forever`. Cửa sổ ≤ 500 block/transaction: ghi `chain_events` (`INSERT IGNORE`) → handler → `indexer_cursor`. Xử lý reorg qua `_rewind` / `rollback_orders_from_block`: lùi con trỏ, hoàn tác đơn về `PENDING_PAYMENT` + `orders.status='pending'`, chạy lại log |
+| `adapters/indexer/handlers.py` ✅ | `HANDLERS`: `on_order_created` (đối chiếu báo giá: khớp → `order_web3=LOCKED` + đồng bộ `orders.status=paid` qua `legacy_sync` + xóa đúng dòng `cartItems`; lệch báo giá → `anomaly_flag=1`; đơn không có ở sàn → chỉ lưu log). 🔲 Tuần 5–6: handler Delivered, Disputed, Completed, Refunded |
 | `python -m slopee_web3.adapters.indexer [--once]` ✅ | chạy Indexer như tiến trình riêng (từ thư mục `backend/`) |
 | `scripts/bootstrap.sh` ✅ | dựng Anvil + build + deploy + `deployments/local.json` + `backend/.env.web3` (`--no-anvil`, `--fresh`, `--force-env`) |
 | `scripts/smoke_week1.sh` ✅ | smoke test trên Anvil thật: báo giá Python ký → nạp → giao → nhận → kiểm số dư |
 | `scripts/install_contract_deps.sh` ✅ | cài forge-std v1.9.4 + OpenZeppelin v5.0.2 đúng tag |
-| `scripts/gen_eip712_vectors.py` ✅ | sinh `shared/eip712/vectors.json` (`orderQuote`, `disputeResolution`, `docHash`, **`walletLink`**; `--check` để CI so khớp) |
+| `scripts/gen_eip712_vectors.py` ✅ | sinh `shared/eip712/vectors.json` (`orderQuote`, `disputeResolution`, `docHash`, `walletLink`; `--check` để CI so khớp) |
 | `scripts/replay.sh`, `scripts/reconcile.py` 🔲 | replay từ block 0 (`--reset`), đối soát số dư |
 | `jobs/` 🔲 | `QuoteExpirySweeper` (1 phút), `AutoRelease` (1 phút), `DeliveryTimeoutReminder` (1 giờ), `DisputeSigExpiry` (5 phút), `ReconcileSnapshot` (10 phút) |
 
 ### 4.5. API Web3 (snake_case, lỗi `{code,message}`; `adapters/flask_api/routes.py`)
-Quyền: chỉ role `user`/`seller` (admin/shipper → 403 `forbidden`, dạng lỗi cũ). Danh tính chỉ từ token. Đăng ký bằng `register_web3(app)` trong `app.py`; chưa có `.env.web3` → các API này trả 503 `WEB3_NOT_CONFIGURED`, phần còn lại của app chạy bình thường. Khi `.env.web3` có mà khóa vai trò không khớp contract → **app không khởi động**.
+Quyền: chỉ role `user`/`seller` (admin/shipper → 403 `forbidden`, dạng lỗi cũ; riêng API status hỗ trợ Admin). Danh tính chỉ từ token. Đăng ký bằng `register_web3(app)` trong `app.py`; chưa có `.env.web3` → các API này trả 503 `WEB3_NOT_CONFIGURED`, phần còn lại của app chạy bình thường. Khi `.env.web3` có mà khóa vai trò không khớp contract → **app không khởi động**.
 | Method + path | Auth | Request | Response chính |
 | --- | :-: | --- | --- |
-| `POST /api/wallet/nonce` ✅ | U/S | `address` *(lệch SDD 10.2 — **đã chốt 14/10/2026, có test**: cần địa chỉ để dựng thông điệp)* | `nonce, message, expires_at` — ký **nguyên văn** `message` |
-| `POST /api/wallet/link` ✅ | U/S | `address, signature, nonce?` *(`nonce` tùy chọn — **đã chốt 14/10/2026, có test**)*; bỏ `nonce` → dùng nonce còn hạn mới nhất | `address, linked_at` (địa chỉ chữ thường) |
+| `POST /api/wallet/nonce` ✅ | U/S | `address` | `nonce, message, expires_at` — ký **nguyên văn** `message` |
+| `POST /api/wallet/link` ✅ | U/S | `address, signature, nonce?` | `address, linked_at` (địa chỉ chữ thường) |
 | `GET /api/wallet` ✅ | U/S | — | `linked, address, linked_at` |
-| `POST /api/orders/eligibility` ✅ | U/S | `cart_item_ids[]` (như `POST /api/orders`) | **200** `all_linked, shops[{shop_id, shop_name, wallet_linked}]` — chỉ đọc; để Checkout khóa lựa chọn Web3 khi có shop chưa liên kết ví (không lộ địa chỉ ví) |
-| `POST /api/orders` ✅ | U/S | `cart_item_ids[]` (≤ 100 dòng, nhiều shop ≤ 5) | **201** `checkout_group_id, total_amount_raw, decimals, symbol, token_address, deadline, server_time, orders[{order_id, shop_id, shop_name, onchain_order_id, quote{…uint256 là chuỗi}, signature, amount_raw, price_vnd, fx, inspection_duration, dispute_timeout, fee_bps, policy_code}]` |
+| `POST /api/orders/eligibility` ✅ | U/S | `cart_item_ids[]` | **200** `all_linked, shops[{shop_id, shop_name, wallet_linked}]` — chỉ đọc |
+| `POST /api/orders` ✅ | U/S | `cart_item_ids[]` (≤ 100 dòng, nhiều shop ≤ 5) | **201** `checkout_group_id, total_amount_raw, decimals, symbol, token_address, deadline, server_time, orders[...]` |
 | `POST /api/checkout-groups/:id/quote` ✅ | U/S (chủ lô) | — | như trên (cấp lại cho cả lô); người khác → 404 |
-| `GET /api/checkout-groups/:id` ✅ | U/S (chủ lô) | — | `checkout_group_id, total_amount_raw, decimals, symbol, deadline, status (hoặc MIXED), server_time, orders[{order_id, shop_id, shop_name, onchain_order_id, status, amount_raw, price_vnd, deposit_tx_hash, quote_deadline, inspection_duration, dispute_timeout, fee_bps}]` |
-| `GET /api/orders/:code`, `GET /api/orders/:code/status` 🔲 | U | — | chi tiết / `status, delivered_at, inspection_duration, disputed_at, dispute_timeout, anomaly, server_time` |
+| `GET /api/checkout-groups/:id` ✅ | U/S (chủ lô) | — | `checkout_group_id, total_amount_raw, decimals, symbol, deadline, status (hoặc MIXED), server_time, orders[...]` |
+| `GET /api/orders/:code/status` ✅ | U/S/A | — | `status, delivered_at, inspection_duration, disputed_at, dispute_timeout, anomaly, server_time, order_id` (chỉ Buyer/Merchant của đơn hoặc Admin; người khác → 404 `ORDER_NOT_FOUND`) |
+| `GET /api/orders/:code` 🔲 | U | — | chi tiết đầy đủ đơn hàng (Tuần 5) |
 | `POST /api/orders/:code/dispute-note` 🔲 | U (Buyer) | lý do/bằng chứng | 200 |
-| `GET /api/shipper/orders`, `POST /api/shipper/orders/:code/deliver` 🔲 | Shipper | — | đơn `LOCKED` được gán / kết quả |
+| `GET /api/shipper/orders`, `POST /api/shipper/orders/:code/deliver` ✅ | Shipper | — | đơn `LOCKED` được gán / kết quả |
 | `POST /api/admin/disputes/:code/proposal` 🔲 | A | `payout_to` | đề xuất `PROPOSED` |
 | `POST /api/disputes/:code/signatures` 🔲 | U | `resolution_id, signature` | trạng thái đề xuất (`PROPOSED|READY`) |
 | `POST /api/disputes/:code/submit` 🔲 | U | — | `tx_hash` |
@@ -330,5 +336,6 @@ Quyền: chỉ role `user`/`seller` (admin/shipper → 403 `forbidden`, dạng l
 | `setDefaultFeeBps`, `setFeeRecipient` | Admin | trần phí ≤ 1.000 BPS / địa chỉ nhận phí |
 
 ### 4.8. Frontend Web3 (✅ tuần 3: xem mục 2; còn lại 🔲)
-`pages/`: ✅ `Wallet.jsx` (UC-00), 🔲 `ShipperOrders.jsx`, `Dispute.jsx`; `components/`: `RequireRole`, `TxStepper`, `CountdownTimer`, `StatusBadge`, `AddressTag`, `AmountView`; `hooks/`: `useWallet`, `useEscrow`, `useOrderStatus`, `useSignDispute`, `useServerClock`, `usePolling`, `useAuth`; `lib/`: ✅ `client`, `chain`, `eip712`, `errors`, `format`, `web3Checkout`, `walletLink`; thay đổi trang cũ: `Checkout.jsx` (✅ khung báo giá tuần 3; 🔲 nạp gom 2 bước ví), `MyOrders.jsx` (nhóm theo lô, đồng hồ, khiếu nại), `SellerDashboard.jsx`, `AdminDashboard.jsx`, `Navbar.jsx` (nút ví), `App.jsx` (`RequireRole`, route mới).
+`pages/`: ✅ `Wallet.jsx` (UC-00), ✅ `ShipperOrders.jsx` (tuần 5, route `/shipper/orders`), 🔲 `Dispute.jsx`; `components/`: `RequireRole`, ✅ `TxStepper`, ✅ `CountdownTimer` (tuần 5), ✅ `StatusBadge` (tuần 5), ✅ `Web3OrderPanel` (tuần 5: một đơn con Web3 của Buyer), ✅ `DisputeDialog` (tuần 5), `AddressTag`, `AmountView`; `hooks/`: ✅ `useWallet`, ✅ `useEscrow`, ✅ `useOrderStatus` (tuần 5: polling `/status` + đồng hồ theo `server_time`, đã gồm vai trò `useServerClock`), ✅ `useOrderActions` (tuần 5: `earlyRelease`/`raiseDispute` của Buyer), 🔲 `useSignDispute`, ✅ `usePolling`, `useAuth`; `lib/`: ✅ `shipperOrders`, ✅ `orderTimer`, ✅ `orderActions`, ✅ `orderStatus`, ✅ `groupOrders` (tuần 5), `client`, `chain`, `eip712`, `errors`, `format`, `web3Checkout`, `walletLink`, `depositFlow`; thay đổi trang cũ: `Checkout.jsx` (✅ khung báo giá tuần 3; ✅ nạp gom 2 bước ví tuần 4 — chưa thử MetaMask thật), ✅ `MyOrders.jsx` (tuần 5: nhóm theo `checkout_group_id`, đồng hồ kiểm tra, "Đã nhận hàng", "Khiếu nại"; đơn Web3 khóa nút cũ), `SellerDashboard.jsx`, `AdminDashboard.jsx`, `Navbar.jsx` (nút ví), `App.jsx` (`RequireRole`, route mới).
+`GET /api/payments/orders` (tuần 5, C hỗ trợ B): mỗi đơn có thêm `web3` = `null` (đơn cũ) hoặc `{onchain_order_id, checkout_group_id, buyer_wallet, status, delivered_at, inspection_duration, disputed_at, dispute_timeout, fee_bps, amount_raw (chuỗi), token_symbol, anomaly}` (`backend/routes/payments.py::_web3_summaries`, một truy vấn phụ, chịu được DB chưa có bảng `order_web3`). Trạng thái `web3.status` do Indexer ghi; giao diện polling `GET /api/orders/:code/status` để lấy giá trị mới và `server_time`.
 `depositReducer(state, event)` là hàm thuần của máy trạng thái nạp tiền: `CHECK_NETWORK → CHECK_QUOTE → CHECK_ALLOWANCE → APPROVING → DEPOSITING → WAITING_INDEXER`.

@@ -108,5 +108,7 @@ export function installWeb3Mock({ ttlSeconds = 900, latencyMs = 120, shops, fxVn
         }
         return realFetch(input, init); // mọi API khác (đăng nhập, giỏ hàng...) vẫn gọi backend thật
     };
+    // Mô phỏng Indexer: chuyển mọi đơn con của lô sang LOCKED (chỉ để dựng giao diện / test; thật thì do Indexer ghi sau khi có OrderCreated)
+    state.lock = (groupId) => { const e = state.groups.get(groupId); if (e) e.status = 'LOCKED'; };
     return { uninstall: () => { globalThis.fetch = realFetch; }, state };
 }

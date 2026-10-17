@@ -71,6 +71,24 @@ def seed_admin_command(username, name, email, password):
     click.echo(f"Admin '{username}' created.")
 
 
+@app.cli.command('seed-shipper')
+@click.option('--username', prompt=True, help='Tên đăng nhập Shipper (> 3 ký tự).')
+@click.option('--name', default='Shipper', show_default=True)
+@click.password_option(envvar='SHIPPER_PASSWORD', help='Mật khẩu (>= 12 ký tự). Có thể truyền qua SHIPPER_PASSWORD.')
+def seed_shipper_command(username, name, password):
+    """Tạo tài khoản Shipper: flask --app app seed-shipper (gán đơn: PUT /api/admin/orders/<code>/shipper)."""
+    from shipper_seed import seed_shipper
+    from routes.auth import get_db_connection
+    conn = get_db_connection()
+    try:
+        user_id = seed_shipper(conn, username, password, name=name)
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    finally:
+        conn.close()
+    click.echo(f"Shipper '{username}' created (id {user_id}).")
+
+
 @app.cli.command('migrate')
 @click.argument('action', default='up', type=click.Choice(['up', 'status']))
 def migrate_command(action):

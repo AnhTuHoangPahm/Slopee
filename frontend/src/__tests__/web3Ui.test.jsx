@@ -199,7 +199,7 @@ describe('Web3CheckoutPanel (UC-01, khung Tuần 3)', () => {
         expect(await screen.findByRole('button', { name: 'Chuyển sang mạng Anvil' })).toBeTruthy();
     });
 
-    it('tạo báo giá: từng shop, tổng token, tỷ giá, thời hạn; nút Ký quỹ bị khóa (Tuần 4)', async () => {
+    it('tạo báo giá: từng shop, tổng token, tỷ giá, thời hạn; nút Ký quỹ bật khi báo giá còn hạn', async () => {
         await linkAccount();
         mountWith(<Web3CheckoutPanel cartItemIds={['c1', 'c2']} />, fakeProvider());
         fireEvent.click(await screen.findByRole('button', { name: /Kết nối MetaMask/ }));
@@ -213,7 +213,7 @@ describe('Web3CheckoutPanel (UC-01, khung Tuần 3)', () => {
         expect(rows[0].textContent).toContain('3 ngày / 30 ngày');
         expect(screen.getByTestId('quote-total').textContent).toContain('20,76 mUSD'); // 15,96 + 4,80
         expect(screen.getByTestId('quote-countdown').textContent).toContain('15:00');
-        expect(screen.getByRole('button', { name: /Ký quỹ/ }).disabled).toBe(true);
+        expect(screen.getByTestId('deposit-button').disabled).toBe(false); // Tuần 4: nút đã hoạt động
         expect(fetchLog.find((c) => c.url.endsWith('/api/orders')).body).toEqual({ cart_item_ids: ['c1', 'c2'] });
     });
 

@@ -20,6 +20,7 @@ _PIN_RE = re.compile(r'^[0-9]{6}$')
 MAX_CHECKOUT_ITEMS = 100
 ER_LOCK_DEADLOCK = 1213
 ER_LOCK_WAIT_TIMEOUT = 1205
+ER_NO_SUCH_TABLE = 1146
 
 # P0-03 (S-05): bảng chuyển trạng thái hợp lệ cho đường ghi trạng thái đơn cũ
 ORDER_TRANSITIONS = {
@@ -373,6 +374,51 @@ def update_order_status(order_id):
         conn.close()
 
 
+WEB3_SUMMARY_COLUMNS = (
+    "order_id, onchain_order_id, checkout_group_id, buyer_wallet, status, delivered_at, inspection_duration, disputed_at, "
+    "dispute_timeout, fee_bps, amount_raw, token_symbol, anomaly_flag"
+)
+
+
+def _web3_summaries(cursor, order_ids):
+    """{order_id: tóm tắt Web3} cho các đơn có dòng order_web3 (SRS 5.1: LEFT JOIN trong GET /orders).
+
+    Đơn không có dòng order_web3 là đơn cũ (không xuất hiện trong kết quả). DB chưa áp migration Web3 (bảng chưa tồn tại,
+    lỗi 1146) thì coi như không có đơn Web3 nào, giống guards.is_web3_order. Trạng thái ở đây do Indexer ghi (BR-09);
+    giao diện dùng nó để biết đơn nào là Web3 và cần onchain_order_id nào để gọi contract.
+    """
+    if not order_ids:
+        return {}
+    try:
+        cursor.execute(
+            f"SELECT {WEB3_SUMMARY_COLUMNS} FROM order_web3 WHERE order_id IN ({_placeholders(len(order_ids))})",
+            tuple(order_ids))
+    except pymysql.err.ProgrammingError as e:
+        if e.args and e.args[0] == ER_NO_SUCH_TABLE:
+            return {}
+        raise
+
+    def opt(v):
+        return None if v is None else int(v)
+    out = {}
+    for r in cursor.fetchall():
+        out[r['order_id']] = {
+            'onchain_order_id': int(r['onchain_order_id']),
+            'checkout_group_id': r['checkout_group_id'],
+            'buyer_wallet': r['buyer_wallet'],      # ví đã ký quỹ: chỉ ví này gọi được earlyRelease/raiseDispute (giao diện kiểm trước khi bật ví)
+            'status': r['status'],
+            'delivered_at': opt(r['delivered_at']),
+            'inspection_duration': int(r['inspection_duration']),
+            'disputed_at': opt(r['disputed_at']),
+            'dispute_timeout': int(r['dispute_timeout']),
+            'fee_bps': int(r['fee_bps']),
+            'amount_raw': str(r['amount_raw']),
+            'token_symbol': r['token_symbol'],
+            'anomaly': bool(r['anomaly_flag']),
+        }
+    return out
+
+
 @payments_bp.route('/orders', methods=['GET'])
 @require_auth
 def get_orders():
@@ -416,6 +462,10 @@ def get_orders():
                     "selectedVariants": variants_json
                 })
                 
+            # Đơn Web3: thêm `web3` (null với đơn cũ) để giao diện khóa nút cũ, hiện đồng hồ kiểm tra và gọi đúng đơn on-chain
+            web3 = _web3_summaries(cursor, list(orders_map))
+            for o_id, order in orders_map.items():
+                order["web3"] = web3.get(o_id)
             return jsonify({"orders": list(orders_map.values())}), 200
             
     finally:
