@@ -5,7 +5,7 @@ admin và shipper không phải bên mua/bán (shipper có khóa relayer riêng 
 """
 import logging
 
-from flask import Blueprint, g, jsonify
+from flask import Blueprint, g, jsonify, request
 from werkzeug.exceptions import HTTPException
 
 from auth_utils import require_auth
@@ -19,6 +19,9 @@ from . import container as c
 
 log = logging.getLogger('slopee.web3')
 
+shipper_bp = Blueprint('w3_shipper', __name__)
+admin_w3_bp = Blueprint('w3_admin', __name__)
+notifications_bp = Blueprint('w3_notifications', __name__)
 wallet_bp = Blueprint('w3_wallet', __name__)
 orders_bp = Blueprint('w3_orders', __name__)
 groups_bp = Blueprint('w3_groups', __name__)
@@ -56,7 +59,7 @@ def _on_unexpected(e):
     return _err('internal_error', 'Đã có lỗi phía máy chủ, hãy thử lại sau.', 500)
 
 
-for _bp in (wallet_bp, orders_bp, groups_bp):
+for _bp in (wallet_bp, orders_bp, groups_bp, shipper_bp, admin_w3_bp, notifications_bp):
     _bp.register_error_handler(DomainError, _on_domain_error)
     _bp.register_error_handler(ApiError, _on_api_error)
     _bp.register_error_handler(ChainUnavailable, _on_chain_unavailable)
@@ -128,6 +131,16 @@ def order_status(order_code):
     return jsonify(_container().order_status_service().get_status(g.user_id, g.role, order_code)), 200
 
 
+@orders_bp.route('/<order_code>/dispute-note', methods=['POST'])
+@require_auth(*BUYER_ROLES)
+def dispute_note(order_code):
+    """UC-05/SEQ-02: Buyer gửi lý do + đường dẫn bằng chứng SAU KHI Indexer đã ghi DISPUTED. Chỉ Buyer của đơn; gửi lại thì ghi đè.
+    Giá trị thô được truyền thẳng cho service (kiểm kiểu và độ dài ở domain), danh tính chỉ từ token."""
+    body = json_body()
+    return jsonify(_container().dispute_note_service().save_note(
+        g.user_id, order_code, body.get('reason'), body.get('evidence_url'))), 200
+
+
 @groups_bp.route('/<group_id>/quote', methods=['POST'])
 @require_auth(*BUYER_ROLES)
 def requote_group(group_id):
@@ -138,3 +151,41 @@ def requote_group(group_id):
 @require_auth(*BUYER_ROLES)
 def get_group(group_id):
     return jsonify(_container().quote_service().get_group(g.user_id, group_id)), 200
+
+
+# ------------------------------------------------------------------ UC-03 (Tuần 5): cổng Shipper. CHỈ role `shipper`.
+@shipper_bp.route('/orders', methods=['GET'])
+@require_auth('shipper')
+def shipper_orders():
+    return jsonify(_container().shipper_service().list_orders(g.user_id)), 200
+
+
+@shipper_bp.route('/orders/<order_code>/deliver', methods=['POST'])
+@require_auth('shipper')
+def shipper_deliver(order_code):
+    """Relayer gửi confirmDelivery; trạng thái đơn do Indexer ghi sau đó (BR-09), nên trả outcome + tx_hash, không trả DELIVERED."""
+    return jsonify(_container().shipper_service().deliver(g.user_id, order_code)), 200
+
+
+# ------------------------------------------------------------------ Admin (Tuần 5). Mới ngoài danh sách SDD 10.2, chờ nhóm xác nhận
+@admin_w3_bp.route('/reconcile', methods=['GET'])
+@require_auth('admin')
+def admin_reconcile():
+    """AC-10: đối soát số dư contract với đơn đang mở. `?deep=1` so thêm trạng thái từng đơn với chuỗi (khi Indexer đã bắt kịp)."""
+    deep = request.args.get('deep', '').lower() in ('1', 'true', 'yes')
+    return jsonify(_container().reconcile_service().run(deep=deep)), 200
+
+
+@admin_w3_bp.route('/orders/<order_code>/shipper', methods=['PUT'])
+@require_auth('admin')
+def admin_assign_shipper(order_code):
+    """Gán/đổi Shipper cho đơn chưa giao (UC-03 cần dòng shipper_assignments). Người gán lấy từ token."""
+    shipper = get_str(json_body(), 'shipper_user_id', max_len=36, label='shipper_user_id')
+    return jsonify(_container().shipper_service().assign(g.user_id, order_code, shipper)), 200
+
+
+@notifications_bp.route('', methods=['GET'])
+@require_auth
+def my_notifications():
+    """Thông báo của chính người gọi (ví dụ: đơn đã giao kèm hạn khiếu nại). Danh tính chỉ từ token."""
+    return jsonify(_container().notification_service().list_for_user(g.user_id)), 200

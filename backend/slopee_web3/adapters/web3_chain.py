@@ -9,6 +9,9 @@ from web3.exceptions import ContractLogicError
 from ..ports.chain_port import ORDER_STATES, ChainTxFailed, ChainUnavailable
 
 ABI_PATH = Path(__file__).resolve().parents[3] / 'shared' / 'abi' / 'SlopeeEscrowMaster.json'
+ZERO_ADDRESS = '0x' + '0' * 40
+_ERC20_BALANCE_ABI = [{'type': 'function', 'name': 'balanceOf', 'stateMutability': 'view',
+                       'inputs': [{'name': 'a', 'type': 'address'}], 'outputs': [{'name': '', 'type': 'uint256'}]}]
 
 
 def load_abi(path=None):
@@ -91,7 +94,7 @@ class Web3Chain:
         out.sort(key=lambda e: (e['block_number'], e['log_index']))
         return out
 
-    # ---- relayer (Tuần 5). Người gọi PHẢI tuần tự hóa (hàng đợi một luồng, DD-06): nonce lấy từ 'pending' ở đây
+    # ---- relayer (Tuần 5, A). Người gọi PHẢI tuần tự hóa (hàng đợi một luồng, DD-06): nonce lấy từ 'pending' ở đây
     # chỉ đúng khi không có giao dịch nào khác của cùng tài khoản đang được dựng song song.
     GAS_MARGIN = 1.2
 
@@ -113,3 +116,19 @@ class Web3Chain:
     def wait_receipt(self, tx_hash, timeout):
         r = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=timeout, poll_latency=0.2)
         return {'status': int(r['status']), 'block_number': int(r['blockNumber'])}
+
+    # ---- đọc cho tác vụ nền và đối soát (Tuần 5, B)
+    @_unavailable
+    def get_order(self, onchain_order_id):
+        t = self.contract.functions.orders(int(onchain_order_id)).call()
+        return {'state': ORDER_STATES[int(t[10])], 'buyer': t[0], 'merchant': t[1], 'token': t[2], 'amount': int(t[3]),
+                'created_at': int(t[4]), 'delivered_at': int(t[5]), 'disputed_at': int(t[6]),
+                'dispute_timeout': int(t[7]), 'inspection_duration': int(t[8]), 'fee_bps': int(t[9])}
+
+    @_unavailable
+    def balance_of(self, token_address, at_block=None):
+        block = 'latest' if at_block is None else int(at_block)
+        if token_address is None or str(token_address).lower() == ZERO_ADDRESS:
+            return int(self.w3.eth.get_balance(self.address, block_identifier=block))
+        erc20 = self.w3.eth.contract(address=to_checksum_address(token_address), abi=_ERC20_BALANCE_ABI)
+        return int(erc20.functions.balanceOf(self.address).call(block_identifier=block))

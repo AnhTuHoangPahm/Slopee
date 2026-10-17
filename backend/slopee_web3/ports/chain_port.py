@@ -1,4 +1,4 @@
-"""ChainPort (SDD 5.2). Tuần 3: các phương thức đọc. Tuần 5: `send_tx` + `wait_receipt` cho relayer (SDD 5.3h, DD-06)."""
+"""ChainPort (SDD 5.2). Tuần 3: các phương thức đọc. Tuần 5: `send_tx` + `wait_receipt` cho relayer (A); `get_order` + `balance_of` cho tác vụ nền và đối soát (B)."""
 from typing import Protocol
 
 ORDER_STATES = ('NONE', 'LOCKED', 'DELIVERED', 'DISPUTED', 'COMPLETED', 'REFUNDED')   # khớp enum OrderState
@@ -40,3 +40,11 @@ class ChainPort(Protocol):
 
     def wait_receipt(self, tx_hash: str, timeout: float) -> dict:
         """Chờ biên nhận: {'status': 1|0, 'block_number': int}. Hết `timeout` giây mà chưa có -> ChainUnavailable."""
+
+    def get_order(self, onchain_order_id: int) -> dict:
+        """Đọc TRỰC TIẾP `orders(id)`: {'state', 'amount' (int), 'created_at', 'delivered_at', 'disputed_at',
+        'dispute_timeout', 'inspection_duration', 'fee_bps', 'buyer', 'merchant', 'token'} (mốc là giây UTC theo block)."""
+
+    def balance_of(self, token_address, at_block=None) -> int:
+        """Số dư contract Escrow: ERC-20 `balanceOf(escrow)`; None/0x0 ⇒ ETH. `at_block` đọc tại block đó (đối soát so đúng
+        tại block Indexer đã xử lý nên không dương tính giả khi Indexer trễ)."""

@@ -53,6 +53,14 @@ class CheckoutRepo(Protocol):
     def order_status_row(self, order_id: str) -> Optional[dict]: ...        # đọc không khóa; None nếu không phải đơn Web3
 
 
+class ShipperRepo(Protocol):
+    def get_user(self, user_id: str) -> Optional[dict]: ...                        # {'id','role','name'}
+    def assigned_orders(self, shipper_user_id: str, statuses: tuple) -> list: ...  # đơn gán cho Shipper theo trạng thái Web3
+    def assigned_order(self, order_id: str, shipper_user_id: str, lock: bool = False) -> Optional[dict]: ...
+    def order_for_assignment(self, order_id: str, lock: bool = False) -> Optional[dict]: ...  # {'order_id','status'}
+    def assign(self, order_id: str, shipper_user_id: str, assigned_by: Optional[str]) -> None: ...
+
+
 class OutboxRepo(Protocol):
     """Nhật ký giao dịch relayer (bảng tx_outbox): PENDING -> SENT -> CONFIRMED | FAILED. Chỉ để truy vết/gỡ lỗi."""
     def insert(self, kind: str, order_id: str) -> int: ...                  # trả id, status = PENDING
@@ -62,12 +70,45 @@ class OutboxRepo(Protocol):
     def recent_for_order(self, order_id: str, limit: int = 20) -> list: ...  # mới nhất trước
 
 
+class NotificationRepo(Protocol):
+    def add(self, user_id: str, order_id: str, kind: str, message: str) -> bool: ...  # False nếu đã gửi (UNIQUE) ⇒ idempotent
+    def list_for_user(self, user_id: str, limit: int) -> list: ...
+
+
+class JobsRepo(Protocol):
+    def expired_quote_candidates(self, now: int, grace: int, limit: int) -> list: ...   # group_id có đơn PENDING_PAYMENT quá hạn
+    def lock_group_orders(self, group_id: str) -> list: ...                             # đơn của lô, FOR UPDATE, kèm hạn báo giá mới nhất
+    def expire_order(self, order_id: str) -> bool: ...                                  # PENDING_PAYMENT -> EXPIRED (+ orders cũ); False nếu đã đổi
+    def delivered_due(self, now: int, limit: int) -> list: ...                          # đơn DELIVERED đã hết hạn kiểm tra
+    def locked_past_delivery_timeout(self, now: int, limit: int) -> list: ...           # đơn LOCKED quá 14 ngày
+
+
+class ReconcileRepo(Protocol):
+    def indexer_cursor(self) -> Optional[dict]: ...                                     # {'last_block','last_block_hash'}
+    def open_totals(self) -> list: ...                                                  # [{'token','orders','amount_raw'(int)}]
+    def pending_totals(self) -> list: ...                                               # [{'token','amount_raw'(int)}]
+    def anomaly_orders(self) -> list: ...                                               # đơn anomaly_flag = 1
+    def open_orders(self, limit: int) -> list: ...                                      # [{'order_id','onchain_order_id','status'}]
+
+
+class DisputeNoteRepo(Protocol):
+    def order_for_note(self, order_id: str, lock: bool = False) -> Optional[dict]: ...   # {'order_id','buyer_user_id','status'}
+    def has_resolution(self, order_id: str) -> bool: ...                                 # Admin đã có đề xuất phán quyết
+    def upsert(self, order_id: str, buyer_user_id: str, reason: str, evidence_url: Optional[str]) -> bool: ...  # True nếu tạo mới
+    def get(self, order_id: str) -> Optional[dict]: ...
+
+
 class UnitOfWork(Protocol):
     wallets: WalletRepo
     settings: SettingsRepo
     policies: PolicyRepo
     checkout: CheckoutRepo
+    shipper: ShipperRepo
     outbox: OutboxRepo
+    notifications: NotificationRepo
+    jobs: JobsRepo
+    reconcile: ReconcileRepo
+    dispute_notes: DisputeNoteRepo
 
     def __enter__(self) -> "UnitOfWork": ...
     def __exit__(self, exc_type, exc, tb) -> None: ...   # chưa commit thì ROLLBACK

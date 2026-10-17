@@ -10,7 +10,10 @@ import pymysql
 
 from ..domain.order_state import is_valid_transition, to_legacy_status
 from ..domain.policy import Policy
+from ..domain.reconcile import OPEN_STATES, token_key
+from ..domain.release import DELIVERY_TIMEOUT_SECONDS
 from ..ports.repositories import DuplicateWallet
+from .legacy_sync import sync_legacy_status
 
 ER_DUP_ENTRY = 1062
 
@@ -277,6 +280,92 @@ class MySqlCheckoutRepo:
         return self.cur.fetchone()
 
 
+# ------------------------------------------------------------------ dùng chung cho Repo và Indexer (đều chỉ cần con trỏ)
+def add_notification(cur, user_id, order_id, kind, message):
+    """Idempotent nhờ UNIQUE(user_id, order_id, kind): True nếu vừa tạo, False nếu đã có. Dùng được trong giao dịch của Indexer."""
+    cur.execute("INSERT IGNORE INTO notifications (user_id, order_id, kind, message) VALUES (%s, %s, %s, %s)",
+                (user_id, order_id, kind, message))
+    return cur.rowcount == 1
+
+
+def _order_stock_lines(cur, order_id):
+    """Số lượng theo sản phẩm của đơn, SẮP THEO productId: mọi nơi đổi tồn kho nhiều sản phẩm phải theo cùng thứ tự để không deadlock."""
+    cur.execute("SELECT productId, SUM(quantity) AS q FROM orderLines WHERE orderId=%s AND productId IS NOT NULL "
+                "GROUP BY productId ORDER BY productId", (order_id,))
+    return [(r['productId'], int(r['q'])) for r in cur.fetchall()]
+
+
+def release_order_stock(cur, order_id):
+    """Hoàn tồn kho của đơn Web3 khi EXPIRED/REFUNDED (SDD 7.4). Sản phẩm đã bị xóa (productId NULL) thì bỏ qua."""
+    for product_id, qty in _order_stock_lines(cur, order_id):
+        cur.execute("UPDATE products SET inStock = inStock + %s WHERE id=%s", (qty, product_id))
+
+
+def reserve_order_stock(cur, order_id):
+    """Giữ lại tồn kho khi một đơn REFUNDED bị reorg đưa về PENDING_PAYMENT (đối xứng với release_order_stock).
+    Trả False nếu hàng đã bán hết trong lúc đó (không trừ âm; người gọi ghi log cảnh báo)."""
+    ok = True
+    for product_id, qty in _order_stock_lines(cur, order_id):
+        cur.execute("UPDATE products SET inStock = inStock - %s WHERE id=%s AND inStock >= %s", (qty, product_id, qty))
+        ok = ok and cur.rowcount == 1
+    return ok
+
+
+class MySqlShipperRepo:
+    def __init__(self, cur):
+        self.cur = cur
+
+    def get_user(self, user_id):
+        self.cur.execute("SELECT id, role, name FROM users WHERE id=%s", (user_id,))
+        return self.cur.fetchone()
+
+    def assigned_orders(self, shipper_user_id, statuses):
+        if not statuses:
+            return []
+        self.cur.execute(
+            "SELECT w.order_id, w.onchain_order_id, w.status, w.amount_raw, w.token_symbol, w.price_vnd, "
+            "w.inspection_duration, w.chain_created_at, w.delivered_at, s.name AS shop_name, bu.name AS buyer_name, "
+            "UNIX_TIMESTAMP(sa.assigned_at) AS assigned_at "
+            "FROM shipper_assignments sa JOIN order_web3 w ON w.order_id = sa.order_id "
+            "LEFT JOIN shops s ON s.id = w.shop_id LEFT JOIN users bu ON bu.id = w.buyer_user_id "
+            f"WHERE sa.shipper_user_id=%s AND w.status IN ({_marks(len(statuses))}) "
+            "ORDER BY sa.assigned_at, w.onchain_order_id", (shipper_user_id, *statuses))
+        rows = list(self.cur.fetchall())
+        items = self._items([r['order_id'] for r in rows])
+        for r in rows:
+            r['items'] = items.get(r['order_id'], [])
+        return rows
+
+    def _items(self, order_ids):
+        if not order_ids:
+            return {}
+        self.cur.execute("SELECT orderId, snapshotProductName AS name, quantity, selectedVariants FROM orderLines "
+                         f"WHERE orderId IN ({_marks(len(order_ids))}) ORDER BY orderId, id", tuple(order_ids))
+        out = {}
+        for r in self.cur.fetchall():
+            out.setdefault(r['orderId'], []).append(
+                {'name': r['name'], 'quantity': int(r['quantity']), 'variants': r['selectedVariants']})
+        return out
+
+    def assigned_order(self, order_id, shipper_user_id, lock=False):
+        self.cur.execute(
+            "SELECT w.order_id, w.onchain_order_id, w.status FROM shipper_assignments sa "
+            "JOIN order_web3 w ON w.order_id = sa.order_id WHERE sa.order_id=%s AND sa.shipper_user_id=%s"
+            + (" FOR UPDATE OF w" if lock else ""), (order_id, shipper_user_id))
+        return self.cur.fetchone()
+
+    def order_for_assignment(self, order_id, lock=False):
+        self.cur.execute("SELECT order_id, onchain_order_id, status FROM order_web3 WHERE order_id=%s"
+                         + (" FOR UPDATE" if lock else ""), (order_id,))
+        return self.cur.fetchone()
+
+    def assign(self, order_id, shipper_user_id, assigned_by):
+        self.cur.execute(
+            "INSERT INTO shipper_assignments (order_id, shipper_user_id, assigned_by) VALUES (%s, %s, %s) "
+            "ON DUPLICATE KEY UPDATE shipper_user_id=VALUES(shipper_user_id), assigned_by=VALUES(assigned_by), "
+            "assigned_at=CURRENT_TIMESTAMP", (order_id, shipper_user_id, assigned_by))
+
+
 class MySqlOutboxRepo:
     """tx_outbox (SDD 012): chỉ ghi vết giao dịch relayer. Chuyển trạng thái có điều kiện trạng thái cũ (SDD 7.5)."""
     MAX_ERROR = 2000
@@ -304,6 +393,139 @@ class MySqlOutboxRepo:
         return list(self.cur.fetchall())
 
 
+class MySqlNotificationRepo:
+    def __init__(self, cur):
+        self.cur = cur
+
+    def add(self, user_id, order_id, kind, message):
+        return add_notification(self.cur, user_id, order_id, kind, message)
+
+    def list_for_user(self, user_id, limit):
+        self.cur.execute("SELECT id, order_id, kind, message, UNIX_TIMESTAMP(created_at) AS created_at, "
+                         "(read_at IS NOT NULL) AS is_read FROM notifications WHERE user_id=%s ORDER BY id DESC LIMIT %s",
+                         (user_id, int(limit)))
+        return [{'id': int(r['id']), 'order_id': r['order_id'], 'kind': r['kind'], 'message': r['message'],
+                 'created_at': int(r['created_at']), 'read': bool(r['is_read'])} for r in self.cur.fetchall()]
+
+
+class MySqlJobsRepo:
+    def __init__(self, cur):
+        self.cur = cur
+
+    def expired_quote_candidates(self, now, grace, limit):
+        """Lô có ít nhất một đơn PENDING_PAYMENT mà báo giá MỚI NHẤT đã quá hạn thêm `grace` giây. Chỉ để chọn ứng viên;
+        QuoteExpirySweeper kiểm lại từng đơn SAU KHI khóa (đọc này không khóa)."""
+        self.cur.execute(
+            "SELECT DISTINCT w.checkout_group_id AS group_id FROM order_web3 w "
+            "JOIN order_quotes q ON q.id = (SELECT MAX(q2.id) FROM order_quotes q2 WHERE q2.order_id = w.order_id) "
+            "WHERE w.status='PENDING_PAYMENT' AND q.deadline < %s ORDER BY w.checkout_group_id LIMIT %s",
+            (int(now) - int(grace), int(limit)))
+        return [r['group_id'] for r in self.cur.fetchall()]
+
+    def lock_group_orders(self, group_id):
+        self.cur.execute(
+            "SELECT w.order_id, w.onchain_order_id, w.status, "
+            "(SELECT q.deadline FROM order_quotes q WHERE q.order_id = w.order_id ORDER BY q.id DESC LIMIT 1) AS deadline "
+            "FROM order_web3 w WHERE w.checkout_group_id=%s ORDER BY w.onchain_order_id FOR UPDATE", (group_id,))
+        rows = list(self.cur.fetchall())
+        for r in rows:
+            r['deadline'] = None if r['deadline'] is None else int(r['deadline'])
+        return rows
+
+    def expire_order(self, order_id):
+        """PENDING_PAYMENT -> EXPIRED (có điều kiện trạng thái, SDD 7.5), đồng bộ `orders` cũ và hoàn tồn kho cùng giao dịch."""
+        self.cur.execute("UPDATE order_web3 SET status='EXPIRED' WHERE order_id=%s AND status='PENDING_PAYMENT'", (order_id,))
+        if self.cur.rowcount != 1:
+            return False
+        sync_legacy_status(self.cur, order_id, 'EXPIRED')
+        release_order_stock(self.cur, order_id)
+        return True
+
+    def delivered_due(self, now, limit):
+        self.cur.execute(
+            "SELECT order_id, onchain_order_id, delivered_at, inspection_duration FROM order_web3 "
+            "WHERE status='DELIVERED' AND delivered_at IS NOT NULL AND delivered_at + inspection_duration <= %s "
+            "ORDER BY delivered_at + inspection_duration, onchain_order_id LIMIT %s", (int(now), int(limit)))
+        return list(self.cur.fetchall())
+
+    def locked_past_delivery_timeout(self, now, limit):
+        self.cur.execute(
+            "SELECT w.order_id, w.onchain_order_id, w.buyer_user_id, w.chain_created_at FROM order_web3 w "
+            "WHERE w.status='LOCKED' AND w.chain_created_at IS NOT NULL AND w.chain_created_at + %s <= %s "
+            "AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.user_id = w.buyer_user_id AND n.order_id = w.order_id "
+            "AND n.kind='DELIVERY_TIMEOUT') ORDER BY w.chain_created_at, w.onchain_order_id LIMIT %s",
+            (DELIVERY_TIMEOUT_SECONDS, int(now), int(limit)))
+        return list(self.cur.fetchall())
+
+
+class MySqlReconcileRepo:
+    def __init__(self, cur):
+        self.cur = cur
+
+    def indexer_cursor(self):
+        self.cur.execute("SELECT last_block, last_block_hash FROM indexer_cursor WHERE name='escrow'")
+        row = self.cur.fetchone()
+        return {'last_block': int(row['last_block']), 'last_block_hash': row['last_block_hash']} if row else None
+
+    def open_totals(self):
+        """Σ amount_raw theo token của đơn đang mở. Cộng bằng int Python (amount_raw là VARCHAR(78), không bao giờ float)."""
+        self.cur.execute(f"SELECT token_address, amount_raw FROM order_web3 WHERE status IN ({_marks(len(OPEN_STATES))})",
+                         OPEN_STATES)
+        totals = {}
+        for r in self.cur.fetchall():
+            t = totals.setdefault(token_key(r['token_address']), {'token': token_key(r['token_address']), 'orders': 0, 'amount_raw': 0})
+            t['orders'] += 1
+            t['amount_raw'] += int(r['amount_raw'])
+        return list(totals.values())
+
+    def pending_totals(self):
+        self.cur.execute("SELECT token_address, amount_raw FROM pending_balances")
+        totals = {}
+        for r in self.cur.fetchall():
+            t = totals.setdefault(token_key(r['token_address']), {'token': token_key(r['token_address']), 'amount_raw': 0})
+            t['amount_raw'] += int(r['amount_raw'])
+        return list(totals.values())
+
+    def anomaly_orders(self):
+        self.cur.execute("SELECT order_id, onchain_order_id, status FROM order_web3 WHERE anomaly_flag=1 "
+                         "ORDER BY onchain_order_id LIMIT 100")
+        return [{'order_id': r['order_id'], 'onchain_order_id': int(r['onchain_order_id']), 'status': r['status']}
+                for r in self.cur.fetchall()]
+
+    def open_orders(self, limit):
+        self.cur.execute(f"SELECT order_id, onchain_order_id, status FROM order_web3 WHERE status IN ({_marks(len(OPEN_STATES))}) "
+                         "ORDER BY onchain_order_id LIMIT %s", (*OPEN_STATES, int(limit)))
+        return [{'order_id': r['order_id'], 'onchain_order_id': int(r['onchain_order_id']), 'status': r['status']}
+                for r in self.cur.fetchall()]
+
+
+class MySqlDisputeNoteRepo:
+    def __init__(self, cur):
+        self.cur = cur
+
+    def order_for_note(self, order_id, lock=False):
+        self.cur.execute("SELECT order_id, buyer_user_id, status FROM order_web3 WHERE order_id=%s"
+                         + (" FOR UPDATE" if lock else ""), (order_id,))
+        return self.cur.fetchone()
+
+    def has_resolution(self, order_id):
+        self.cur.execute("SELECT 1 AS x FROM dispute_resolutions WHERE order_id=%s LIMIT 1", (order_id,))
+        return self.cur.fetchone() is not None
+
+    def upsert(self, order_id, buyer_user_id, reason, evidence_url):
+        """INSERT ... ON DUPLICATE KEY UPDATE: rowcount 1 = tạo mới, 2 = ghi đè, 0 = y hệt bản cũ (gửi lại không đổi gì)."""
+        self.cur.execute(
+            "INSERT INTO dispute_notes (order_id, buyer_user_id, reason, evidence_url) VALUES (%s, %s, %s, %s) "
+            "ON DUPLICATE KEY UPDATE reason=VALUES(reason), evidence_url=VALUES(evidence_url)",
+            (order_id, buyer_user_id, reason, evidence_url))
+        return self.cur.rowcount == 1
+
+    def get(self, order_id):
+        self.cur.execute("SELECT order_id, buyer_user_id, reason, evidence_url, UNIX_TIMESTAMP(created_at) AS created_at, "
+                         "UNIX_TIMESTAMP(updated_at) AS updated_at FROM dispute_notes WHERE order_id=%s", (order_id,))
+        return self.cur.fetchone()
+
+
 class MySqlUnitOfWork:
     """Một kết nối + một transaction. Thoát khối `with` mà chưa `commit()` thì ROLLBACK (lỗi bất kỳ -> rollback cả lô)."""
 
@@ -318,7 +540,12 @@ class MySqlUnitOfWork:
         self.settings = MySqlSettingsRepo(self.cur)
         self.policies = MySqlPolicyRepo(self.cur)
         self.checkout = MySqlCheckoutRepo(self.cur)
+        self.shipper = MySqlShipperRepo(self.cur)
         self.outbox = MySqlOutboxRepo(self.cur)
+        self.notifications = MySqlNotificationRepo(self.cur)
+        self.jobs = MySqlJobsRepo(self.cur)
+        self.reconcile = MySqlReconcileRepo(self.cur)
+        self.dispute_notes = MySqlDisputeNoteRepo(self.cur)
         return self
 
     def commit(self):

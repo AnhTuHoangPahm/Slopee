@@ -1,4 +1,4 @@
-"""Migration Web3 0006..0020 trên MySQL THẬT (tự skip nếu không có MySQL; CI chạy với MySQL service 8.0).
+"""Migration Web3 0006..0022 trên MySQL THẬT (tự skip nếu không có MySQL; CI chạy với MySQL service 8.0).
 
 Kiểm: (1) DB mới từ schema.sql, (2) DB cũ nâng cấp bằng migrate.py cho ra CÙNG lược đồ, (3) idempotent,
 (4) migration phòng vệ khi charset/collation của bảng cha khác mặc định (SDD Q-06, lỗi errno 150), (5) các ràng buộc thật sự chặn dữ liệu xấu.
@@ -14,17 +14,18 @@ import migrate
 
 pytestmark = pytest.mark.mysql
 
-MARKER = "-- WEB3 ESCROW (migration 0006 .. 0020)"
+MARKER = "-- WEB3 ESCROW (migration 0006 .. 0022)"
 WEB3_NAMES = [
     '0006_wallets.py', '0007_checkout_groups.py', '0008_order_web3.py', '0009_order_quotes.py',
     '0010_dispute_resolutions.py', '0011_dispute_signatures.sql', '0012_chain_events.sql', '0013_indexer_cursor.sql',
     '0014_platform_settings.sql', '0015_category_policies.sql', '0016_category_policy_map.sql', '0017_tx_outbox.sql',
     '0018_onchain_id_seq.sql', '0019_pending_balances.sql', '0020_shipper.py',
+    '0021_notifications.py', '0022_dispute_notes.py',
 ]
 WEB3_TABLES = [
     'user_wallets', 'wallet_nonces', 'checkout_groups', 'order_web3', 'order_quotes', 'dispute_resolutions',
     'dispute_signatures', 'chain_events', 'indexer_cursor', 'platform_settings', 'category_policies',
-    'category_policy_map', 'tx_outbox', 'onchain_id_seq', 'pending_balances', 'shipper_assignments',
+    'category_policy_map', 'tx_outbox', 'onchain_id_seq', 'pending_balances', 'shipper_assignments', 'notifications', 'dispute_notes',
 ]
 LEGACY_NAMES = ['0001_money_to_vnd.sql', '0002_product_fk_snapshots.py', '0003_reviews_dedupe.py',
                 '0004_auth_attempts.sql', '0005_order_line_settlement.py']
@@ -170,7 +171,7 @@ def test_fresh_database_has_all_web3_tables_and_marks_migrations_applied(db_conn
     have = {r['t'] for r in cur.fetchall()}
     assert set(WEB3_TABLES) <= have
     cur.execute("SELECT version FROM schema_migrations")
-    assert set(WEB3_NAMES) <= {r['version'] for r in cur.fetchall()}, "init_db phải đánh dấu 0006..0020 đã áp dụng"
+    assert set(WEB3_NAMES) <= {r['version'] for r in cur.fetchall()}, "init_db phải đánh dấu 0006..0022 đã áp dụng"
     cur.execute("SELECT COLUMN_TYPE c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='role'")
     assert cur.fetchone()['c'] == "enum('admin','seller','user','shipper')"
 

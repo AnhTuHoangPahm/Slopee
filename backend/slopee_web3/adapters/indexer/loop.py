@@ -142,7 +142,7 @@ class Indexer:
                     if handler:
                         handler(cur, ev, block_ts[bn])
                     else:
-                        log.debug('Chưa có handler cho %s (Tuần 4)', ev['event'])
+                        log.debug('Chưa có handler cho %s (DisputeResolved/ArbitratorForceResolved: Tuần 6)', ev['event'])
                 end_hash = self._chain.get_block(end)['hash']
                 cur.execute(
                     "INSERT INTO indexer_cursor (name, last_block, last_block_hash) VALUES (%s, %s, %s) "

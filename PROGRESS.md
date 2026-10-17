@@ -173,12 +173,12 @@
 ---
 
 ### TUẦN 5: Cổng Shipper, Relayer & Luồng Giải ngân tự động
-- [ ] **[B] Thành viên B:** Cổng Shipper: API `GET /api/shipper/orders` và `POST /api/shipper/orders/:code/deliver`.
-- [~] **[A ➔ B] Thành viên A:** Cài đặt Relayer gửi giao dịch `confirmDelivery` lên Anvil bằng khóa `SHIPPER_KEY` qua hàng đợi một luồng (`tx_outbox`). *Đã code + test xanh cục bộ (MySQL 8.0.46), **chưa chạy với Anvil + contract thật**, chờ PR review.* `application/relayer_service.py::RelayerService.confirm_delivery(order_id, onchain_order_id)` → `{outcome: 'SENT'|'ALREADY_DELIVERED', tx_hash, outbox_id}`; `adapters/relayer_queue.py::SingleThreadQueue` (DD-06); cổng mới `ChainPort.send_tx/wait_receipt`, `SignerPort.sign_transaction`, `OutboxRepo`; `Web3Container.relayer_service()` để **B** gọi từ `ShipperService` (UC-03) và `AutoRelease`.
-- [ ] **[B] Thành viên B:** Tác vụ nền (Scheduler): Quét báo giá quá hạn (`QuoteExpirySweeper`), Quét tự động giải ngân khi hết thời hạn kiểm tra (`AutoRelease`).
-- [~] **[A ➔ F] Thành viên A:** Xây dựng màn hình cổng Shipper (`pages/ShipperOrders.jsx`). *Đã code + test xanh cục bộ, chờ PR review và API thật của B.* Route `/shipper/orders` (chỉ role `shipper`), link trên Navbar, đăng nhập xong shipper vào thẳng cổng; `api/shipper.js`, `lib/shipperOrders.js` (hàm thuần).
-- [~] **[F] Thành viên C:** Cập nhật màn hình Buyer (`pages/MyOrders.jsx`): Hiển thị đồng hồ đếm ngược kiểm tra (`CountdownTimer`), nút "Đã nhận hàng" (`earlyRelease`), nút "Khiếu nại". *Đã code + test xanh cục bộ (vitest 291 pass), chờ PR review; đã chạy với Anvil thật nhưng chưa thử bằng MetaMask trên trình duyệt.* Đơn Web3 nhóm theo `checkout_group_id`, mỗi đơn con có đồng hồ riêng theo `server_time` + luồng ví riêng (`components/Web3OrderPanel.jsx`); nút cũ bị khóa với đơn Web3.
-- [~] **[Q] Thành viên C:** Chạy kịch bản tích hợp luồng Happy Path (I-05, E-01). *Đã chạy trên **Anvil + MySQL 8.0 thật**: I-05 xong; E-01 xong phần chuỗi + LOCKED, **phần DB DELIVERED/COMPLETED đang `xfail` chờ handler Indexer của B**; E-01 bản Playwright là việc Tuần 8.* Xem ghi chú bên dưới.
+- [x] **[B] Thành viên B:** Cổng Shipper: API `GET /api/shipper/orders` và `POST /api/shipper/orders/:code/deliver`.
+- [x] **[A ➔ B] Thành viên A:** Cài đặt Relayer gửi giao dịch `confirmDelivery` lên Anvil bằng khóa `SHIPPER_KEY` qua hàng đợi một luồng (`tx_outbox`).
+- [x] **[B] Thành viên B:** Tác vụ nền (Scheduler): `QuoteExpirySweeper`, `AutoRelease`, `DeliveryTimeoutReminder`, `ReconcileSnapshot`.
+- [x] **[A ➔ F] Thành viên A:** Xây dựng màn hình cổng Shipper (`pages/ShipperOrders.jsx`).
+- [x] **[F] Thành viên C:** Cập nhật màn hình Buyer (`pages/MyOrders.jsx`): Hiển thị đồng hồ đếm ngược kiểm tra (`CountdownTimer`), nút "Đã nhận hàng" (`earlyRelease`), nút "Khiếu nại".
+- [x] **[Q] Thành viên C:** Chạy kịch bản tích hợp luồng Happy Path (I-05, E-01).
 
 ---
 
@@ -207,10 +207,55 @@
 8. **Lưu ý khi chạy lại:** các test I-05 **tua giờ Anvil tiến lên vĩnh viễn** trên node đang chạy (muốn về giờ thật: `bootstrap.sh --fresh`). Fixture `svc` của `test_w3_chain_anvil.py` (B) đẩy `AUTO_INCREMENT` của `onchain_id_seq` lên mili-giây hiện tại trên DB test dùng chung cả phiên, làm `test_web3_migrations` đỏ tùy thứ tự khi chạy cùng lúc test Anvil; test của C tự trả về `100001` khi xong module. Nên đưa cách trả về đó vào chính fixture `svc` khi B rảnh.
 9. **Chưa làm / ngoài phạm vi C:** thử bằng MetaMask thật trên trình duyệt (cần chạy tay), E-01 bản Playwright (Tuần 8), màn hình `Dispute.jsx` ký 2/3 (Tuần 6), nút hủy đơn quá hạn 14 ngày (`cancelIfUnfulfilled`, Tuần 7).
 
+**Ghi chú Tuần 5 — phần Thành viên B:**
+1. **Kết quả test (MySQL 8.0.46 + Anvil 1.5.1 thật):** `pytest test` 701 pass, 0 skip. Phần B thêm 77 test (39 đơn vị, 19 luồng MySQL, 14 Indexer/HTTP, 5 Anvil). Đã kiểm thử đột biến: hỏng hoàn kho REFUNDED, bỏ kiểm chuỗi của Sweeper, đọc số dư không theo block con trỏ, cả ba đều bị test bắt.
+2. **Cổng Shipper:** chỉ role `shipper`, chỉ đơn gán trong `shipper_assignments`, người khác/không tồn tại ⇒ 404. `deliver` trả `{outcome:'SENT'|'ALREADY_DELIVERED', tx_hash}`. API không ghi trạng thái, MySQL chỉ đổi khi Indexer thấy `OrderDelivered` (BR-09). Thông báo cho Buyer (kèm hạn khiếu nại) do Indexer ghi, hạn tính theo giờ block nên replay ra y hệt.
+3. **Indexer handler mới:** Delivered, Disputed, Completed, Refunded (hoàn tồn kho), PayoutDeferred, PendingClaimed. Chuyển trạng thái sai chỉ gắn `anomaly_flag`. Reorg đối xứng: đảo ngược số dư chờ rút, giữ lại tồn kho khi REFUNDED bị reorg, xóa thông báo cũ. Còn lại cho Tuần 6: `DisputeResolved`, `ArbitratorForceResolved`.
+4. **QuoteExpirySweeper:** chỉ EXPIRED cả lô khi quá hạn + đệm 30 giây, đã khóa đơn, và `orders(id) == NONE` đọc trực tiếp từ chuỗi. Test Anvil chứng minh quá hạn + đệm thì chính contract cũng từ chối nạp.
+5. **AutoRelease:** quyết định theo dữ liệu đọc từ chuỗi (`deliveredAt`, `inspectionDuration`, thời gian block), không theo MySQL. Revert do cạnh tranh (Buyer vừa mở khóa sớm) được bỏ qua, ghi `tx_outbox` FAILED.
+6. **Đối soát (AC-10):** `GET /api/admin/reconcile[?deep=1]`. Số dư contract đọc **tại block con trỏ Indexer** và MySQL đọc cùng một snapshot, nên Indexer trễ không gây báo lệch giả. Khoản lạ chỉ lộ sau khi Indexer đi qua block đó. Trên Anvil dùng chung, so **độ lệch** trước/sau chứ không so tuyệt đối.
+7. **Scheduler:** `cd backend && python -m slopee_web3.adapters.scheduler [--once]`, một thể hiện nhờ GET_LOCK, lỗi một job không dừng job khác. Biến môi trường: `QUOTE_SWEEP_SECONDS`, `AUTO_RELEASE_SECONDS`, `TIMEOUT_REMINDER_SECONDS`, `RECONCILE_SECONDS`, `QUOTE_EXPIRY_GRACE_SECONDS`, `RELAYER_LOCK_SECONDS`. `bootstrap.sh` chưa tự khởi động Scheduler.
+8. **API mới ngoài danh sách SDD 10.2, cần nhóm xác nhận:** `GET /api/admin/reconcile`, `PUT /api/admin/orders/:code/shipper`, `GET /api/notifications`. Migration `0021_notifications` (Slopee chưa có bảng thông báo). CLI `seed-shipper`.
+9. **Chưa làm:** `DisputeSigExpiry` (Tuần 6), nút hủy quá hạn 14 ngày (Tuần 7), thử bằng MetaMask. Test Anvil của B tua giờ Anvil tiến vĩnh viễn (về giờ thật: `bootstrap.sh --fresh`).
+
+10. **Ghi chú kỹ thuật sau khi CI Run #20 xanh (2026-10-17):**
+    - **Kết quả CI & Phân bổ bài test:** CI trên nhánh chính đã hoàn thành 100% qua cả 4 job: `backend`, `web3-chain`, `frontend` (302 passes), và `contracts`. 5 bài test bị skip ở frontend là các bài test tương tác trực tiếp với hợp đồng thông minh qua `ethers.js` (`orderActions.anvil.test.js`); các ca này đòi hỏi node Anvil thực tế nên được chủ động skip trong môi trường unit test Vitest thông thường và đã chạy kiểm chứng thành công trong job `web3-chain`.
+    - **Xử lý sự cố chặn tương tác nút "Đã nhận hàng" (`earlyRelease`):**
+      - *Hiện tượng:* Nút trên giao diện Buyer hợp lệ (không dính `disabled`, `walletGate` trả về `'OK'`) nhưng click chuột không có phản hồi và MetaMask không bật lên.
+      - *Nguyên nhân cốt lõi:* `Web3OrderPanel.jsx` gọi `window.confirm` trước khi gọi `run(...)`. Trình duyệt Firefox bị nghẽn do vòng lặp lỗi `CORS preflight (status: 404)` lặp lại liên tục từ request nền gửi lý do khiếu nại (endpoint `POST /api/orders/<id>/dispute-note` của Tuần 6 chưa có). Cơ chế bảo vệ luồng giao diện (UI Protection) của Firefox đã tự động ngắt các modal dialog đồng bộ, khiến `window.confirm` âm thầm trả về `false` ngay lập tức mà không hiển thị hộp thoại, dừng luồng trước khi gọi ví.
+      - *Xác nhận giải pháp:* Khi console sạch lỗi (hoặc tạo đơn mới không dính bản nháp khiếu nại cũ), hộp thoại xác nhận và popup MetaMask hiển thị bình thường. Hợp đồng đã thực thi `earlyRelease` thành công trên Anvil, Indexer bắt sự kiện và cập nhật trạng thái đơn sang `COMPLETED`. Lỗi CORS sẽ tự động triệt tiêu khi hoàn thiện API `dispute-note` ở Tuần 6.
+    - **Cơ chế và hiện tượng nhảy giây ở đồng hồ đếm ngược (`CountdownTimer`):**
+      - *Hiện tượng:* Thời hạn kiểm tra hàng (`remaining`) thỉnh thoảng bị giật lùi 1–2 giây hoặc nhảy cóc không đều nhịp.
+      - *Nguyên nhân kiến trúc:*
+        1. `useOrderStatus.js` tính mốc đếm bằng cách kết hợp `server_time` (tính từ `now_chain()` của Backend) và `receivedAtMs = Date.now()` của máy khách mỗi khi polling (chu kỳ 3 giây).
+        2. Sự biến thiên độ trễ mạng (Network Latency ~ 50–300ms) giữa các lần gọi API làm điểm neo thời gian `(serverTime - receivedAtMs)` bị xê dịch nhẹ mỗi 3 giây, dẫn đến việc tính toán lại số giây `remaining` bị lệch nhịp so với bộ đếm `setInterval` nội bộ của  trình duyệt.
+        3. Môi trường Anvil dev cục bộ không bật cờ tăng timestamp đều theo giây thực nếu không có block/transaction mới, dẫn đến `server_time` phụ thuộc vào đồng hồ hệ thống.
+      - *Hướng xử lý ghi nhận:* Logic nghiệp vụ on-chain và backend hoàn toàn chính xác. Ở tầng Frontend, sẽ bổ sung bộ lọc làm mượt (Smooth Countdown) ở các tuần tối ưu: chỉ cập nhật lại mốc tính toán khi độ lệch vượt quá ngưỡng cho phép ($\ge 2$ giây) thay vì ghi đè liên tục sau mỗi chu kỳ polling.
+
+  11. **Đề xuất kỹ thuật tối ưu hóa cơ chế đồng hồ đếm ngược và tần suất Polling (`CountdownTimer` / `useOrderStatus`):**
+    - **Bối cảnh hiện tại:** Trạng thái `DELIVERED` đang polling định kỳ mỗi 3 giây (`intervalMs = 3000`). Cứ mỗi nhịp nhận dữ liệu, frontend ghi đè lại mốc `clock = { serverTime, receivedAtMs }`, gây xung đột pha với `setInterval(1000)` nội bộ và làm đồng hồ đếm ngược bị giật cục/nhảy giây do biến thiên độ trễ mạng.
+    - **Hướng giải quyết 1: Tách biệt tính toán đếm ngược khỏi vòng lặp Polling (Smooth Client Ticking):**
+      - *Nguyên lý:* Không bỏ polling hoàn toàn vì hệ thống cần nhận biết các sự kiện trạng thái cuối (`COMPLETED`, `DISPUTED`) từ server hoặc tác vụ nền `AutoRelease`. Thay vào đó, tách việc đồng bộ trạng thái đơn hàng ra khỏi logic đếm từng giây của UI.
+      - *Cách thực thi:*
+        - Lần đầu tiên fetch status thành công: Tính và lưu mốc chênh lệch đồng hồ:
+          $$\Delta = \text{server\_time} - \lfloor \text{Date.now()} / 1000 \rfloor$$
+        - Các lần polling tiếp theo: Chỉ cập nhật trạng thái nghiệp vụ `status`. Giữ nguyên mốc $\Delta$ ban đầu để `CountdownTimer` tự đếm ngược mượt mà qua `setInterval(1000)` độc lập ở client.
+        - Chỉ cập nhật lại mốc $\Delta$ khi phát hiện độ trôi thời gian vượt ngưỡng dung sai lớn ($\vert{}\Delta_{\text{mới}} - \Delta_{\text{cũ}}\vert{} \ge 2\text{s}$).
+      - *Ưu điểm:* Đồng hồ hiển thị mượt 100%, loại bỏ hoàn toàn hiện tượng giật lùi/nhảy cóc do độ trễ mạng (Network Latency) gây ra.
+
+    - **Hướng giải quyết 2: Áp dụng cơ chế Polling thích ứng theo trạng thái đơn (Adaptive Polling Interval):**
+      - *Nguyên lý:* Thời hạn kiểm tra hàng thực tế kéo dài từ 1 đến 3 ngày. Chu kỳ poll 3s/lần là không cần thiết trong suốt giai đoạn người dùng đang giữ hàng kiểm tra.
+      - *Cách thực thi:*
+        - Giữ nhịp polling ngắn $2 - 3\text{s}$ ở các trạng thái yêu cầu phản hồi tức thì: `PENDING_PAYMENT` (chờ vào chuỗi) hoặc khi người dùng vừa thực hiện hành động ký ví (`earlyRelease`, `raiseDispute`).
+        - Khi đơn đã ở trạng thái ổn định `DELIVERED`: Tự động giãn `intervalMs` lên **$10 - 15\text{s}$** (hoặc $30\text{s}$).
+      - *Ưu điểm:* Giảm 70–80% lưu lượng request dư thừa lên backend, hạ tải cho server và giảm thiểu nguy cơ nghẽn console trình duyệt khi có lỗi mạng phát sinh.
+
+    - **Khuyến nghị kết hợp:** Triển khai đồng thời cả 2 hướng: Cho phép Frontend tự tính và đếm theo mốc cố định của đơn hàng (`deadline = delivered_at + inspection_duration`), đồng thời giãn chu kỳ polling của đơn `DELIVERED` lên $15\text{s}$ để vừa tiết kiệm tài nguyên mạng vừa đảm bảo giao diện hiển thị mượt mà tuyệt đối.
+
 ---
 
 ### TUẦN 6: Luồng Tranh chấp & Phân xử 2/3 Chữ ký EIP-712
-- [ ] **[B] Thành viên B:** API lưu ghi chú khiếu nại `POST /api/orders/:code/dispute-note`.
+- [~] **[B] Thành viên B:** API lưu ghi chú khiếu nại `POST /api/orders/:code/dispute-note`.
 - [ ] **[B] Thành viên B:** API Admin tạo đề xuất phán quyết `POST /api/admin/disputes/:code/proposal`, tự động ký phiếu Arbitrator bằng `ARBITRATOR_KEY` với `deadline < disputedAt + disputeTimeout`.
 - [ ] **[B] Thành viên B:** API tiếp nhận chữ ký của Buyer / Merchant `POST /api/disputes/:code/signatures`.
 - [ ] **[A ➔ B] Thành viên A:** Relayer hỗ trợ nộp giao dịch `resolveDispute` khi đủ 2/3 chữ ký (`POST /api/disputes/:code/submit`).
@@ -319,7 +364,7 @@
 | **I-02** | Báo giá: Quy đổi VND ➔ token chuẩn xác, hợp đồng chấp nhận chữ ký Python | AC-01, AC-02 | `[x] PASS` |
 | **I-03** | Indexer: Xử lý trùng tx_hash/log_index không ghi đôi, khởi động lại, phục hồi con trỏ | AC-08 / Tính Idempotent | `[x] PASS (17 test khung + 16 test handler OrderCreated); chờ CI. Handler Delivered/Disputed/Completed/Refunded ở Tuần 5-6` |
 | **I-04** | Nhóm hàng: Đơn nhiều nhóm lấy `max()`, đổi chính sách không ảnh hưởng đơn cũ | AC-12 | `[~] một phần: `max()` riêng từng thời hạn + policy mỗi shop đúng; thời hạn lưu cứng trên `order_web3` nhưng chưa có test "đổi chính sách sau khi đặt"` |
-| **I-05** | Đồng bộ thời gian: `now_chain()` theo sát block Anvil; tua thời gian cấp quote mới chuẩn | AC-02 | `[~] đã chạy trên Anvil thật (test_w5_happy_path_anvil.py): now_chain nhảy theo evm_increaseTime, quá hạn chặn Khiếu nại, báo giá mới sau tua giờ được contract nhận; chờ CI` |
+| **I-05** | Đồng bộ thời gian: `now_chain()` theo sát block Anvil; tua thời gian cấp quote mới chuẩn | AC-02 | `[x] PASS: now_chain nhảy theo evm_increaseTime, quá hạn chặn Khiếu nại, báo giá mới sau tua giờ được contract nhận (CI web3-chain xanh)` |
 | **I-06** | Đồng bộ ngược: Cập nhật `order_web3` tự động cập nhật `orders.status` cũ; Chặn route ghi đè cũ | AC-08 / Bảng ánh xạ 5.1 | `[x] PASS` |
 | **I-07** | Giỏ 3 shop: Tạo đúng 3 đơn 1 group, tổng token khớp lệnh, Indexer xóa đúng giỏ hàng | AC-14 | `[x] PASS` |
 | **A-01** | Mọi API yêu cầu token: Không token hoặc token hết hạn trả HTTP 401 | Mục 15 (P0-01) | `[x] PASS` |
@@ -343,18 +388,18 @@
 | **F-06** | Đồng hồ đếm ngược: Tính độ lệch dựa trên `server_time`, không lệch theo máy client | Đếm ngược chuẩn xác | `[x] PASS` |
 | **F-07** | Làm mới báo giá của lô đang chờ: nhãn đúng bản chất, nút khóa trong lúc gọi, không gửi trùng khi bấm dồn, đồng hồ bắt đầu lại từ 15:00 | Không giật bộ đếm, không nhiều yêu cầu đồng thời | `[x] PASS` |
 | **F-08** | Checkout khóa lựa chọn Web3 và cảnh báo khi có shop chưa liên kết ví; panel nêu đích danh shop | BR-07, không để lỗi ở bước cuối | `[x] PASS` |
-| **F-09** | Quy tắc nút và đồng hồ kiểm tra (`orderTimer`): đếm theo `server_time`, máy khách sai giờ không lệch; hết hạn khóa "Khiếu nại" nhưng vẫn cho "Đã nhận hàng"; chỉ ví đã ký quỹ mới bật nút | SDD 9.4, F-06 | `[~]` |
-| **F-10** | Luồng ví Buyer (`orderActions`, `MyOrders`): biên nhận chưa phải `COMPLETED`, chỉ API báo mới đổi; bấm dồn chỉ một giao dịch; hủy ví là thông báo nhẹ; lỗi revert dịch đúng | DD-04, BR-09 | `[~]` |
-| **F-11** | Khiếu nại: form chặn lý do ngắn/URL không phải http(s); lý do chỉ gửi sau khi `DISPUTED`; gửi lỗi thì "Gửi lại lý do"; hủy ví thì xóa bản nháp; tải lại trang vẫn gửi được | UC-05, SEQ-02 | `[~]` |
-| **F-12** | Nhóm đơn theo `checkout_group_id`: thao tác đơn shop này không đổi đơn shop khác; đơn đã xong không bị poll; đơn cũ giữ nguyên nút | BR-11 | `[~]` |
-| **F-13** | `runOrderAction` + ABI + ethers thật trên Anvil: `earlyRelease`/`raiseDispute` chạy được; revert thật `Not delivered`/`Only buyer`/`Expired` được dịch đúng (`orderActions.anvil.test.js`, tự skip nếu không có Anvil) | UC-04, UC-05 | `[~]` |
+| **F-09** | Quy tắc nút và đồng hồ kiểm tra (`orderTimer`): đếm theo `server_time`, máy khách sai giờ không lệch; hết hạn khóa "Khiếu nại" nhưng vẫn cho "Đã nhận hàng"; chỉ ví đã ký quỹ mới bật nút | SDD 9.4, F-06 | `[x] PASS` |
+| **F-10** | Luồng ví Buyer (`orderActions`, `MyOrders`): biên nhận chưa phải `COMPLETED`, chỉ API báo mới đổi; bấm dồn chỉ một giao dịch; hủy ví là thông báo nhẹ; lỗi revert dịch đúng | DD-04, BR-09 | `[x] PASS` |
+| **F-11** | Khiếu nại: form chặn lý do ngắn/URL không phải http(s); lý do chỉ gửi sau khi `DISPUTED`; gửi lỗi thì "Gửi lại lý do"; hủy ví thì xóa bản nháp; tải lại trang vẫn gửi được | UC-05, SEQ-02 | `[x] PASS` |
+| **F-12** | Nhóm đơn theo `checkout_group_id`: thao tác đơn shop này không đổi đơn shop khác; đơn đã xong không bị poll; đơn cũ giữ nguyên nút | BR-11 | `[x] PASS` |
+| **F-13** | `runOrderAction` + ABI + ethers thật trên Anvil: `earlyRelease`/`raiseDispute` chạy được; revert thật `Not delivered`/`Only buyer`/`Expired` được dịch đúng (`orderActions.anvil.test.js`, tự skip nếu không có Anvil) | UC-04, UC-05 | `[x] PASS (5 test Anvil ethers được chạy trong job web3-chain / test riêng)` |
 
 ---
 
 ### 5.4. End-to-End Automated Test Suite (Playwright + Mock Provider)
 | Mã test | Kịch bản luồng E2E | Tiêu chí nghiệm thu liên quan | Tình trạng |
 | :---: | :--- | :---: | :---: |
-| **E-01** | **Happy Path:** Đăng ký ➔ Liên kết ví ➔ Đặt hàng ➔ Ký quỹ gom ➔ Giao hàng ➔ Mở khóa sớm | AC-01, AC-03, AC-04 | `[~] một phần: tích hợp chuỗi thật + MySQL đã chạy (khóa, giao, giải ngân, chia phí, BR-11); phần DB DELIVERED/COMPLETED xfail chờ handler Indexer của B; bản Playwright mock ví làm ở Tuần 8` |
+| **E-01** | **Happy Path:** Đăng ký ➔ Liên kết ví ➔ Đặt hàng ➔ Ký quỹ gom ➔ Giao hàng ➔ Mở khóa sớm | AC-01, AC-03, AC-04 | `[x] PASS (tích hợp chuỗi thật Anvil + MySQL: khóa quỹ -> Shipper giao -> Buyer nhận -> chia phí feeBps chuẩn xác; bản mock UI Playwright ở Tuần 8)` |
 | **E-02** | **Inspection Expiry:** Giao hàng ➔ Tua thời gian Anvil ➔ Tự động giải ngân sau hạn | AC-04 | `[ ] PASS` |
 | **E-03** | **Dispute Resolution:** Khiếu nại ➔ Đề xuất phán quyết ➔ Buyer/Merchant ký EIP-712 ➔ Hoàn tiền | AC-05, AC-06 | `[ ] PASS` |
 | **E-04** | **Timeouts:** Delivery timeout (14 ngày hủy hoàn tiền); Dispute timeout (Trọng tài xử đơn phương) | AC-07 | `[ ] PASS` |

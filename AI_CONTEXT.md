@@ -165,7 +165,10 @@ Migration: DB mới → `python init_db.py` (đã gồm mọi migration). **DB c
 | Quyết định nhóm sau Phase 0: hủy đơn `paid` hoàn tiền, COD không cộng người bán, giữ FK `RESTRICT`, migration Web3 từ `0006` | Đã code, chờ review | A |
 | **Tuần 2**: contract hoàn chỉnh (tranh chấp, thoát hiểm, nạp gom, `claimPending`, quản trị) + bộ test M1 + ABI đóng băng; migration MySQL Web3 `0006`–`0020` | Đã code, chờ review (139 test forge, 360 pytest trên MySQL 8) | A+B |
 | **Tuần 3**: UC-00 (liên kết ví) + UC-01 (tạo đơn, báo giá ký EIP-712, cấp lại báo giá) + khung Indexer + `Wallet.jsx` + khung thanh toán Web3 + vector `walletLink` | Đã code, chờ review (580 pytest gồm 5 test trên Anvil thật, 150 vitest). Các quyết định đã chốt 14/10/2026: xem mục 6 | B+C |
-| Indexer handler (`LOCKED`), UC-02…UC-09, nạp tiền ở giao diện | Chưa bắt đầu | Tuần 4–10 |
+| **Tuần 4**: Event Indexer handler `OrderCreated` -> `LOCKED` (đối soát báo giá, `orders.status=paid`, xóa giỏ hàng) + bảo vệ reorg con trỏ; tích hợp Checkout nạp gom 2 bước ví (`approve` + `depositEscrowBatch`), hook `usePolling`; đạt cột mốc **M2** | **Đã hoàn thành** (592 pytest, 203 vitest, đạt mốc M2) | B+C |
+| **Tuần 5**: Cổng Shipper (`/shipper/orders`), Relayer gửi `confirmDelivery` (`tx_outbox`), Scheduler (`AutoRelease`, `QuoteExpirySweeper`), Indexer handler `Delivered`/`Completed`/`Refunded`/`Disputed`; UI `MyOrders` nhóm theo lô + đồng hồ kiểm tra + nút "Đã nhận hàng" (`earlyRelease`) và "Khiếu nại" | **Đã hoàn thành** (CI Run #20 xanh 100%: 701 pytest, 302 vitest, 139 forge) | A+B+C |
+| **Tuần 6**: Luồng Tranh chấp & Phân xử 2/3 chữ ký EIP-712 (`dispute-note`, đề xuất phán quyết, tiếp nhận chữ ký, relayer nộp `resolveDispute`, UI Admin/Dispute) | Đang thực hiện | Tuần 6 |
+| UC-07..UC-09, 4 vai trò hoàn chỉnh, thoát hiểm timeout, đối soát số dư | Chưa bắt đầu | Tuần 7–10 |
 
 **Đã xử lý ở P0-03…06 (đã review 14/10/2026, PR #2; test MySQL thật vẫn chờ CI GitHub xác nhận):** chủ sở hữu cart item/đơn/sản phẩm/ảnh/biến thể (không phải chủ → 404); đơn Web3 bị từ chối bằng `409 WEB3_ORDER_MANAGED`; chuyển trạng thái đơn theo bảng hợp lệ; checkout khóa `FOR UPDATE` + `UPDATE` có điều kiện; khóa tạm 5 lần sai mật khẩu/PIN (`429`); route migrate đã bỏ; `debug` theo môi trường; lỗi chung, không còn `str(e)`; validate body.
 
@@ -214,6 +217,8 @@ Migration: DB mới → `python init_db.py` (đã gồm mọi migration). **DB c
 - **`.gitignore` gốc có `lib/` (mẫu Python):** nó từng làm `frontend/src/lib/` không được commit nên CI không tìm thấy `../lib/client`. Đã thêm ngoại lệ `!frontend/src/lib/`. Thêm thư mục mã nguồn tên `lib`, `build`, `dist`, `out`… thì kiểm `git status`/`git check-ignore -v <file>` trước khi push; tốt nhất mô phỏng CI bằng `git clone` sạch rồi chạy test.
 - **Tiền legacy:** người bán chỉ được cộng khi người mua thực sự bị trừ tiền (không COD/`cash`); mọi đường hủy/hoàn phải thu lại đúng khoản đó (`orderLines.sellerCredit`), tuyệt đối không tạo tiền. Test MySQL dùng `created_at` chỉ chính xác tới giây: đừng dựa `ORDER BY created_at` để tìm "đơn vừa tạo" trong vòng lặp.
 - Tên shop/sản phẩm/UI của Slopee viết bằng tiếng Anh; thông báo lỗi Web3 và tài liệu viết bằng **tiếng Việt**.
+- **Firefox chặn `window.confirm` do console bị nghẽn (Tuần 5):** Khi trình duyệt gặp lỗi lặp nền dồn dập (ví dụ CORS 404 do gọi API chưa có như `dispute-note`), cơ chế bảo vệ giao diện của Firefox tự động ép `window.confirm` trả về `false` ngay lập tức mà không hiển thị hộp thoại, làm ngắt luồng gọi ví. Tránh dùng `confirm` trình duyệt trong các luồng Web3; thay bằng modal React hoặc để MetaMask làm bước xác nhận cuối.
+- **Xung đột đếm ngược giữa Polling và `setInterval` (Tuần 5):** Hook `useOrderStatus` ghi đè mốc `clock = { serverTime, receivedAtMs }` sau mỗi 3 giây polling làm lệch nhịp bộ đếm 1 giây nội bộ do biến thiên độ trễ mạng (`Date.now() - receivedAtMs`), gây hiện tượng đồng hồ bị giật lùi/nhảy giây. Cần tách logic đếm ngược độc lập ở client dựa trên mốc `deadline = delivered_at + inspection_duration` cố định.
 
 ---
 

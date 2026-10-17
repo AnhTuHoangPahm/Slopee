@@ -6,28 +6,37 @@ Chưa cấu hình Web3 (chưa chạy bootstrap) -> WEB3_NOT_CONFIGURED 503, ứn
 import logging
 import threading
 
+from ...application.dispute_note_service import DisputeNoteService
+from ...application.jobs import AutoRelease, DeliveryTimeoutReminder, QuoteExpirySweeper
+from ...application.notification_service import NotificationService
 from ...application.order_status_service import OrderStatusService
 from ...application.quote_service import QuoteService
+from ...application.reconcile_service import ReconcileService
 from ...application.relayer_service import RelayerService
+from ...application.shipper_service import ShipperService
 from ...application.wallet_service import WalletService
 from ...domain.errors import DomainError
 from ...settings import MAX_BATCH_SIZE, Web3Settings
+from ..advisory_lock import MySqlAdvisoryLock
 from ..clock import HybridClock
 from ..env_signer import EnvKeySigner, recover_personal_sign
 from ..mysql_repos import MySqlUnitOfWork
 from ..relayer_queue import SingleThreadQueue
+from ..scheduler import Job
 from ..web3_chain import Web3Chain
 
 log = logging.getLogger('slopee.web3')
 
 
 class Web3Container:
-    def __init__(self, settings, signer, chain, clock, uow_factory, verifier=recover_personal_sign, relayer_queue=None):
+    def __init__(self, settings, signer, chain, clock, uow_factory, verifier=recover_personal_sign, relayer_queue=None,
+                 job_guard=None):
         self.settings, self.signer, self.chain, self.clock = settings, signer, chain, clock
         self.uow_factory = uow_factory
         self.verifier = verifier
         # Hàng đợi relayer PHẢI là một đối tượng duy nhất cho cả tiến trình (DD-06), nên giữ ở container chứ không dựng mỗi lần gọi.
         self.relayer_queue = relayer_queue or SingleThreadQueue()
+        self.job_guard = job_guard          # khóa liên tiến trình quanh job gửi giao dịch (Flask + Scheduler dùng chung SHIPPER_KEY)
 
     def wallet_service(self):
         return WalletService(self.uow_factory, self.verifier, wallet_domain=self.settings.wallet_domain,
@@ -35,8 +44,37 @@ class Web3Container:
                              max_nonces_per_minute=self.settings.nonce_max_per_minute)
 
     def relayer_service(self):
-        """Việc của Thành viên B (ShipperService, AutoRelease) gọi `confirm_delivery(order_id, onchain_order_id)`."""
-        return RelayerService(self.uow_factory, self.chain, self.signer, self.relayer_queue)
+        return RelayerService(self.uow_factory, self.chain, self.signer, self.relayer_queue, job_guard=self.job_guard)
+
+    def shipper_service(self):
+        return ShipperService(self.uow_factory, self.relayer_service())
+
+    def dispute_note_service(self):
+        return DisputeNoteService(self.uow_factory)
+
+    def notification_service(self):
+        return NotificationService(self.uow_factory)
+
+    def reconcile_service(self):
+        return ReconcileService(self.uow_factory, self.chain, known_tokens=[self.settings.token_address],
+                                confirmations=self.settings.confirmations)
+
+    def jobs(self):
+        """Danh sách tác vụ nền cho Scheduler (SDD 5.5). DisputeSigExpiry thuộc Tuần 6."""
+        s = self.settings
+        sweeper = QuoteExpirySweeper(self.uow_factory, self.chain, self.clock, grace=s.quote_expiry_grace_seconds)
+        release = AutoRelease(self.uow_factory, self.chain, self.clock, self.relayer_service())
+        reminder = DeliveryTimeoutReminder(self.uow_factory, self.chain, self.clock)
+
+        def reconcile_snapshot():
+            r = self.reconcile_service().run()
+            if not r['ok']:
+                log.error('ĐỐI SOÁT LỆCH: %s', r['tokens'])
+            return {'ok': r['ok'], 'indexer_lag_blocks': r['indexer_lag_blocks']}
+        return [Job('QuoteExpirySweeper', s.quote_sweep_seconds, sweeper.run_once),
+                Job('AutoRelease', s.auto_release_seconds, release.run_once),
+                Job('DeliveryTimeoutReminder', s.timeout_reminder_seconds, reminder.run_once),
+                Job('ReconcileSnapshot', s.reconcile_seconds, reconcile_snapshot)]
 
     def order_status_service(self):
         return OrderStatusService(self.uow_factory, self.clock)
@@ -63,7 +101,8 @@ def build_container(get_connection, settings=None):
     signer = EnvKeySigner.from_settings(settings)
     chain = Web3Chain(settings.rpc_url, settings.escrow_address, timeout=settings.rpc_timeout)
     signer.verify_against_chain(chain)      # địa chỉ khóa phải đúng vai trò trên contract, sai là dừng (SDD 5.6)
-    return Web3Container(settings, signer, chain, HybridClock(chain), lambda: MySqlUnitOfWork(get_connection))
+    return Web3Container(settings, signer, chain, HybridClock(chain), lambda: MySqlUnitOfWork(get_connection),
+                         job_guard=MySqlAdvisoryLock(get_connection, timeout=settings.relayer_lock_seconds))
 
 
 def get_container(get_connection):

@@ -86,7 +86,6 @@ class FakeChain:
         return True
 
 
-
 class RelayChain:
     """ChainPort giả cho relayer (Tuần 5): trạng thái đơn theo mã, send_tx đo độ song song và nonce, receipt cấu hình được."""
 
@@ -137,6 +136,159 @@ class RelayChain:
         if self.receipt_timeout:
             raise ChainUnavailable('TimeExhausted')
         return {'status': self.receipt_status, 'block_number': 7}
+
+
+class FakeEscrowChain(FakeChain):
+    """Contract Escrow giả (Tuần 5, B): mô hình ĐÚNG máy trạng thái + điều kiện thời gian của SlopeeEscrowMaster, phát log đúng
+    hình dạng Web3Chain.get_logs, ghi số dư theo block. Dùng để chạy luồng đầy đủ qua Indexer + relayer + tác vụ nền thật trên MySQL.
+
+    Thời gian: `now` là timestamp của block kế tiếp; mỗi giao dịch đào một block mới có timestamp `now`; `advance(s)` tua `now`
+    và đào một block rỗng (như evm_increaseTime + evm_mine) để block mới nhất bắt kịp.
+    """
+
+    def __init__(self, now=1_800_000_000, fee_cap=300):
+        super().__init__(fee_cap=fee_cap, block_ts=now)
+        self.now = now
+        self.times = {0: now}
+        self.orders = {}               # onchain_id -> dict giống struct Order
+        self.balances = [(0, 0)]       # [(block, số dư token của contract)]
+        self.pending = {}              # {(token, to): amount} cho PayoutDeferred
+        self.eth_balance = 0           # số dư ETH của contract (chỉ để test đối soát nhánh ETH; không theo block)
+        self.sent_txs = []
+
+    # ---- đồng hồ / block
+    def get_block(self, number):
+        self._check()
+        b = {'number': number, 'timestamp': self.times.get(number, self.now), 'hash': '0x' + format(number, '064x')}
+        b.update(self.blocks.get(number, {}))          # ghi đè hash để mô phỏng reorg
+        return b
+
+    def _mine(self, *evs):
+        """Đào MỘT block chứa các sự kiện (name, args) theo thứ tự; trả block number."""
+        self.head += 1
+        self.times[self.head] = self.now
+        for i, (name, args) in enumerate(evs):
+            self.logs.append(event(name, self.head, i, **args))
+        return self.head
+
+    def advance(self, seconds):
+        self.now += int(seconds)
+        self._mine()
+
+    def _balance_delta(self, delta):
+        self.balances.append((self.head, self.balances[-1][1] + delta))
+
+    # ---- ChainPort đọc
+    def get_order_state(self, onchain_order_id):
+        self._check()
+        return self.orders.get(int(onchain_order_id), {}).get('state', 'NONE')
+
+    def get_order(self, onchain_order_id):
+        self._check()
+        o = self.orders.get(int(onchain_order_id))
+        if o is None:
+            return {'state': 'NONE', 'amount': 0, 'created_at': 0, 'delivered_at': 0, 'disputed_at': 0,
+                    'dispute_timeout': 0, 'inspection_duration': 0, 'fee_bps': 0, 'buyer': '', 'merchant': '', 'token': ''}
+        return dict(o)
+
+    def balance_of(self, token_address, at_block=None):
+        self._check()
+        if token_address is None or str(token_address).lower() == '0x' + '0' * 40:
+            return self.eth_balance
+        if at_block is None:
+            return self.balances[-1][1]
+        return [b for blk, b in self.balances if blk <= int(at_block)][-1]
+
+    # ---- hành động của người dùng trên chuỗi (test gọi trực tiếp, như MetaMask)
+    def deposit(self, quote):
+        """Buyer nạp theo báo giá (dict `quote` của API): LOCKED + OrderCreated + tiền vào contract."""
+        oid = int(quote['orderId'])
+        assert oid not in self.orders, 'Order exists'
+        self.orders[oid] = {'state': 'LOCKED', 'buyer': quote['buyer'], 'merchant': quote['merchant'], 'token': quote['token'],
+                            'amount': int(quote['amount']), 'created_at': self.now, 'delivered_at': 0, 'disputed_at': 0,
+                            'dispute_timeout': int(quote['disputeTimeout']),
+                            'inspection_duration': int(quote['inspectionDuration']), 'fee_bps': int(quote['feeBps'])}
+        blk = self._mine(('OrderCreated', dict(orderId=oid, buyer=quote['buyer'], merchant=quote['merchant'], token=quote['token'],
+                                              amount=int(quote['amount']), inspectionDuration=int(quote['inspectionDuration']),
+                                              disputeTimeout=int(quote['disputeTimeout']), docHash=quote['docHash'],
+                                              feeBps=int(quote['feeBps']))))
+        self._balance_delta(int(quote['amount']))
+        return blk
+
+    def _payout(self, oid, o):
+        fee = o['amount'] * o['fee_bps'] // 10000
+        return o['amount'] - fee, fee
+
+    def early_release(self, oid):
+        o = self.orders[int(oid)]
+        assert o['state'] == 'DELIVERED', 'Not delivered'
+        return self._complete(int(oid), o)
+
+    def _complete(self, oid, o):
+        net, fee = self._payout(oid, o)
+        o['state'] = 'COMPLETED'
+        blk = self._mine(('OrderCompleted', dict(orderId=oid, netPayout=net, feeAmount=fee)))
+        self._balance_delta(-o['amount'])
+        return blk
+
+    def raise_dispute(self, oid):
+        o = self.orders[int(oid)]
+        assert o['state'] == 'DELIVERED' and self.now < o['delivered_at'] + o['inspection_duration']
+        o['state'], o['disputed_at'] = 'DISPUTED', self.now
+        return self._mine(('OrderDisputed', dict(orderId=int(oid), raisedBy=o['buyer'], disputedAt=self.now)))
+
+    def cancel_if_unfulfilled(self, oid):
+        o = self.orders[int(oid)]
+        assert o['state'] == 'LOCKED' and self.now >= o['created_at'] + 14 * 86400, 'Timeout not reached'
+        return self._refund(int(oid), o)
+
+    def _refund(self, oid, o):
+        o['state'] = 'REFUNDED'
+        blk = self._mine(('OrderRefunded', dict(orderId=oid, to=o['buyer'], amount=o['amount'])))
+        self._balance_delta(-o['amount'])
+        return blk
+
+    def defer_payout(self, token, to, amount):
+        """ETH: người nhận từ chối -> sổ chờ rút (PayoutDeferred)."""
+        self.pending[(token, to)] = self.pending.get((token, to), 0) + int(amount)
+        return self._mine(('PayoutDeferred', dict(token=token, to=to, amount=int(amount))))
+
+    def claim_pending(self, token, to):
+        amount = self.pending.pop((token, to))
+        return self._mine(('PendingClaimed', dict(token=token, to=to, amount=amount)))
+
+    def stray_transfer(self, amount):
+        """Token chuyển thẳng vào contract ngoài luồng đơn (đối soát phải báo lệch)."""
+        self._mine()
+        self._balance_delta(int(amount))
+
+    # ---- relayer: send_tx / wait_receipt như contract thật (revert khi sai trạng thái/chưa tới hạn)
+    def send_tx(self, fn, args, sender, sign):
+        self._check()
+        oid = int(args[0])
+        o = self.orders.get(oid)
+        if o is None:
+            raise ChainTxFailed('execution reverted: no such order')
+        sign({'to': ADDR['quote_signer'], 'value': 0, 'gas': 100000, 'gasPrice': 10 ** 9, 'nonce': len(self.sent_txs),
+              'chainId': CHAIN_ID, 'data': b''})          # đi qua đường ký thật của EnvKeySigner
+        if fn == 'confirmDelivery':
+            if o['state'] != 'LOCKED':
+                raise ChainTxFailed('execution reverted: Not locked')
+            o['state'], o['delivered_at'] = 'DELIVERED', self.now
+            self._mine(('OrderDelivered', dict(orderId=oid, deliveredAt=self.now)))
+        elif fn == 'releaseAfterInspection':
+            if o['state'] != 'DELIVERED':
+                raise ChainTxFailed('execution reverted: Not delivered')
+            if self.now < o['delivered_at'] + o['inspection_duration']:
+                raise ChainTxFailed('execution reverted: Under inspection')
+            self._complete(oid, o)
+        else:
+            raise AssertionError(fn)
+        self.sent_txs.append((fn, oid, sender))
+        return '0x' + format(len(self.sent_txs), '064x')
+
+    def wait_receipt(self, tx_hash, timeout):
+        return {'status': 1, 'block_number': self.head}
 
 
 def event(name, block, log_index=0, tx=None, **args):

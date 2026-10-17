@@ -63,6 +63,10 @@ def svc(stack, mysql_db):
     quote = QuoteService(lambda: MySqlUnitOfWork(connect), signer, chain, HybridClock(chain), token_address=s.token_address,
                          token_decimals=s.token_decimals, token_symbol=s.token_symbol)
     yield cur, quote, signer, chain, token, s
+    # Trả bộ cấp id về điểm xuất phát: AUTO_INCREMENT mili-giây ở trên làm test_web3_migrations (id đầu tiên = 100001) đỏ tùy thứ
+    # tự chạy khi dùng chung DB trong một phiên. Phải xóa dòng trước vì MySQL không hạ AUTO_INCREMENT xuống dưới max(id) + 1.
+    cur.execute("DELETE FROM onchain_id_seq")
+    cur.execute("ALTER TABLE onchain_id_seq AUTO_INCREMENT = 100001")
     conn.close()
 
 

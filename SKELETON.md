@@ -275,10 +275,13 @@ Nguồn: SRS mục 4–7, 9–10; SDD mục 3–8, 10. Đặt dưới `backend/s
 | `QuoteService` ✅ | `create_checkout(user_id, cart_item_ids) -> group`, `reissue_group_quotes(user_id, group_id) -> group`, `get_group(user_id, group_id)`, `check_web3_eligibility(user_id, cart_item_ids) -> {all_linked, shops[]}` (chỉ đọc) | UC-01: nhóm theo shop (≤ 5), cấp `onchain_order_id`, quy đổi, `docHash`, ký, ghi `checkout_groups`+`orders`+`orderLines`+`order_web3`+`order_quotes`, giữ chỗ kho, một transaction. Cấp lại: kiểm `NONE` trên chuỗi, giữ id/`docHash`/thời hạn, làm mới tỷ giá/phí/ví/hạn. Lỗi: `WALLET_NOT_LINKED` (`extra.party` = `buyer`\|`merchant`; merchant kèm `shop_id`, `shop_name`), `EMPTY_CART`, `CART_ITEM_NOT_FOUND`, `PRODUCT_UNAVAILABLE`, `OUT_OF_STOCK`, `SELF_PURCHASE`, `BATCH_TOO_LARGE`, `PENDING_GROUP_EXISTS`, `INVALID_AMOUNT`, `SETTING_INVALID`, `POLICY_*`, `CHAIN_UNAVAILABLE`, `GROUP_NOT_FOUND`, `INVALID_STATE` |
 | `OrderQueryService` ✅ | `get_status(user_id, role, order_code)` | trạng thái polling đơn Web3 cho Buyer, Merchant hoặc Admin; trả `status, delivered_at, inspection_duration, disputed_at, dispute_timeout, anomaly, server_time, order_id` (404 `ORDER_NOT_FOUND` nếu không thuộc quyền) |
 | `RelayerService` ✅ (tuần 5) | `confirm_delivery(order_id, onchain_order_id)` | UC-03 phần chuỗi: kiểm trạng thái 2 lần (trước + trong hàng đợi), gửi `confirmDelivery` bằng khóa `shipper` qua `SingleThreadQueue`, ghi `tx_outbox` PENDING→SENT→CONFIRMED/FAILED; trả `{outcome, tx_hash, outbox_id}`; ném `INVALID_STATE`, `CHAIN_TX_FAILED`, `ChainUnavailable`. `ShipperService` (B) gọi qua `container.relayer_service()` |
-| `ShipperService` 🔲 | `list_orders(shipper)`, `deliver(code, shipper)` | UC-03: đọc chuỗi, idempotent, gửi `confirmDelivery` qua relayer (hàng đợi một luồng, ghi `tx_outbox`) |
+| `ShipperService` ✅ | 	`list_orders(shipper_id)`, `deliver(shipper_id, order_code)`, `assign(admin_id, order_code, shipper_id)` | UC-03: kiểm gán, gọi `RelayerService.confirm_delivery`; lỗi `ORDER_NOT_FOUND`, `INVALID_STATE`, `INVALID_SHIPPER`, `CHAIN_TX_FAILED`, `CHAIN_UNAVAILABLE` |
+| `AutoRelease`, `QuoteExpirySweeper`, `DeliveryTimeoutReminder` ✅ | `run_once()` | 	MOD-10, chạy bởi `adapters/scheduler` |
 | `DisputeService` 🔲 | `propose(code, admin, payout_to)`, `add_signature(code, user, signature)`, `submit(code)`, `add_note(code, user, text)` | UC-05/06: đề xuất, ký Arbitrator, nhận chữ ký Buyer/Merchant, nộp `resolveDispute` |
 | `SettingsService` 🔲 | `set_fee(...)`, `set_category_policy(code, ...)`, `set_category_policy_map(category_id, policy_code)` | UC-09: tham số vận hành, ghi `updated_by` |
-| `ReconcileService` 🔲 | `snapshot() -> report` | AC-10: số dư contract = Σ đơn mở + sổ chờ rút |
+| `ReconcileService` ✅ | `run(deep=False)` | MOD-08, chỉ đọc |
+| `NotificationService` ✅ | `list_for_user(user_id)` | ghi bởi Indexer và tác vụ nền |
+
 
 ### 4.4. Indexer và tác vụ nền
 | Thành phần | Làm gì |
@@ -307,7 +310,7 @@ Quyền: chỉ role `user`/`seller` (admin/shipper → 403 `forbidden`, dạng l
 | `GET /api/orders/:code/status` ✅ | U/S/A | — | `status, delivered_at, inspection_duration, disputed_at, dispute_timeout, anomaly, server_time, order_id` (chỉ Buyer/Merchant của đơn hoặc Admin; người khác → 404 `ORDER_NOT_FOUND`) |
 | `GET /api/orders/:code` 🔲 | U | — | chi tiết đầy đủ đơn hàng (Tuần 5) |
 | `POST /api/orders/:code/dispute-note` 🔲 | U (Buyer) | lý do/bằng chứng | 200 |
-| `GET /api/shipper/orders`, `POST /api/shipper/orders/:code/deliver` 🔲 | Shipper | — | đơn `LOCKED` được gán / kết quả |
+| `GET /api/shipper/orders`, `POST /api/shipper/orders/:code/deliver` ✅ | Shipper | — | đơn `LOCKED` được gán / kết quả |
 | `POST /api/admin/disputes/:code/proposal` 🔲 | A | `payout_to` | đề xuất `PROPOSED` |
 | `POST /api/disputes/:code/signatures` 🔲 | U | `resolution_id, signature` | trạng thái đề xuất (`PROPOSED|READY`) |
 | `POST /api/disputes/:code/submit` 🔲 | U | — | `tx_hash` |

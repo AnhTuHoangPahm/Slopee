@@ -1,9 +1,9 @@
-"""Adapter Flask của mô-đun Web3. `register_web3(app)` gắn 3 blueprint; không làm hỏng app khi chưa cấu hình Web3."""
+"""Adapter Flask của mô-đun Web3. `register_web3(app)` gắn các blueprint Web3; không làm hỏng app khi chưa cấu hình Web3."""
 import logging
 
 from ...ports.chain_port import ChainUnavailable
 from . import container
-from .routes import groups_bp, orders_bp, wallet_bp
+from .routes import admin_w3_bp, groups_bp, notifications_bp, orders_bp, shipper_bp, wallet_bp
 
 log = logging.getLogger('slopee.web3')
 
@@ -12,6 +12,9 @@ def register_web3(app, *, eager=False):
     app.register_blueprint(wallet_bp, url_prefix='/api/wallet')
     app.register_blueprint(orders_bp, url_prefix='/api/orders')
     app.register_blueprint(groups_bp, url_prefix='/api/checkout-groups')
+    app.register_blueprint(shipper_bp, url_prefix='/api/shipper')
+    app.register_blueprint(admin_w3_bp, url_prefix='/api/admin')
+    app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
     if not eager:
         return
     # Dựng sớm để khóa vai trò sai/ABI lệch làm DỪNG khởi động (SDD 5.6); Anvil chưa chạy chỉ cảnh báo, dựng lười sau.

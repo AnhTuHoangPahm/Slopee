@@ -1,4 +1,4 @@
-"""Kiểm tra TĨNH các migration Web3 0006..0020 (không cần MySQL): đặt tên, thứ tự, đối xứng với schema.sql, an toàn."""
+"""Kiểm tra TĨNH các migration Web3 0006..0022 (không cần MySQL): đặt tên, thứ tự, đối xứng với schema.sql, an toàn."""
 import os
 import re
 
@@ -11,6 +11,7 @@ EXPECTED = [
     '0010_dispute_resolutions.py', '0011_dispute_signatures.sql', '0012_chain_events.sql', '0013_indexer_cursor.sql',
     '0014_platform_settings.sql', '0015_category_policies.sql', '0016_category_policy_map.sql', '0017_tx_outbox.sql',
     '0018_onchain_id_seq.sql', '0019_pending_balances.sql', '0020_shipper.py',
+    '0021_notifications.py', '0022_dispute_notes.py',
 ]
 
 
@@ -22,10 +23,10 @@ def _read(m):
     return open(m.path, encoding='utf-8').read()
 
 
-def test_web3_migrations_are_exactly_0006_to_0020_contiguous():
+def test_web3_migrations_are_exactly_0006_to_0022_contiguous():
     found = _web3()
     assert [m.name for m in found] == EXPECTED
-    assert [m.number for m in found] == list(range(6, 21))
+    assert [m.number for m in found] == list(range(6, 23))
 
 
 def test_every_table_created_by_a_migration_is_in_schema_sql_exactly_once():
@@ -33,7 +34,7 @@ def test_every_table_created_by_a_migration_is_in_schema_sql_exactly_once():
     tables = []
     for m in _web3():
         tables += re.findall(r'CREATE TABLE IF NOT EXISTS (\w+)', _read(m))
-    assert len(tables) == 16 and len(set(tables)) == 16
+    assert len(tables) == 18 and len(set(tables)) == 18
     for t in tables:
         assert len(re.findall(rf'CREATE TABLE IF NOT EXISTS {t}\b', schema)) == 1, t
 
