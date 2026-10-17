@@ -53,6 +53,10 @@ class Web3Chain:
         return ORDER_STATES[int(self.contract.functions.orders(int(onchain_order_id)).call()[10])]
 
     @_unavailable
+    def dispute_nonce(self, onchain_order_id):
+        return int(self.contract.functions.disputeNonces(int(onchain_order_id)).call())
+
+    @_unavailable
     def default_fee_bps(self):
         return int(self.contract.functions.defaultFeeBps().call())
 

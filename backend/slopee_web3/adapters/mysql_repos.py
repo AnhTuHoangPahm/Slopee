@@ -526,6 +526,80 @@ class MySqlDisputeNoteRepo:
         return self.cur.fetchone()
 
 
+class MySqlDisputeRepo:
+    """dispute_resolutions + dispute_signatures (Tuần 6, A: phần đọc/nộp). Số token đọc ra `int`; mốc thời gian là giây UTC."""
+
+    def __init__(self, cur):
+        self.cur = cur
+
+    def order_for_dispute(self, order_id, lock=False):
+        self.cur.execute(
+            "SELECT order_id, onchain_order_id, buyer_user_id, merchant_user_id, buyer_wallet, merchant_wallet, status, "
+            "amount_raw, disputed_at, dispute_timeout FROM order_web3 WHERE order_id=%s" + (" FOR UPDATE" if lock else ""),
+            (order_id,))
+        return self.cur.fetchone()
+
+    @staticmethod
+    def _resolution(r):
+        r = dict(r)
+        r['amount_raw'] = int(r['amount_raw'])
+        r['nonce'], r['deadline'] = int(r['nonce']), int(r['deadline'])
+        return r
+
+    def latest_resolution(self, order_id, lock=False):
+        self.cur.execute(
+            "SELECT id, order_id, payout_to, amount_raw, nonce, deadline, status, reason_note, submitted_tx_hash "
+            "FROM dispute_resolutions WHERE order_id=%s ORDER BY id DESC LIMIT 1" + (" FOR UPDATE" if lock else ""), (order_id,))
+        row = self.cur.fetchone()
+        return self._resolution(row) if row else None
+
+    def signatures(self, resolution_id):
+        self.cur.execute("SELECT party, signer_address, signature FROM dispute_signatures WHERE resolution_id=%s ORDER BY id",
+                         (resolution_id,))
+        return list(self.cur.fetchall())
+
+    def transition_resolution(self, resolution_id, from_states, to_status, tx_hash=None):
+        """UPDATE có điều kiện trạng thái cũ (SDD 7.5). True nếu chuyển được; False nếu đã bị đổi (Indexer đặt EXECUTED, v.v.)."""
+        if not from_states:
+            return False
+        self.cur.execute(
+            "UPDATE dispute_resolutions SET status=%s, submitted_tx_hash=COALESCE(%s, submitted_tx_hash) "
+            f"WHERE id=%s AND status IN ({_marks(len(from_states))})", (to_status, tx_hash, resolution_id, *from_states))
+        return self.cur.rowcount == 1
+
+    def open_disputes(self):
+        self.cur.execute(
+            "SELECT w.order_id, w.onchain_order_id, w.amount_raw, w.token_symbol, w.price_vnd, w.buyer_wallet, w.merchant_wallet, "
+            "w.disputed_at, w.dispute_timeout, s.name AS shop_name, bu.name AS buyer_name "
+            "FROM order_web3 w LEFT JOIN shops s ON s.id = w.shop_id LEFT JOIN users bu ON bu.id = w.buyer_user_id "
+            "WHERE w.status='DISPUTED' ORDER BY w.disputed_at, w.onchain_order_id")
+        rows = list(self.cur.fetchall())
+        ids = [r['order_id'] for r in rows]
+        notes, latest, sigs = {}, {}, {}
+        if ids:
+            self.cur.execute(f"SELECT order_id, reason, evidence_url FROM dispute_notes WHERE order_id IN ({_marks(len(ids))})", tuple(ids))
+            notes = {r['order_id']: r for r in self.cur.fetchall()}
+            self.cur.execute(
+                "SELECT id, order_id, payout_to, amount_raw, nonce, deadline, status, reason_note, submitted_tx_hash "
+                f"FROM dispute_resolutions WHERE order_id IN ({_marks(len(ids))}) ORDER BY id", tuple(ids))
+            for r in self.cur.fetchall():
+                latest[r['order_id']] = self._resolution(r)            # id tăng dần nên bản cuối là mới nhất
+            if latest:
+                rid = [r['id'] for r in latest.values()]
+                self.cur.execute(f"SELECT resolution_id, party FROM dispute_signatures WHERE resolution_id IN ({_marks(len(rid))})",
+                                 tuple(rid))
+                for r in self.cur.fetchall():
+                    sigs.setdefault(r['resolution_id'], []).append(r['party'])
+        for r in rows:
+            r['amount_raw'], r['price_vnd'] = int(r['amount_raw']), int(r['price_vnd'])
+            r['note'] = notes.get(r['order_id'])
+            res = latest.get(r['order_id'])
+            if res:
+                res['signed_by'] = sigs.get(res['id'], [])
+            r['resolution'] = res
+        return rows
+
+
 class MySqlUnitOfWork:
     """Một kết nối + một transaction. Thoát khối `with` mà chưa `commit()` thì ROLLBACK (lỗi bất kỳ -> rollback cả lô)."""
 
@@ -546,6 +620,7 @@ class MySqlUnitOfWork:
         self.jobs = MySqlJobsRepo(self.cur)
         self.reconcile = MySqlReconcileRepo(self.cur)
         self.dispute_notes = MySqlDisputeNoteRepo(self.cur)
+        self.disputes = MySqlDisputeRepo(self.cur)
         return self
 
     def commit(self):

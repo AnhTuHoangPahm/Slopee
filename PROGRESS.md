@@ -258,10 +258,22 @@
 - [~] **[B] Thành viên B:** API lưu ghi chú khiếu nại `POST /api/orders/:code/dispute-note`.
 - [ ] **[B] Thành viên B:** API Admin tạo đề xuất phán quyết `POST /api/admin/disputes/:code/proposal`, tự động ký phiếu Arbitrator bằng `ARBITRATOR_KEY` với `deadline < disputedAt + disputeTimeout`.
 - [ ] **[B] Thành viên B:** API tiếp nhận chữ ký của Buyer / Merchant `POST /api/disputes/:code/signatures`.
-- [ ] **[A ➔ B] Thành viên A:** Relayer hỗ trợ nộp giao dịch `resolveDispute` khi đủ 2/3 chữ ký (`POST /api/disputes/:code/submit`).
-- [ ] **[A ➔ F] Thành viên A:** Xây dựng màn hình Admin quản lý tranh chấp (`pages/AdminDashboard.jsx`).
+- [~] **[A ➔ B] Thành viên A:** Relayer hỗ trợ nộp giao dịch `resolveDispute` khi đủ 2/3 chữ ký (`POST /api/disputes/:code/submit`). *Đã code + test xanh trên MySQL thật + chuỗi giả mô hình đúng contract; **chưa chạy với Anvil + contract thật**, chờ PR review.* `RelayerService.resolve_dispute`, `DisputeSubmitService.submit`, `SignerPort.sign_dispute/recover_dispute_signer`, `ChainPort.dispute_nonce`, `DisputeRepo`.
+- [~] **[A ➔ F] Thành viên A:** Xây dựng màn hình Admin quản lý tranh chấp (`pages/AdminDashboard.jsx`). *Đã code + test xanh, chờ PR review và API `proposal` thật của B.* `components/AdminDisputes.jsx` gắn vào `AdminDashboard`, `api/disputes.js`, `lib/adminDisputes.js`; backend thêm `GET /api/admin/disputes`.
 - [ ] **[F] Thành viên C:** Xây dựng giao diện ký phán quyết (`pages/Dispute.jsx`): Khung cảnh báo màu vàng, ký `eth_signTypedData_v4` không tốn gas.
 - [ ] **[Q] Thành viên C:** Kiểm thử tích hợp kịch bản giải quyết tranh chấp (Hoàn tiền Buyer và Giải ngân Merchant) (E-03).
+
+---
+
+**Ghi chú Tuần 6 — phần Thành viên A:**
+1. **Kết quả test (cục bộ, MySQL 8.0.46, KHÔNG có Anvil):** `pytest test` **821 pass, 15 skip** (các test `anvil`). Thêm 43 test đơn vị `test_w3_dispute_submit.py` và 11 test MySQL `test_w3_dispute_submit_mysql.py`. Frontend `vitest` **347 pass** (+48), `vite build` thành công. Đã làm hỏng cố ý 4 hành vi (bỏ kiểm người ký, bỏ kiểm quyền, bỏ kiểm lại trong hàng đợi, bỏ kiểm nonce) để xác nhận test bắt được; riêng kiểm nonce ở service là phòng thủ lớp hai vì relayer cũng kiểm.
+2. **Không tin cột `party`:** `DisputeSubmitService` khôi phục địa chỉ từng chữ ký rồi so với ví đã khóa trong đơn (Buyer/Merchant) hoặc địa chỉ Trọng tài của sàn; chữ ký sai người/sai nội dung bị bỏ (có test), nên dòng giả mạo trong `dispute_signatures` không thể làm tốn gas. Đủ khi có Trọng tài + một bên, hoặc Buyer + Merchant (đúng điều contract cần: hai bên KHÁC NHAU).
+3. **Mọi kiểm tra chạy TRƯỚC khi tốn gas** (revert vẫn mất phí): đọc đơn trực tiếp từ contract, khớp số tiền/người nhận/nonce, `deadline` còn hạn và `< disputedAt + disputeTimeout`. Hết hạn thì đặt `EXPIRED`. Mã lỗi mới: `DISPUTE_NOT_FOUND` 404, `DISPUTE_NOT_READY` 409 (kèm `signed_by`), `DISPUTE_STALE` 409, `DISPUTE_EXPIRED` 410.
+4. **Idempotent + đua:** nộp lần hai, hoặc Buyer và Admin bấm cùng lúc, chỉ gửi MỘT giao dịch (`ALREADY_RESOLVED`). Hết hạn chờ biên nhận thì `tx_outbox` giữ `SENT`; lần thử lại thấy chuỗi đã xử đúng theo đề xuất nên đặt `SUBMITTED` và không gửi lại. Chuỗi đã xử NGƯỢC đề xuất (vd. REFUNDED nhưng đề xuất giải ngân Merchant) thì trả `INVALID_STATE`, không nhận vơ.
+5. **Việc của B để khớp:** (a) `DisputeService` thêm tạo đề xuất/lưu chữ ký vào CÙNG `DisputeRepo`/`disputes_bp` (đã có sẵn `latest_resolution`, `signatures`, `transition_resolution`); (b) dùng `signer.sign_dispute` để ký phiếu Trọng tài và `signer.recover_dispute_signer` để kiểm chữ ký Buyer/Merchant (đã kiểm chéo với vector `shared/eip712/vectors.json`); (c) Indexer handler `DisputeResolved` đặt `EXECUTED` từ BẤT KỲ trạng thái nào (relayer chỉ đặt `SUBMITTED`); (d) body `proposal` mình giả định `{payout_to: 'BUYER'|'MERCHANT', reason_note?}` theo SKELETON: giao diện KHÔNG xử lý địa chỉ ví.
+6. **Mới ngoài SDD 10.2, cần nhóm xác nhận:** `GET /api/admin/disputes` (danh sách đơn `DISPUTED` kèm ghi chú Buyer, đề xuất mới nhất, bên đã ký, `force_resolve_at`). SRS chỉ có `GET /api/disputes/:code` theo từng đơn nên Admin không có cách liệt kê.
+7. **Giao diện Admin:** hộp thoại React (không `window.confirm`), cảnh báo "bất kỳ ai cũng có thể thi hành", chống bấm đúp bằng cờ đồng bộ, liên kết bằng chứng chỉ http/https và có `rel="noopener noreferrer nofollow"`, lý do của Buyer hiển thị dạng chữ (có test HTML không thành thẻ). Hết hạn chữ ký tính theo `server_time` nên đúng cả khi Anvil bị tua. `AdminDashboard.jsx` có sẵn 1 lỗi eslint cũ (`loadDashboard` dùng trước khi khai báo), không đụng tới.
+8. **Chưa làm:** chạy với Anvil + contract thật (các test `anvil` hiện skip ở máy mình; cần `bootstrap.sh`), kịch bản E-03 (C), UC-07 `arbitratorForceResolve` (Tuần 7).
 
 ---
 

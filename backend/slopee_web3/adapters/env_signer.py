@@ -12,6 +12,7 @@ from eth_account import Account
 from eth_account.messages import encode_defunct, encode_typed_data
 from eth_utils import keccak, to_checksum_address
 
+from ..domain.dispute import DISPUTE_FIELDS, DisputeResolution
 from ..domain.quote import QUOTE_FIELDS, OrderQuote
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -50,6 +51,8 @@ class EnvKeySigner:
         types = load_eip712_types(types_path)
         if tuple(f['name'] for f in types['OrderQuote']) != QUOTE_FIELDS:
             raise RuntimeError('Thứ tự trường OrderQuote trong types.json lệch với domain/quote.py.')
+        if tuple(f['name'] for f in types['DisputeResolution']) != DISPUTE_FIELDS:
+            raise RuntimeError('Thứ tự trường DisputeResolution trong types.json lệch với domain/dispute.py.')
         self._types = types
         self._domain = {'name': 'SlopeeEscrow', 'version': '1', 'chainId': int(chain_id),
                         'verifyingContract': to_checksum_address(verifying_contract)}
@@ -82,6 +85,31 @@ class EnvKeySigner:
         signed = Account.sign_message(encode_typed_data(full_message=full), self._keys['quote_signer'])
         sig = signed.signature.hex()
         return sig if sig.startswith('0x') else '0x' + sig
+
+    def _dispute_typed_data(self, resolution):
+        return {
+            'types': {'EIP712Domain': [{'name': 'name', 'type': 'string'}, {'name': 'version', 'type': 'string'},
+                                       {'name': 'chainId', 'type': 'uint256'},
+                                       {'name': 'verifyingContract', 'type': 'address'}],
+                      'DisputeResolution': self._types['DisputeResolution']},
+            'primaryType': 'DisputeResolution', 'domain': self._domain,
+            'message': {name: getattr(resolution, name) for name in DISPUTE_FIELDS},
+        }
+
+    def sign_dispute(self, resolution: DisputeResolution):
+        """Chữ ký của ARBITRATOR. Buyer/Merchant ký bằng MetaMask ở trình duyệt, backend KHÔNG bao giờ giữ khóa của họ (BR-01)."""
+        if 'arbitrator' not in self._keys:
+            raise RuntimeError("Chưa cấu hình khóa cho vai trò 'arbitrator'.")
+        signed = Account.sign_message(encode_typed_data(full_message=self._dispute_typed_data(resolution)), self._keys['arbitrator'])
+        sig = signed.signature.hex()
+        return sig if sig.startswith('0x') else '0x' + sig
+
+    def recover_dispute_signer(self, resolution: DisputeResolution, signature):
+        try:
+            return Account.recover_message(encode_typed_data(full_message=self._dispute_typed_data(resolution)),
+                                           signature=signature)
+        except Exception as e:      # eth_keys/eth_account ném nhiều loại lỗi tùy dạng chữ ký hỏng
+            raise ValueError('chữ ký phán quyết không khôi phục được') from e
 
     def sender_address(self, role):
         return self._addr[role]

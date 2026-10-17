@@ -98,6 +98,16 @@ class DisputeNoteRepo(Protocol):
     def get(self, order_id: str) -> Optional[dict]: ...
 
 
+class DisputeRepo(Protocol):
+    """Đề xuất phán quyết + chữ ký (bảng dispute_resolutions, dispute_signatures). Tuần 6 (A): đọc cho việc nộp, danh sách Admin,
+    chuyển PROPOSED/READY -> SUBMITTED. Tạo đề xuất và lưu chữ ký là việc của DisputeService (B), thêm vào cùng repo này."""
+    def order_for_dispute(self, order_id: str, lock: bool = False) -> Optional[dict]: ...
+    def latest_resolution(self, order_id: str, lock: bool = False) -> Optional[dict]: ...   # id lớn nhất; amount_raw/nonce/deadline là int
+    def signatures(self, resolution_id: int) -> list: ...                                   # [{'party','signer_address','signature'}]
+    def transition_resolution(self, resolution_id: int, from_states: tuple, to_status: str, tx_hash: Optional[str] = None) -> bool: ...
+    def open_disputes(self) -> list: ...                                                    # đơn DISPUTED + ghi chú + đề xuất mới nhất + các bên đã ký
+
+
 class UnitOfWork(Protocol):
     wallets: WalletRepo
     settings: SettingsRepo
@@ -109,6 +119,7 @@ class UnitOfWork(Protocol):
     jobs: JobsRepo
     reconcile: ReconcileRepo
     dispute_notes: DisputeNoteRepo
+    disputes: DisputeRepo
 
     def __enter__(self) -> "UnitOfWork": ...
     def __exit__(self, exc_type, exc, tb) -> None: ...   # chưa commit thì ROLLBACK

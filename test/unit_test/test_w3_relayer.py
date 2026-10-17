@@ -13,56 +13,7 @@ from slopee_web3.adapters.relayer_queue import SingleThreadQueue
 from slopee_web3.application.relayer_service import RelayerService
 from slopee_web3.domain.errors import DomainError, http_status
 from slopee_web3.ports.chain_port import ChainUnavailable
-from w3_support import ADDR, CHAIN_ID, KEYS, RelayChain, make_signer
-
-
-class MemoryOutbox:
-    """Bảng tx_outbox trong bộ nhớ, đúng máy trạng thái của MySqlOutboxRepo (chuyển có điều kiện trạng thái cũ)."""
-
-    def __init__(self):
-        self.rows = []
-        self.lock = threading.Lock()
-
-    def insert(self, kind, order_id):
-        with self.lock:
-            self.rows.append({'id': len(self.rows) + 1, 'kind': kind, 'order_id': order_id, 'tx_hash': None,
-                              'status': 'PENDING', 'error': None})
-            return len(self.rows)
-
-    def _row(self, oid):
-        return self.rows[oid - 1]
-
-    def mark_sent(self, oid, tx_hash):
-        r = self._row(oid)
-        if r['status'] == 'PENDING':
-            r.update(status='SENT', tx_hash=tx_hash)
-
-    def mark_confirmed(self, oid):
-        r = self._row(oid)
-        if r['status'] == 'SENT':
-            r['status'] = 'CONFIRMED'
-
-    def mark_failed(self, oid, error):
-        r = self._row(oid)
-        if r['status'] in ('PENDING', 'SENT'):
-            r.update(status='FAILED', error=str(error))
-
-    def recent_for_order(self, order_id, limit=20):
-        return [r for r in reversed(self.rows) if r['order_id'] == order_id][:limit]
-
-
-class MemoryUow:
-    def __init__(self, outbox, commits):
-        self.outbox, self._commits = outbox, commits
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *a):
-        return None
-
-    def commit(self):
-        self._commits.append(1)
+from w3_support import ADDR, CHAIN_ID, KEYS, MemoryOutbox, MemoryUow, RelayChain, make_signer
 
 
 @pytest.fixture

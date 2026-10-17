@@ -6,7 +6,9 @@ Chưa cấu hình Web3 (chưa chạy bootstrap) -> WEB3_NOT_CONFIGURED 503, ứn
 import logging
 import threading
 
+from ...application.dispute_admin_service import DisputeAdminService
 from ...application.dispute_note_service import DisputeNoteService
+from ...application.dispute_submit_service import DisputeSubmitService
 from ...application.jobs import AutoRelease, DeliveryTimeoutReminder, QuoteExpirySweeper
 from ...application.notification_service import NotificationService
 from ...application.order_status_service import OrderStatusService
@@ -45,6 +47,12 @@ class Web3Container:
 
     def relayer_service(self):
         return RelayerService(self.uow_factory, self.chain, self.signer, self.relayer_queue, job_guard=self.job_guard)
+
+    def dispute_submit_service(self):
+        return DisputeSubmitService(self.uow_factory, self.chain, self.signer, self.clock, self.relayer_service())
+
+    def dispute_admin_service(self):
+        return DisputeAdminService(self.uow_factory, self.clock)
 
     def shipper_service(self):
         return ShipperService(self.uow_factory, self.relayer_service())

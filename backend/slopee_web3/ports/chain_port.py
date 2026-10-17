@@ -48,3 +48,6 @@ class ChainPort(Protocol):
     def balance_of(self, token_address, at_block=None) -> int:
         """Số dư contract Escrow: ERC-20 `balanceOf(escrow)`; None/0x0 ⇒ ETH. `at_block` đọc tại block đó (đối soát so đúng
         tại block Indexer đã xử lý nên không dương tính giả khi Indexer trễ)."""
+
+    def dispute_nonce(self, onchain_order_id: int) -> int:
+        """`disputeNonces(orderId)` trực tiếp từ contract: nonce mà chữ ký phán quyết phải mang (SRS 6)."""
