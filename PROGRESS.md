@@ -177,8 +177,8 @@
 - [~] **[A ➔ B] Thành viên A:** Cài đặt Relayer gửi giao dịch `confirmDelivery` lên Anvil bằng khóa `SHIPPER_KEY` qua hàng đợi một luồng (`tx_outbox`). *Đã code + test xanh cục bộ (MySQL 8.0.46), **chưa chạy với Anvil + contract thật**, chờ PR review.* `application/relayer_service.py::RelayerService.confirm_delivery(order_id, onchain_order_id)` → `{outcome: 'SENT'|'ALREADY_DELIVERED', tx_hash, outbox_id}`; `adapters/relayer_queue.py::SingleThreadQueue` (DD-06); cổng mới `ChainPort.send_tx/wait_receipt`, `SignerPort.sign_transaction`, `OutboxRepo`; `Web3Container.relayer_service()` để **B** gọi từ `ShipperService` (UC-03) và `AutoRelease`.
 - [ ] **[B] Thành viên B:** Tác vụ nền (Scheduler): Quét báo giá quá hạn (`QuoteExpirySweeper`), Quét tự động giải ngân khi hết thời hạn kiểm tra (`AutoRelease`).
 - [~] **[A ➔ F] Thành viên A:** Xây dựng màn hình cổng Shipper (`pages/ShipperOrders.jsx`). *Đã code + test xanh cục bộ, chờ PR review và API thật của B.* Route `/shipper/orders` (chỉ role `shipper`), link trên Navbar, đăng nhập xong shipper vào thẳng cổng; `api/shipper.js`, `lib/shipperOrders.js` (hàm thuần).
-- [ ] **[F] Thành viên C:** Cập nhật màn hình Buyer (`pages/MyOrders.jsx`): Hiển thị đồng hồ đếm ngược kiểm tra (`CountdownTimer`), nút "Đã nhận hàng" (`earlyRelease`), nút "Khiếu nại".
-- [ ] **[Q] Thành viên C:** Chạy kịch bản tích hợp luồng Happy Path (I-05, E-01).
+- [~] **[F] Thành viên C:** Cập nhật màn hình Buyer (`pages/MyOrders.jsx`): Hiển thị đồng hồ đếm ngược kiểm tra (`CountdownTimer`), nút "Đã nhận hàng" (`earlyRelease`), nút "Khiếu nại". *Đã code + test xanh cục bộ (vitest 291 pass), chờ PR review; đã chạy với Anvil thật nhưng chưa thử bằng MetaMask trên trình duyệt.* Đơn Web3 nhóm theo `checkout_group_id`, mỗi đơn con có đồng hồ riêng theo `server_time` + luồng ví riêng (`components/Web3OrderPanel.jsx`); nút cũ bị khóa với đơn Web3.
+- [~] **[Q] Thành viên C:** Chạy kịch bản tích hợp luồng Happy Path (I-05, E-01). *Đã chạy trên **Anvil + MySQL 8.0 thật**: I-05 xong; E-01 xong phần chuỗi + LOCKED, **phần DB DELIVERED/COMPLETED đang `xfail` chờ handler Indexer của B**; E-01 bản Playwright là việc Tuần 8.* Xem ghi chú bên dưới.
 
 ---
 
@@ -191,6 +191,21 @@
 6. **Hợp đồng API giả định với B (cần B xác nhận trước khi merge):** `GET /api/shipper/orders` → `{orders:[{order_id, status, shop_name, buyer_name, price_vnd, chain_created_at, delivered_at}]}` (chấp nhận cả mảng trần); `POST /api/shipper/orders/:code/deliver` → `{outcome, tx_hash}` (đúng kết quả của `confirm_delivery`); lỗi `INVALID_STATE`/`ORDER_NOT_FOUND`/`CHAIN_TX_FAILED`/`CHAIN_UNAVAILABLE`. `ShipperService` còn phải kiểm đơn được gán trong `shipper_assignments` trước khi gọi relayer.
 7. **Giao diện:** xác nhận hai bước (tránh bấm nhầm), cờ đồng bộ chống bấm đúp, sau khi gửi hiện "đang chờ hệ thống ghi nhận" tới khi polling 5 s thấy đơn sang DELIVERED hoặc biến mất; không dùng ví. Việc cũ `api/web3.js::request` được `export` (đổi đúng một từ khóa) để dùng lại.
 8. **Chưa làm / ngoài phạm vi A:** chạy với Anvil + contract thật (cần `bootstrap.sh`; test `anvil` đã viết, đặt `RELAYER_TEST_ONCHAIN_ID` = id đơn đang LOCKED), nối `ShipperService`/route/`AutoRelease` (B), Indexer handler `OrderDelivered` (B), kịch bản E-01 (C). Việc tạo tài khoản `shipper` và gán đơn cho shipper (`shipper_assignments`) chưa có CLI/Admin UI.
+
+**Ghi chú Tuần 5 — phần Thành viên C (cập nhật gần nhất):**
+1. **Kết quả test (chạy cục bộ: MySQL 8.0.46 + Anvil 1.5.1 thật, sau `bootstrap.sh --fresh`):** `pytest test` **607 pass, 1 xfail** (gồm 5 test `anvil` cũ; không còn skip); `vitest` **291 pass** (+88 so với 203 trước khi làm), trong đó 5 test chạy **ethers thật trên Anvil**; `eslint` sạch trên mọi tệp mới/đã đụng (hai cảnh báo còn lại trong `MyOrders.jsx` là mã cũ có sẵn); `vite build` thành công. Chưa chạy trên CI.
+2. **Backend (hỗ trợ B, SRS 5.1):** `GET /api/payments/orders` trả thêm `web3` cho từng đơn (`null` với đơn cũ): `onchain_order_id`, `checkout_group_id`, `buyer_wallet`, `status`, các mốc thời gian, `amount_raw` (chuỗi, tránh mất chính xác), `anomaly`. Thiếu `onchain_order_id` thì Buyer không gọi được `earlyRelease`. Một truy vấn phụ (không N+1), chịu được DB chưa có bảng `order_web3`; 7 test trong `test/unit_test/test_w5_orders_web3_summary.py`.
+3. **Giao diện không tự quyết trạng thái (DD-04, BR-09):** biên nhận của ví chỉ đưa luồng tới "chờ hệ thống xác nhận"; `COMPLETED`/`DISPUTED` chỉ hiện khi **API polling** báo (Indexer ghi). Có test cố tình phá điều này và test bắt được. Bấm dồn chỉ gửi một giao dịch; nút khóa trong lúc chờ; có xác nhận trước khi giải ngân; cổng ví kiểm tra đúng mạng và **đúng ví đã ký quỹ** trước khi bật nút (tránh tốn một giao dịch rồi mới nhận `Only buyer`).
+4. **Quy tắc nút (SDD 9.4):** "Đã nhận hàng" bật suốt trạng thái `DELIVERED` kể cả sau khi hết hạn kiểm tra (contract cho phép, đã kiểm chứng trên chuỗi thật); "Khiếu nại" chỉ bật khi còn hạn và đã có đồng hồ máy chủ (không đoán theo giờ máy người dùng). Đồng hồ tính theo `server_time` của lần poll gần nhất nên đúng cả khi máy người dùng sai giờ hoặc Anvil bị tua.
+5. **Khiếu nại (UC-05):** hộp thoại lý do + đường dẫn bằng chứng (chỉ http/https). Giao dịch `raiseDispute` gửi trước; lý do chỉ gửi lên sàn **sau khi Indexer ghi `DISPUTED`** (SEQ-02). Gửi lỗi thì hiện nút "Gửi lại lý do"; bản nháp giữ trong `sessionStorage` (xóa khi gửi xong hoặc khi giao dịch không lên được chuỗi) để tải lại trang không mất lý do.
+6. **[Q] Kịch bản tích hợp thật (`test/integration_test/test_w5_happy_path_anvil.py`, 4 test):**
+   - **E-01 (phần tích hợp):** 2 shop ký quỹ gom thật → Indexer thật ghi `LOCKED` → Shipper `confirmDelivery` → người lạ bị `Only buyer` → Buyer `earlyRelease` → **tiền chia đúng theo `feeBps` đã khóa** (merchant nhận `amount − fee`, người nhận phí nhận `fee`, escrow chỉ giảm đúng đơn đó) → đơn của shop còn lại **vẫn `LOCKED`** (BR-11).
+   - **I-05:** `HybridClock.now_chain()` nhảy theo `evm_increaseTime`; quá hạn thì contract chặn Khiếu nại (`Expired`) nhưng vẫn cho `earlyRelease` và `releaseAfterInspection`; trước hạn `releaseAfterInspection` bị chặn (`Under inspection`); báo giá cấp **sau khi tua giờ** vẫn được contract nhận.
+   - Khiếu nại trong hạn: `DISPUTED`, tiền đóng băng, không `earlyRelease`/tự giải ngân nữa.
+   - `frontend/src/__tests__/orderActions.anvil.test.js` (5 test): chạy chính `runOrderAction` + ABI của frontend + ethers v6 trên Anvil, xác nhận 3 lỗi revert thật (`Not delivered`, `Only buyer`, `Expired`) được dịch đúng sang tiếng Việt. Tự skip nếu không có Anvil; `REQUIRE_ANVIL=1` thì thiếu là đỏ.
+7. **Điều chờ Thành viên B (đã thể hiện bằng `xfail`, không phải giấu lỗi):** Indexer hiện chỉ có handler `OrderCreated` (`HANDLERS`). Khi B thêm `OrderDelivered`/`OrderCompleted`/`OrderDisputed`, phần cuối của `test_e01_happy_path_…` tự thành PASS (nên bỏ khối `xfail` cho gọn) và giao diện sẽ tự thấy trạng thái mới qua polling. Cần B xác nhận: `GET /api/orders/:code/status` đủ cho polling (đã đủ), và **tên trường của `POST /api/orders/:code/dispute-note`** (Tuần 6): giao diện đang gửi `{reason, evidence_url}`.
+8. **Lưu ý khi chạy lại:** các test I-05 **tua giờ Anvil tiến lên vĩnh viễn** trên node đang chạy (muốn về giờ thật: `bootstrap.sh --fresh`). Fixture `svc` của `test_w3_chain_anvil.py` (B) đẩy `AUTO_INCREMENT` của `onchain_id_seq` lên mili-giây hiện tại trên DB test dùng chung cả phiên, làm `test_web3_migrations` đỏ tùy thứ tự khi chạy cùng lúc test Anvil; test của C tự trả về `100001` khi xong module. Nên đưa cách trả về đó vào chính fixture `svc` khi B rảnh.
+9. **Chưa làm / ngoài phạm vi C:** thử bằng MetaMask thật trên trình duyệt (cần chạy tay), E-01 bản Playwright (Tuần 8), màn hình `Dispute.jsx` ký 2/3 (Tuần 6), nút hủy đơn quá hạn 14 ngày (`cancelIfUnfulfilled`, Tuần 7).
 
 ---
 
@@ -304,7 +319,7 @@
 | **I-02** | Báo giá: Quy đổi VND ➔ token chuẩn xác, hợp đồng chấp nhận chữ ký Python | AC-01, AC-02 | `[x] PASS` |
 | **I-03** | Indexer: Xử lý trùng tx_hash/log_index không ghi đôi, khởi động lại, phục hồi con trỏ | AC-08 / Tính Idempotent | `[x] PASS (17 test khung + 16 test handler OrderCreated); chờ CI. Handler Delivered/Disputed/Completed/Refunded ở Tuần 5-6` |
 | **I-04** | Nhóm hàng: Đơn nhiều nhóm lấy `max()`, đổi chính sách không ảnh hưởng đơn cũ | AC-12 | `[~] một phần: `max()` riêng từng thời hạn + policy mỗi shop đúng; thời hạn lưu cứng trên `order_web3` nhưng chưa có test "đổi chính sách sau khi đặt"` |
-| **I-05** | Đồng bộ thời gian: `now_chain()` theo sát block Anvil; tua thời gian cấp quote mới chuẩn | AC-02 | `[~] một phần: hạn báo giá dùng max(hệ thống, block) (đồng hồ giả); `HybridClock` chưa test với Anvil tua thời gian` |
+| **I-05** | Đồng bộ thời gian: `now_chain()` theo sát block Anvil; tua thời gian cấp quote mới chuẩn | AC-02 | `[~] đã chạy trên Anvil thật (test_w5_happy_path_anvil.py): now_chain nhảy theo evm_increaseTime, quá hạn chặn Khiếu nại, báo giá mới sau tua giờ được contract nhận; chờ CI` |
 | **I-06** | Đồng bộ ngược: Cập nhật `order_web3` tự động cập nhật `orders.status` cũ; Chặn route ghi đè cũ | AC-08 / Bảng ánh xạ 5.1 | `[x] PASS` |
 | **I-07** | Giỏ 3 shop: Tạo đúng 3 đơn 1 group, tổng token khớp lệnh, Indexer xóa đúng giỏ hàng | AC-14 | `[x] PASS` |
 | **A-01** | Mọi API yêu cầu token: Không token hoặc token hết hạn trả HTTP 401 | Mục 15 (P0-01) | `[x] PASS` |
@@ -328,13 +343,18 @@
 | **F-06** | Đồng hồ đếm ngược: Tính độ lệch dựa trên `server_time`, không lệch theo máy client | Đếm ngược chuẩn xác | `[x] PASS` |
 | **F-07** | Làm mới báo giá của lô đang chờ: nhãn đúng bản chất, nút khóa trong lúc gọi, không gửi trùng khi bấm dồn, đồng hồ bắt đầu lại từ 15:00 | Không giật bộ đếm, không nhiều yêu cầu đồng thời | `[x] PASS` |
 | **F-08** | Checkout khóa lựa chọn Web3 và cảnh báo khi có shop chưa liên kết ví; panel nêu đích danh shop | BR-07, không để lỗi ở bước cuối | `[x] PASS` |
+| **F-09** | Quy tắc nút và đồng hồ kiểm tra (`orderTimer`): đếm theo `server_time`, máy khách sai giờ không lệch; hết hạn khóa "Khiếu nại" nhưng vẫn cho "Đã nhận hàng"; chỉ ví đã ký quỹ mới bật nút | SDD 9.4, F-06 | `[~]` |
+| **F-10** | Luồng ví Buyer (`orderActions`, `MyOrders`): biên nhận chưa phải `COMPLETED`, chỉ API báo mới đổi; bấm dồn chỉ một giao dịch; hủy ví là thông báo nhẹ; lỗi revert dịch đúng | DD-04, BR-09 | `[~]` |
+| **F-11** | Khiếu nại: form chặn lý do ngắn/URL không phải http(s); lý do chỉ gửi sau khi `DISPUTED`; gửi lỗi thì "Gửi lại lý do"; hủy ví thì xóa bản nháp; tải lại trang vẫn gửi được | UC-05, SEQ-02 | `[~]` |
+| **F-12** | Nhóm đơn theo `checkout_group_id`: thao tác đơn shop này không đổi đơn shop khác; đơn đã xong không bị poll; đơn cũ giữ nguyên nút | BR-11 | `[~]` |
+| **F-13** | `runOrderAction` + ABI + ethers thật trên Anvil: `earlyRelease`/`raiseDispute` chạy được; revert thật `Not delivered`/`Only buyer`/`Expired` được dịch đúng (`orderActions.anvil.test.js`, tự skip nếu không có Anvil) | UC-04, UC-05 | `[~]` |
 
 ---
 
 ### 5.4. End-to-End Automated Test Suite (Playwright + Mock Provider)
 | Mã test | Kịch bản luồng E2E | Tiêu chí nghiệm thu liên quan | Tình trạng |
 | :---: | :--- | :---: | :---: |
-| **E-01** | **Happy Path:** Đăng ký ➔ Liên kết ví ➔ Đặt hàng ➔ Ký quỹ gom ➔ Giao hàng ➔ Mở khóa sớm | AC-01, AC-03, AC-04 | `[ ] PASS` |
+| **E-01** | **Happy Path:** Đăng ký ➔ Liên kết ví ➔ Đặt hàng ➔ Ký quỹ gom ➔ Giao hàng ➔ Mở khóa sớm | AC-01, AC-03, AC-04 | `[~] một phần: tích hợp chuỗi thật + MySQL đã chạy (khóa, giao, giải ngân, chia phí, BR-11); phần DB DELIVERED/COMPLETED xfail chờ handler Indexer của B; bản Playwright mock ví làm ở Tuần 8` |
 | **E-02** | **Inspection Expiry:** Giao hàng ➔ Tua thời gian Anvil ➔ Tự động giải ngân sau hạn | AC-04 | `[ ] PASS` |
 | **E-03** | **Dispute Resolution:** Khiếu nại ➔ Đề xuất phán quyết ➔ Buyer/Merchant ký EIP-712 ➔ Hoàn tiền | AC-05, AC-06 | `[ ] PASS` |
 | **E-04** | **Timeouts:** Delivery timeout (14 ngày hủy hoàn tiền); Dispute timeout (Trọng tài xử đơn phương) | AC-07 | `[ ] PASS` |

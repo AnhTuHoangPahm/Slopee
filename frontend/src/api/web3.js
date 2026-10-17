@@ -2,11 +2,12 @@
 import { API_ORIGIN, authFetch } from '../lib/client';
 import { ERROR_MESSAGES, Web3ApiError } from '../lib/errors';
 
-export async function request(path, { method = 'GET', body } = {}) {
+export async function request(path, { method = 'GET', body, signal } = {}) {
     let res;
     try {
-        res = await authFetch(`${API_ORIGIN}${path}`, { method, body: body === undefined ? undefined : JSON.stringify(body) });
-    } catch {
+        res = await authFetch(`${API_ORIGIN}${path}`, { method, body: body === undefined ? undefined : JSON.stringify(body), signal });
+    } catch (e) {
+        if (e?.name === 'AbortError') throw e; // hủy chủ động (rời trang): để usePolling nhận ra, không đổi thành lỗi mạng
         throw new Web3ApiError({ code: 'NETWORK_ERROR', message: ERROR_MESSAGES.NETWORK_ERROR });
     }
     let data = null;
@@ -34,3 +35,10 @@ export const fetchWeb3EligibilityAPI = (cartItemIds) => request('/api/orders/eli
 export const createWeb3OrderAPI = (cartItemIds) => request('/api/orders', { method: 'POST', body: { cart_item_ids: cartItemIds } });
 export const requoteGroupAPI = (groupId) => request(`/api/checkout-groups/${encodeURIComponent(groupId)}/quote`, { method: 'POST', body: {} });
 export const fetchCheckoutGroupAPI = (groupId) => request(`/api/checkout-groups/${encodeURIComponent(groupId)}`);
+
+// ---- UC-03..05 (Buyer): trạng thái đơn cho polling + ghi chú khiếu nại
+/** Nhẹ, dùng cho polling 2-3 giây: { order_id, status, delivered_at, inspection_duration, disputed_at, dispute_timeout, anomaly, server_time }. */
+export const fetchOrderStatusAPI = (orderCode, signal) => request(`/api/orders/${encodeURIComponent(orderCode)}/status`, { signal });
+/** Lưu lý do + đường dẫn bằng chứng (SRS 7). Giao dịch `raiseDispute` do Buyer tự gửi; tên trường chờ B chốt khi làm API (Tuần 6). */
+export const saveDisputeNoteAPI = (orderCode, { reason, evidenceUrl }) =>
+    request(`/api/orders/${encodeURIComponent(orderCode)}/dispute-note`, { method: 'POST', body: { reason, evidence_url: evidenceUrl || null } });
