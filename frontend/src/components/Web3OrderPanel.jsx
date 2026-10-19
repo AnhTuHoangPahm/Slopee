@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { saveDisputeNoteAPI } from '../api/web3';
 import CountdownTimer from './CountdownTimer';
 import DisputeDialog from './DisputeDialog';
@@ -133,6 +134,9 @@ export default function Web3OrderPanel({ orderCode, web3, escrowFactory, fetchSt
                 <p style={{ margin: '8px 0 0', color: '#555' }}>
                     Nếu hàng có vấn đề, hãy khiếu nại trước khi hết giờ. Hết giờ mà không khiếu nại, tiền sẽ tự động giải ngân cho cửa hàng.
                 </p>
+            )}
+            {statusName === ORDER_STATUS.DISPUTED && (
+                <p style={{ margin: '8px 0 0' }}><Link to={`/disputes/${orderCode}`} data-testid="dispute-link" style={{ color: '#ee4d2d', fontWeight: 'bold' }}>Xem đề xuất phán quyết ›</Link></p>
             )}
             {(polled?.anomaly || web3.anomaly) && <p style={{ margin: '8px 0 0', color: '#b8860b' }}>Hệ thống phát hiện sai lệch dữ liệu ở đơn này, quản trị viên sẽ kiểm tra.</p>}
             {pollError && !polled && <p role="status" style={{ margin: '8px 0 0', color: '#888' }}>Chưa cập nhật được trạng thái đơn, đang thử lại…</p>}

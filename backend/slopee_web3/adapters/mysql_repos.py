@@ -526,6 +526,35 @@ class MySqlDisputeNoteRepo:
         return self.cur.fetchone()
 
 
+def resolution_executed(cur, order_id, payout_to):
+    """Indexer thấy DisputeResolved: đề xuất KHỚP bên nhận tiền -> EXECUTED từ BẤT KỲ trạng thái nào (A: relayer chỉ đặt SUBMITTED; tác vụ
+    hết hạn có thể đã đặt EXPIRED khi giao dịch gửi kịp hạn nhưng vào chuỗi muộn). Chuỗi là sự thật (BR-09) nên kể cả đề xuất đã CANCELLED vẫn
+    ghi EXECUTED. Trả: 'OK' (khớp, hoặc đã EXECUTED từ trước nên replay vô hại) | 'WAS_CANCELLED' (đề xuất đã bị Admin hủy mà vẫn được thi hành
+    bằng chữ ký cũ) | 'NONE' (không có đề xuất nào của sàn khớp: ai đó nộp chữ ký ngoài sàn). Hai kết quả sau đều cần anomaly."""
+    for statuses, result in ((('SUBMITTED', 'READY', 'PROPOSED', 'EXPIRED'), 'OK'), (('CANCELLED',), 'WAS_CANCELLED')):
+        cur.execute(f"UPDATE dispute_resolutions SET status='EXECUTED' WHERE order_id=%s AND LOWER(payout_to)=LOWER(%s) "
+                    f"AND status IN ({_marks(len(statuses))}) ORDER BY FIELD(status, {', '.join(['%s'] * len(statuses))}), id DESC LIMIT 1",
+                    (order_id, payout_to, *statuses, *statuses))
+        if cur.rowcount:
+            return result
+    cur.execute("SELECT 1 AS x FROM dispute_resolutions WHERE order_id=%s AND LOWER(payout_to)=LOWER(%s) AND status='EXECUTED' LIMIT 1",
+                (order_id, payout_to))
+    return 'OK' if cur.fetchone() else 'NONE'
+
+
+def resolution_unexecuted(cur, order_id, payout_to):
+    """Reorg: block chứa DisputeResolved bị bỏ -> đề xuất EXECUTED quay về trạng thái trước (SUBMITTED nếu relayer đã nộp, ngược lại READY)."""
+    cur.execute("UPDATE dispute_resolutions SET status=IF(submitted_tx_hash IS NULL, 'READY', 'SUBMITTED') "
+                "WHERE order_id=%s AND LOWER(payout_to)=LOWER(%s) AND status='EXECUTED' ORDER BY id DESC LIMIT 1", (order_id, payout_to))
+    return cur.rowcount
+
+
+def resolutions_superseded(cur, order_id):
+    """Indexer thấy ArbitratorForceResolved: Trọng tài xử đơn phương nên mọi đề xuất đang hoạt động hết ý nghĩa -> CANCELLED."""
+    cur.execute("UPDATE dispute_resolutions SET status='CANCELLED' WHERE order_id=%s AND status IN ('PROPOSED','READY','SUBMITTED')", (order_id,))
+    return cur.rowcount
+
+
 class MySqlDisputeRepo:
     """dispute_resolutions + dispute_signatures (Tuần 6, A: phần đọc/nộp). Số token đọc ra `int`; mốc thời gian là giây UTC."""
 
@@ -535,27 +564,55 @@ class MySqlDisputeRepo:
     def order_for_dispute(self, order_id, lock=False):
         self.cur.execute(
             "SELECT order_id, onchain_order_id, buyer_user_id, merchant_user_id, buyer_wallet, merchant_wallet, status, "
-            "amount_raw, disputed_at, dispute_timeout FROM order_web3 WHERE order_id=%s" + (" FOR UPDATE" if lock else ""),
+            "amount_raw, token_symbol, fee_bps, disputed_at, dispute_timeout FROM order_web3 WHERE order_id=%s" + (" FOR UPDATE" if lock else ""),
             (order_id,))
         return self.cur.fetchone()
+
+    _COLS = ("SELECT id, order_id, payout_to, amount_raw, nonce, deadline, status, reason_note, submitted_tx_hash, "
+             "UNIX_TIMESTAMP(created_at) AS created_at")
 
     @staticmethod
     def _resolution(r):
         r = dict(r)
         r['amount_raw'] = int(r['amount_raw'])
         r['nonce'], r['deadline'] = int(r['nonce']), int(r['deadline'])
+        if r.get('created_at') is not None:
+            r['created_at'] = int(r['created_at'])
         return r
 
     def latest_resolution(self, order_id, lock=False):
         self.cur.execute(
-            "SELECT id, order_id, payout_to, amount_raw, nonce, deadline, status, reason_note, submitted_tx_hash "
-            "FROM dispute_resolutions WHERE order_id=%s ORDER BY id DESC LIMIT 1" + (" FOR UPDATE" if lock else ""), (order_id,))
+            f"{self._COLS} FROM dispute_resolutions WHERE order_id=%s ORDER BY id DESC LIMIT 1" + (" FOR UPDATE" if lock else ""),
+            (order_id,))
         row = self.cur.fetchone()
         return self._resolution(row) if row else None
 
+    def get_resolution(self, resolution_id):
+        self.cur.execute(f"{self._COLS} FROM dispute_resolutions WHERE id=%s", (resolution_id,))
+        row = self.cur.fetchone()
+        return self._resolution(row) if row else None
+
+    def create_resolution(self, order_id, payout_to, amount_raw, nonce, deadline, reason_note, admin_id):
+        self.cur.execute("INSERT INTO dispute_resolutions (order_id, payout_to, amount_raw, nonce, deadline, status, reason_note, "
+                         "created_by_admin) VALUES (%s, %s, %s, %s, %s, 'PROPOSED', %s, %s)",
+                         (order_id, payout_to, str(amount_raw), int(nonce), int(deadline), reason_note, admin_id))
+        return int(self.cur.lastrowid)
+
+    def add_signature(self, resolution_id, party, signer_address, signature):
+        """UNIQUE(resolution_id, party): INSERT IGNORE trả False khi bên đó đã ký (service quyết định idempotent hay lỗi)."""
+        self.cur.execute("INSERT IGNORE INTO dispute_signatures (resolution_id, party, signer_address, signature) "
+                         "VALUES (%s, %s, %s, %s)", (resolution_id, party, signer_address.lower(), signature))
+        return self.cur.rowcount == 1
+
+    def expire_due(self, now, limit):
+        """PROPOSED/READY quá `deadline` -> EXPIRED (contract chỉ nhận khi block.timestamp <= deadline). Không đụng SUBMITTED/EXECUTED."""
+        self.cur.execute("UPDATE dispute_resolutions SET status='EXPIRED' WHERE status IN ('PROPOSED','READY') AND deadline < %s "
+                         "ORDER BY id LIMIT %s", (int(now), int(limit)))
+        return self.cur.rowcount
+
     def signatures(self, resolution_id):
-        self.cur.execute("SELECT party, signer_address, signature FROM dispute_signatures WHERE resolution_id=%s ORDER BY id",
-                         (resolution_id,))
+        self.cur.execute("SELECT party, signer_address, signature, UNIX_TIMESTAMP(created_at) AS signed_at FROM dispute_signatures "
+                         "WHERE resolution_id=%s ORDER BY id", (resolution_id,))
         return list(self.cur.fetchall())
 
     def transition_resolution(self, resolution_id, from_states, to_status, tx_hash=None):

@@ -303,6 +303,13 @@ describe('MyOrders — các trạng thái khác', () => {
         expect(inPanel('o1').queryByTestId('receive-btn')).toBeNull();
         expect(inPanel('o1').queryByTestId('countdown')).toBeNull();
     });
+    it('DISPUTED: có liên kết sang màn hình phán quyết /disputes/:code; trạng thái khác thì không', async () => {
+        await show([order('o1', web3({ status: 'DISPUTED', disputed_at: NOW + 5 })), order('o2', web3({ onchain_order_id: 2 }))],
+            { fetchStatus: serverState({ o1: { status: 'DISPUTED' } }).fetchStatus, connect: false, saveNote: vi.fn(async () => ({})) });
+        const link = await inPanel('o1').findByTestId('dispute-link');
+        expect(link.getAttribute('href')).toBe('/disputes/o1');
+        expect(inPanel('o2').queryByTestId('dispute-link')).toBeNull();
+    });
     it('PENDING_PAYMENT: không poll, hướng dẫn hoàn tất thanh toán', async () => {
         const srv = serverState();
         await show([order('o1', web3({ status: 'PENDING_PAYMENT', delivered_at: null }))], { fetchStatus: srv.fetchStatus, connect: false });

@@ -253,6 +253,17 @@ class FakeEscrowChain(FakeChain):
         self._balance_delta(-o['amount'])
         return blk
 
+    def arbitrator_force_resolve(self, oid, payout_to):
+        """UC-07: Trọng tài xử đơn phương, chỉ khi đã qua disputedAt + disputeTimeout. Sự kiện đặt SAU OrderCompleted/OrderRefunded như contract."""
+        oid, o = int(oid), self.orders[int(oid)]
+        if o['state'] != 'DISPUTED' or self.now < o['disputed_at'] + o['dispute_timeout']:
+            raise ChainTxFailed('execution reverted: Dispute timeout not reached')
+        if str(payout_to).lower() == o['buyer'].lower():
+            self._refund(oid, o)
+        else:
+            self._complete(oid, o)
+        return self._mine(('ArbitratorForceResolved', dict(orderId=oid, payoutTo=payout_to)))
+
     def defer_payout(self, token, to, amount):
         """ETH: người nhận từ chối -> sổ chờ rút (PayoutDeferred)."""
         self.pending[(token, to)] = self.pending.get((token, to), 0) + int(amount)

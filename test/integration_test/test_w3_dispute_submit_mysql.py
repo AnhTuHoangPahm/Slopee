@@ -113,7 +113,7 @@ def test_release_merchant_with_merchant_signature_submitted_by_merchant(st, db):
     assert out['payout_side'] == 'MERCHANT' and st.chain.get_order_state(p['oid']) == 'COMPLETED'
     st.index()
     assert status(db, o['order_id']) == 'COMPLETED'
-    assert res_row(db, rid)['status'] == 'SUBMITTED'
+    assert res_row(db, rid)['status'] == 'EXECUTED'        # handler DisputeResolved của Indexer (B, tuần 6) đặt EXECUTED; relayer chỉ đặt SUBMITTED
 
 
 def test_not_ready_changes_nothing_in_the_database(st, db):

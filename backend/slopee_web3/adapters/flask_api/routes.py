@@ -11,7 +11,7 @@ from werkzeug.exceptions import HTTPException
 from auth_utils import require_auth
 from errors import ApiError
 from routes.auth import get_db_connection
-from validation import json_body, get_str
+from validation import as_int, get_str, json_body
 
 from ...domain.errors import DomainError, http_status
 from ...ports.chain_port import ChainUnavailable
@@ -206,3 +206,29 @@ def dispute_submit(order_code):
 def admin_disputes():
     """Các đơn đang DISPUTED kèm ghi chú của Buyer, đề xuất mới nhất và các bên đã ký (màn hình Admin). Mới ngoài SDD 10.2."""
     return jsonify(_container().dispute_admin_service().list_open()), 200
+
+
+# ------------------------------------------------------------------ UC-06 (Tuần 6, B): đề xuất + chữ ký + xem
+@admin_w3_bp.route('/disputes/<order_code>/proposal', methods=['POST'])
+@require_auth('admin')
+def admin_dispute_proposal(order_code):
+    """Admin chọn bên nhận tiền (`payout_to`: 'BUYER' | 'MERCHANT' | đúng địa chỉ ví của bên đó); Trọng tài ký ngay (UC-06 bước 1-2)."""
+    body = json_body()
+    return jsonify(_container().dispute_service().propose(g.user_id, order_code, body.get('payout_to'), body.get('reason_note'))), 201
+
+
+@disputes_bp.route('/<order_code>', methods=['GET'])
+@require_auth(*BUYER_ROLES, 'admin')
+def get_dispute(order_code):
+    """Đề xuất + danh sách chữ ký (không có chữ ký thô) + ghi chú khiếu nại. Chỉ Buyer/Merchant của đơn hoặc Admin."""
+    return jsonify(_container().dispute_service().get(g.user_id, g.role, order_code)), 200
+
+
+@disputes_bp.route('/<order_code>/signatures', methods=['POST'])
+@require_auth(*BUYER_ROLES)
+def add_dispute_signature(order_code):
+    """Bên (Buyer/Merchant) được xác định từ token, không do client chọn (SDD 10.2). Admin không ký thay."""
+    body = json_body()
+    rid = as_int(body.get('resolution_id'), 'resolution_id', minimum=1)
+    return jsonify(_container().dispute_service().add_signature(g.user_id, order_code, rid, body.get('signature'))), 200
+

@@ -105,6 +105,14 @@ export const DISPUTE_REASON_MIN = 10;
 export const DISPUTE_REASON_MAX = 1000;
 export const EVIDENCE_URL_MAX = 500;
 
+/** URL http/https hợp lệ (chặn javascript:, data:, file:, ...). Dùng cả khi NHẬP và khi HIỂN THỊ liên kết bằng chứng do người khác gửi. */
+export function isHttpUrl(value) {
+    try {
+        const parsed = new URL(String(value).trim());
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch { return false; }
+}
+
 /** @returns {{ ok: boolean, errors: {reason?: string, evidenceUrl?: string}, value: {reason: string, evidenceUrl: string} }} */
 export function validateDisputeForm({ reason = '', evidenceUrl = '' } = {}) {
     const r = String(reason).trim();
@@ -114,12 +122,7 @@ export function validateDisputeForm({ reason = '', evidenceUrl = '' } = {}) {
     else if (r.length > DISPUTE_REASON_MAX) errors.reason = `Lý do tối đa ${DISPUTE_REASON_MAX} ký tự.`;
     if (u) {
         // Chỉ nhận http(s), cùng quy tắc validate_url của backend (P0-06): chặn javascript:, data:, file:...
-        let ok = false;
-        try {
-            const parsed = new URL(u);
-            ok = parsed.protocol === 'http:' || parsed.protocol === 'https:';
-        } catch { /* không phải URL */ }
-        if (!ok) errors.evidenceUrl = 'Đường dẫn bằng chứng phải bắt đầu bằng http:// hoặc https://.';
+        if (!isHttpUrl(u)) errors.evidenceUrl = 'Đường dẫn bằng chứng phải bắt đầu bằng http:// hoặc https://.';
         else if (u.length > EVIDENCE_URL_MAX) errors.evidenceUrl = `Đường dẫn tối đa ${EVIDENCE_URL_MAX} ký tự.`;
     }
     return { ok: Object.keys(errors).length === 0, errors, value: { reason: r, evidenceUrl: u } };

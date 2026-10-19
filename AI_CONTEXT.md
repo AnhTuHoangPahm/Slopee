@@ -43,7 +43,7 @@ backend/                Flask + MySQL (không phải package; chạy từ thư m
   json_provider.py      Decimal -> số (int nếu nguyên) khi jsonify
   admin_seed.py         seed_admin(conn, ...) dùng cho CLI
   init_db.py            tạo DB từ schema.sql (KHÔNG còn tạo admin); DB mới: đánh dấu migration đã áp dụng
-  schema.sql            lược đồ MỚI NHẤT cho DB tạo mới (đã gồm mọi migration, kể cả 16 bảng Web3 sau dấu mốc `WEB3 ESCROW`); 4 cột tiền DECIMAL(15,0)
+  schema.sql            lược đồ MỚI NHẤT cho DB tạo mới (đã gồm mọi migration, kể cả 18 bảng Web3 sau dấu mốc `WEB3 ESCROW`); 4 cột tiền DECIMAL(15,0)
   migrations/           0001 money_to_vnd.sql, 0002 product_fk_snapshots.py, 0003 reviews_dedupe.py, 0004 auth_attempts.sql,
                         0005 order_line_settlement.py (hủy đơn paid hoàn tiền không tạo tiền). Web3: 0006 wallets … 0020 shipper (15 tệp, tuần 2)
   routes/               auth, admin, carts, payments, products, reviews, shops

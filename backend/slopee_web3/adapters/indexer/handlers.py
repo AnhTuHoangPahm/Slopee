@@ -6,15 +6,16 @@ chain_events/con trỏ (lỗi -> ROLLBACK cả cửa sổ). Mỗi handler chỉ 
 Mọi mốc thời gian lấy từ block_timestamp, không bao giờ từ NOW() (replay phải cho kết quả giống hệt).
 
 TUẦN 4: OrderCreated. TUẦN 5: OrderDelivered, OrderDisputed, OrderCompleted, OrderRefunded, PayoutDeferred, PendingClaimed.
-Còn lại cho Tuần 6: DisputeResolved, ArbitratorForceResolved (cần dispute_resolutions của DisputeService).
+TUẦN 6: DisputeResolved, ArbitratorForceResolved (cập nhật `dispute_resolutions`).
 """
 import json
 import logging
-from datetime import datetime, timedelta, timezone
 
 from ...domain.order_state import is_valid_transition
+from ...domain.timefmt import fmt_vn
 from ..legacy_sync import sync_legacy_status
-from ..mysql_repos import add_notification, release_order_stock, reserve_order_stock
+from ..mysql_repos import (add_notification, release_order_stock, reserve_order_stock, resolution_executed, resolution_unexecuted,
+                           resolutions_superseded)
 
 log = logging.getLogger('slopee.indexer')
 
@@ -82,7 +83,6 @@ def on_order_created(cur, ev, block_ts):
 
 # Cột do chuỗi sinh ra mà một lần chuyển trạng thái được phép đặt (tên cột cố định, KHÔNG bao giờ lấy từ dữ liệu ngoài).
 _DERIVED_COLUMNS = ('delivered_at', 'disputed_at', 'closed_at')
-_VN_TZ = timezone(timedelta(hours=7))
 
 
 def _transition(cur, ev, new_status, **columns):
@@ -106,10 +106,6 @@ def _transition(cur, ev, new_status, **columns):
     return row
 
 
-def _fmt_vn(ts):
-    return datetime.fromtimestamp(int(ts), _VN_TZ).strftime('%d/%m/%Y %H:%M')
-
-
 def on_order_delivered(cur, ev, block_ts):
     delivered_at = int(ev['args'].get('deliveredAt', block_ts))
     row = _transition(cur, ev, 'DELIVERED', delivered_at=delivered_at)
@@ -119,7 +115,7 @@ def on_order_delivered(cur, ev, block_ts):
         until = delivered_at + int(row['inspection_duration'])
         add_notification(cur, row['buyer_user_id'], row['order_id'], 'ORDER_DELIVERED',
                          f"Đơn {row['order_id'][:8]} đã được giao. Bạn có thể khiếu nại hoặc bấm \"Đã nhận hàng\" "
-                         f"trước {_fmt_vn(until)} (giờ Việt Nam); quá hạn tiền sẽ tự động chuyển cho người bán.")
+                         f"trước {fmt_vn(until)} (giờ Việt Nam); quá hạn tiền sẽ tự động chuyển cho người bán.")
 
 
 def on_order_disputed(cur, ev, block_ts):
@@ -159,6 +155,43 @@ def on_pending_claimed(cur, ev, block_ts):
     _adjust_pending(cur, a['token'], a['to'], -int(a['amount']))
 
 
+def _order_by_onchain_id(cur, onchain_id):
+    cur.execute("SELECT order_id, buyer_user_id, merchant_user_id, buyer_wallet FROM order_web3 WHERE onchain_order_id=%s", (onchain_id,))
+    return cur.fetchone()
+
+
+def _notify_resolved(cur, row, payout, by=''):
+    label = 'hoàn tiền cho người mua' if str(payout).lower() == row['buyer_wallet'].lower() else 'giải ngân cho người bán'
+    for user_id in (row['buyer_user_id'], row['merchant_user_id']):
+        add_notification(cur, user_id, row['order_id'], 'DISPUTE_RESOLVED',
+                         f"Tranh chấp đơn {row['order_id'][:8]} đã được{by} giải quyết: {label}.")
+
+
+def on_dispute_resolved(cur, ev, block_ts):
+    """UC-06 bước 5: đề xuất khớp bên nhận tiền -> EXECUTED từ MỌI trạng thái (OrderCompleted/OrderRefunded đã được xử lý trước đó). Báo cả hai bên."""
+    a = ev['args']
+    row = _order_by_onchain_id(cur, a['orderId'])
+    if row is None:
+        log.warning('DisputeResolved cho đơn on-chain %s không tồn tại ở sàn (tx %s)', a['orderId'], ev['tx_hash'])
+        return
+    result = resolution_executed(cur, row['order_id'], str(a['payoutTo']))
+    if result == 'NONE':
+        _flag_anomaly(cur, row['order_id'], 'DisputeResolved không khớp đề xuất nào của sàn')
+    elif result == 'WAS_CANCELLED':
+        _flag_anomaly(cur, row['order_id'], 'DisputeResolved thi hành đề xuất đã bị hủy trên sàn')
+    _notify_resolved(cur, row, a['payoutTo'])
+
+
+def on_arbitrator_force_resolved(cur, ev, block_ts):
+    """UC-07: Trọng tài xử đơn phương sau disputeTimeout. Đề xuất đang hoạt động (nếu còn) hết ý nghĩa -> CANCELLED."""
+    row = _order_by_onchain_id(cur, ev['args']['orderId'])
+    if row is None:
+        log.warning('ArbitratorForceResolved cho đơn on-chain %s không tồn tại ở sàn (tx %s)', ev['args']['orderId'], ev['tx_hash'])
+        return
+    resolutions_superseded(cur, row['order_id'])
+    _notify_resolved(cur, row, ev['args']['payoutTo'], by=' Trọng tài')
+
+
 HANDLERS = {
     'OrderCreated': on_order_created,
     'OrderDelivered': on_order_delivered,
@@ -167,7 +200,21 @@ HANDLERS = {
     'OrderRefunded': on_order_refunded,
     'PayoutDeferred': on_payout_deferred,
     'PendingClaimed': on_pending_claimed,
+    'DisputeResolved': on_dispute_resolved,
+    'ArbitratorForceResolved': on_arbitrator_force_resolved,
 }
+
+
+def _undo_dispute_events(cur, from_block):
+    """Reorg: đảo ngược trạng thái đề xuất cho mỗi DisputeResolved sắp bị xóa (nếu nhánh mới vẫn có sự kiện, replay sẽ đặt lại EXECUTED).
+    ArbitratorForceResolved không đảo được (không biết đề xuất bị hủy ở trạng thái nào): Admin tạo đề xuất mới nếu cần."""
+    cur.execute("SELECT payload_json FROM chain_events WHERE block_number >= %s AND event_name = 'DisputeResolved'", (from_block,))
+    for e in cur.fetchall():
+        p = e['payload_json']
+        p = json.loads(p) if isinstance(p, (str, bytes)) else p
+        row = _order_by_onchain_id(cur, p['orderId'])
+        if row is not None:
+            resolution_unexecuted(cur, row['order_id'], p['payoutTo'])
 
 
 def _undo_pending_events(cur, from_block):
@@ -195,6 +242,7 @@ def rollback_orders_from_block(cur, from_block, handlers=None):
                 (from_block,))
     affected = [r['order_id'] for r in cur.fetchall()]
     _undo_pending_events(cur, from_block)
+    _undo_dispute_events(cur, from_block)
     cur.execute("DELETE FROM chain_events WHERE block_number >= %s", (from_block,))
     for onchain_id in affected:
         cur.execute("SELECT order_id, status, buyer_user_id FROM order_web3 WHERE onchain_order_id=%s FOR UPDATE",
@@ -206,7 +254,7 @@ def rollback_orders_from_block(cur, from_block, handlers=None):
             if row['status'] == 'REFUNDED' and not reserve_order_stock(cur, row['order_id']):
                 log.error('Reorg đưa đơn %s từ REFUNDED về PENDING_PAYMENT nhưng hàng đã hết: tồn kho không giữ lại được',
                           row['order_id'])
-            cur.execute("DELETE FROM notifications WHERE order_id=%s AND kind='ORDER_DELIVERED'", (row['order_id'],))
+            cur.execute("DELETE FROM notifications WHERE order_id=%s AND kind IN ('ORDER_DELIVERED', 'DISPUTE_RESOLVED')", (row['order_id'],))
             cur.execute(
                 "UPDATE order_web3 SET status='PENDING_PAYMENT', deposit_tx_hash=NULL, chain_created_at=NULL, "
                 "delivered_at=NULL, disputed_at=NULL, closed_at=NULL, anomaly_flag=0 WHERE order_id=%s", (row['order_id'],))

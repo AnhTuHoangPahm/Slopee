@@ -106,6 +106,12 @@ class DisputeRepo(Protocol):
     def signatures(self, resolution_id: int) -> list: ...                                   # [{'party','signer_address','signature'}]
     def transition_resolution(self, resolution_id: int, from_states: tuple, to_status: str, tx_hash: Optional[str] = None) -> bool: ...
     def open_disputes(self) -> list: ...                                                    # đơn DISPUTED + ghi chú + đề xuất mới nhất + các bên đã ký
+    # --- Tuần 6 (B): tạo đề xuất, lưu chữ ký, hết hạn
+    def get_resolution(self, resolution_id: int) -> Optional[dict]: ...                     # cùng dạng latest_resolution
+    def create_resolution(self, order_id: str, payout_to: str, amount_raw: str, nonce: int, deadline: int,
+                          reason_note: Optional[str], admin_id: str) -> int: ...            # status PROPOSED; trả id
+    def add_signature(self, resolution_id: int, party: str, signer_address: str, signature: str) -> bool: ...   # False nếu bên đó đã ký
+    def expire_due(self, now: int, limit: int) -> int: ...                                  # PROPOSED/READY quá deadline -> EXPIRED
 
 
 class UnitOfWork(Protocol):

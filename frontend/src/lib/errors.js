@@ -32,6 +32,13 @@ export const ERROR_MESSAGES = Object.freeze({
     WEB3_NOT_CONFIGURED: 'Tính năng thanh toán Web3 chưa được cấu hình trên máy chủ.',
     ACCOUNT_CHANGED: 'Bạn vừa đổi tài khoản trong ví, hãy thử lại.',
     NETWORK_ERROR: 'Không kết nối được máy chủ, hãy kiểm tra mạng và thử lại.',
+    INVALID_PAYOUT: 'Hãy chọn bên được nhận tiền: người mua (hoàn tiền) hoặc người bán (giải ngân).',
+    DISPUTE_WINDOW_CLOSED: 'Đã hết thời hạn dùng chữ ký 2/3 cho đơn này; chỉ còn cách để Trọng tài xử đơn phương.',
+    ORDER_NOT_FOUND: 'Không tìm thấy đơn hàng, hoặc bạn không có quyền xem.',
+    INVALID_DISPUTE_NOTE: 'Lý do hoặc đường dẫn bằng chứng chưa hợp lệ, hãy kiểm tra lại.',
+    SIGNATURE_EXPIRED: 'Đề xuất đã hết hạn ký. Hãy chờ quản trị viên tạo đề xuất mới.',
+    ALREADY_SIGNED: 'Bạn đã ký đề xuất này rồi.',
+    NOT_A_PARTY: 'Chỉ Buyer hoặc Merchant của đơn mới ký được.',
     forbidden: 'Tài khoản của bạn không dùng được tính năng này.',
     internal_error: 'Đã có lỗi phía máy chủ, hãy thử lại sau.',
 });

@@ -11,6 +11,7 @@ import ProductView from './pages/ProductView';
 import UserSettings from './pages/UserSettings';
 import Wallet from './pages/Wallet';
 import ShipperOrders from './pages/ShipperOrders';
+import Dispute from './pages/Dispute';
 import Tetris from './pages/Tetris';
 import RequireRole from './components/RequireRole';
 import { WalletProvider } from './hooks/useWallet';
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="/checkout" element={<RequireRole><Checkout /></RequireRole>} />
           <Route path="/orders" element={<RequireRole><MyOrders /></RequireRole>} />
           <Route path="/shipper/orders" element={<RequireRole roles="shipper"><ShipperOrders /></RequireRole>} />
+          <Route path="/disputes/:code" element={<RequireRole roles={['user', 'seller']}><Dispute /></RequireRole>} />
           <Route path="/wallet" element={<RequireRole roles={['user', 'seller']}><Wallet /></RequireRole>} />
           <Route path="/settings" element={<RequireRole><UserSettings /></RequireRole>} />
           <Route path="/play/tetris" element={<Tetris />} />
