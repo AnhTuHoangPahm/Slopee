@@ -61,6 +61,13 @@ class ShipperRepo(Protocol):
     def assign(self, order_id: str, shipper_user_id: str, assigned_by: Optional[str]) -> None: ...
 
 
+class MerchantRepo(Protocol):
+    """Cổng Merchant (Tuần 7, UC-07): đơn Web3 của shop mình + số dư chờ rút. Danh tính luôn là `merchant_user_id` lấy từ token."""
+    def merchant_orders(self, merchant_user_id: str, statuses: tuple, limit: int) -> list: ...   # đơn của shop mình, mới nhất trước
+    def merchant_wallets(self, merchant_user_id: str) -> list: ...                                # ví đang liên kết + ví đã dùng trên đơn (chữ thường)
+    def pending_for_addresses(self, addresses: list) -> list: ...                                 # [{'token_address','address','amount_raw'}] chỉ số dư > 0
+
+
 class OutboxRepo(Protocol):
     """Nhật ký giao dịch relayer (bảng tx_outbox): PENDING -> SENT -> CONFIRMED | FAILED. Chỉ để truy vết/gỡ lỗi."""
     def insert(self, kind: str, order_id: str) -> int: ...                  # trả id, status = PENDING
@@ -98,17 +105,35 @@ class DisputeNoteRepo(Protocol):
     def get(self, order_id: str) -> Optional[dict]: ...
 
 
+class DisputeRepo(Protocol):
+    """Đề xuất phán quyết + chữ ký (bảng dispute_resolutions, dispute_signatures). Tuần 6 (A): đọc cho việc nộp, danh sách Admin,
+    chuyển PROPOSED/READY -> SUBMITTED. Tạo đề xuất và lưu chữ ký là việc của DisputeService (B), thêm vào cùng repo này."""
+    def order_for_dispute(self, order_id: str, lock: bool = False) -> Optional[dict]: ...
+    def latest_resolution(self, order_id: str, lock: bool = False) -> Optional[dict]: ...   # id lớn nhất; amount_raw/nonce/deadline là int
+    def signatures(self, resolution_id: int) -> list: ...                                   # [{'party','signer_address','signature'}]
+    def transition_resolution(self, resolution_id: int, from_states: tuple, to_status: str, tx_hash: Optional[str] = None) -> bool: ...
+    def open_disputes(self) -> list: ...                                                    # đơn DISPUTED + ghi chú + đề xuất mới nhất + các bên đã ký
+    # --- Tuần 6 (B): tạo đề xuất, lưu chữ ký, hết hạn
+    def get_resolution(self, resolution_id: int) -> Optional[dict]: ...                     # cùng dạng latest_resolution
+    def create_resolution(self, order_id: str, payout_to: str, amount_raw: str, nonce: int, deadline: int,
+                          reason_note: Optional[str], admin_id: str) -> int: ...            # status PROPOSED; trả id
+    def add_signature(self, resolution_id: int, party: str, signer_address: str, signature: str) -> bool: ...   # False nếu bên đó đã ký
+    def expire_due(self, now: int, limit: int) -> int: ...                                  # PROPOSED/READY quá deadline -> EXPIRED
+
+
 class UnitOfWork(Protocol):
     wallets: WalletRepo
     settings: SettingsRepo
     policies: PolicyRepo
     checkout: CheckoutRepo
     shipper: ShipperRepo
+    merchant: MerchantRepo
     outbox: OutboxRepo
     notifications: NotificationRepo
     jobs: JobsRepo
     reconcile: ReconcileRepo
     dispute_notes: DisputeNoteRepo
+    disputes: DisputeRepo
 
     def __enter__(self) -> "UnitOfWork": ...
     def __exit__(self, exc_type, exc, tb) -> None: ...   # chưa commit thì ROLLBACK

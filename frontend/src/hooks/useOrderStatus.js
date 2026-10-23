@@ -1,9 +1,16 @@
-// Trạng thái một đơn Web3 qua polling 2-3 giây (SDD 9.1, 9.4, DD-04) + đồng hồ đếm ngược theo giờ MÁY CHỦ.
-// Mỗi lần poll trả `server_time`; hook nhớ thời điểm máy khách nhận để tính độ lệch, nên đồng hồ máy người dùng sai
-// hay Anvil bị tua thời gian đều không làm lệch đếm ngược (F-06). Dừng khi đơn tới trạng thái cuối hoặc khi rời trang.
-import { useEffect, useState } from 'react';
+// Trạng thái một đơn Web3 qua polling (SDD 9.1, 9.4, DD-04) + đồng hồ đếm ngược theo giờ MÁY CHỦ (F-06).
+//
+// Đồng hồ (PROGRESS Tuần 5 mục 10): mỗi lần poll nhận `server_time`, nhưng KHÔNG ghi đè mốc neo. `lib/serverClock` chỉ giữ độ lệch lớn nhất
+// giữa `server_time` và giờ máy (server_time luôn cũ hơn giờ thật 0-2 giây, nên mẫu lớn nhất là ước lượng tốt nhất), nhờ đó đếm ngược không giật
+// lùi dù `server_time` có răng cưa (Anvil đã tua giờ) hay độ trễ mạng biến thiên; đồng hồ máy người dùng sai cũng không ảnh hưởng.
+// Độ lệch được cập nhật NGAY TRONG hàm poll, cùng nhịp với dữ liệu.
+//
+// Chu kỳ poll (mục 11): thích ứng theo trạng thái, xem `nextPollDelayMs`. `intervalMs` là số thì cố định (dùng cho test). Dừng khi đơn tới trạng
+// thái cuối hoặc khi rời trang.
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchOrderStatusAPI } from '../api/web3';
-import { isTerminalStatus, inspectionRemaining } from '../lib/orderTimer';
+import { createServerClock } from '../lib/serverClock';
+import { BOOST_MS, deliveryRemainingAt, inspectionRemainingAt, isTerminalStatus, nextPollDelayMs } from '../lib/orderTimer';
 import { usePolling } from './usePolling';
 
 /** Đồng hồ máy khách nhảy mỗi `everyMs` khi `active`, để giao diện đếm từng giây. */
@@ -17,35 +24,61 @@ export function useNow(active, everyMs = 1000) {
     return nowMs;
 }
 
+// Tick 2 lần/giây: số giây nguyên hiển thị đổi đúng lúc qua mốc thật (không bỏ sót, không lặp) kể cả khi setInterval trễ nhịp.
+const TICK_MS = 500;
+
 /**
  * @param {string} orderCode  `orders.id`
  * @param {object} [opts]
  * @param {boolean} [opts.enabled=true]
- * @param {number}  [opts.intervalMs=3000]
+ * @param {number}  [opts.intervalMs]  số: chu kỳ cố định (test); bỏ trống: thích ứng theo trạng thái
  * @param {Function} [opts.fetchStatus]  thay cho fetchOrderStatusAPI (chỉ dùng khi test)
- * @returns {{ status: object|null, error, stopped: boolean, clock: {serverTime:number, receivedAtMs:number}|null, remaining: number|null, refresh: Function }}
- *   `remaining`: số giây còn của hạn kiểm tra, null khi chưa giao hoặc chưa có lần poll nào.
+ * @returns {{ status: object|null, error, stopped: boolean, offset: number|null, remaining: number|null, deliveryRemaining: number|null, boost: Function, refresh: Function }}
+ *   `remaining`: số giây nguyên còn của hạn kiểm tra, null khi chưa giao hoặc chưa có lần poll nào.
+ *   `deliveryRemaining`: số giây nguyên còn tới mốc được hủy đơn chưa giao (chain_created_at + 14 ngày, làm tròn lên; <= 0 là hủy được); null khi
+ *   chưa biết `chain_created_at` hoặc chưa có lần poll nào. Cùng độ lệch đồng hồ máy chủ với `remaining`.
+ *   `boost(ms?)`: gọi ngay sau thao tác ví (earlyRelease, raiseDispute) để poll nhanh trong `ms` (mặc định BOOST_MS) và hỏi lại tức thì.
  */
-export function useOrderStatus(orderCode, { enabled = true, intervalMs = 3000, fetchStatus = fetchOrderStatusAPI } = {}) {
-    const [clock, setClock] = useState(null);
+export function useOrderStatus(orderCode, { enabled = true, intervalMs, fetchStatus = fetchOrderStatusAPI } = {}) {
+    const clockRef = useRef(null);
+    if (clockRef.current === null) clockRef.current = createServerClock();
+    const boostUntilRef = useRef(0);
+    const [sample, setSample] = useState({ offset: null, atMs: 0 });   // cùng nhịp với `data` (cùng một lô cập nhật)
+
+    const delay = useCallback((st) => {
+        if (typeof intervalMs === 'number') return intervalMs;
+        const now = Date.now();
+        return nextPollDelayMs(st?.status, st ? inspectionRemainingAt(st, clockRef.current.offset, now) : null, { boosted: now < boostUntilRef.current });
+    }, [intervalMs]);
+
     const poll = usePolling(
         async (signal) => {
             const st = await fetchStatus(orderCode, signal);
-            setClock({ serverTime: Number(st.server_time), receivedAtMs: Date.now() });
+            const atMs = Date.now();
+            if (st?.server_time != null) setSample({ offset: clockRef.current.observe(Number(st.server_time), atMs), atMs });
             return st;
         },
-        { intervalMs, enabled: enabled && Boolean(orderCode), stopWhen: (st) => isTerminalStatus(st?.status) },
+        { intervalMs: delay, enabled: enabled && Boolean(orderCode), stopWhen: (st) => isTerminalStatus(st?.status) },
     );
+    const { refresh } = poll;
+    const boost = useCallback((ms = BOOST_MS) => {
+        boostUntilRef.current = Date.now() + ms;
+        return refresh();
+    }, [refresh]);
+
     const status = poll.data;
-    const ticking = Boolean(status) && status.delivered_at != null && !poll.stopped;
-    const nowMs = useNow(ticking);
+    // Tick khi có đồng hồ phải đếm: hạn kiểm tra (đã giao) hoặc hạn hủy đơn chưa giao (còn LOCKED, đã biết mốc ký quỹ)
+    const ticking = Boolean(status) && !poll.stopped && (status.delivered_at != null || (status.status === 'LOCKED' && status.chain_created_at != null));
+    const nowMs = useNow(ticking, TICK_MS);
     return {
         status,
         error: poll.error,
         stopped: poll.stopped,
-        clock,
+        offset: sample.offset,
         // nowMs có thể "cũ" hơn lần poll gần nhất (vừa bật tick): không để thời gian trôi âm làm đếm ngược nhảy lên
-        remaining: status ? inspectionRemaining(status, clock, Math.max(nowMs, clock?.receivedAtMs ?? 0)) : null,
-        refresh: poll.refresh,
+        remaining: status ? inspectionRemainingAt(status, sample.offset, Math.max(nowMs, sample.atMs)) : null,
+        deliveryRemaining: status ? deliveryRemainingAt(status, sample.offset, Math.max(nowMs, sample.atMs)) : null,
+        boost,
+        refresh,
     };
 }

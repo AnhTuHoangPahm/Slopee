@@ -11,7 +11,7 @@ from werkzeug.exceptions import HTTPException
 from auth_utils import require_auth
 from errors import ApiError
 from routes.auth import get_db_connection
-from validation import json_body, get_str
+from validation import as_int, get_str, json_body
 
 from ...domain.errors import DomainError, http_status
 from ...ports.chain_port import ChainUnavailable
@@ -20,8 +20,10 @@ from . import container as c
 log = logging.getLogger('slopee.web3')
 
 shipper_bp = Blueprint('w3_shipper', __name__)
+merchant_bp = Blueprint('w3_merchant', __name__)
 admin_w3_bp = Blueprint('w3_admin', __name__)
 notifications_bp = Blueprint('w3_notifications', __name__)
+disputes_bp = Blueprint('w3_disputes', __name__)
 wallet_bp = Blueprint('w3_wallet', __name__)
 orders_bp = Blueprint('w3_orders', __name__)
 groups_bp = Blueprint('w3_groups', __name__)
@@ -59,7 +61,7 @@ def _on_unexpected(e):
     return _err('internal_error', 'Đã có lỗi phía máy chủ, hãy thử lại sau.', 500)
 
 
-for _bp in (wallet_bp, orders_bp, groups_bp, shipper_bp, admin_w3_bp, notifications_bp):
+for _bp in (wallet_bp, orders_bp, groups_bp, shipper_bp, merchant_bp, admin_w3_bp, notifications_bp, disputes_bp):
     _bp.register_error_handler(DomainError, _on_domain_error)
     _bp.register_error_handler(ApiError, _on_api_error)
     _bp.register_error_handler(ChainUnavailable, _on_chain_unavailable)
@@ -167,6 +169,15 @@ def shipper_deliver(order_code):
     return jsonify(_container().shipper_service().deliver(g.user_id, order_code)), 200
 
 
+# ------------------------------------------------------------------ UC-07 (Tuần 7, A): cổng Merchant. CHỈ role `seller`, CHỈ đơn của shop mình.
+@merchant_bp.route('/orders', methods=['GET'])
+@require_auth('seller')
+def merchant_orders():
+    """Đơn Web3 của shop (đã ký quỹ trở đi) + số dư chờ rút. Mới ngoài SDD 10.2 (SDD 9.2 có màn /merchant/orders nhưng không có API), chờ nhóm xác nhận.
+    Danh tính chỉ từ token; mọi query string/body bị bỏ qua."""
+    return jsonify(_container().merchant_service().list_orders(g.user_id)), 200
+
+
 # ------------------------------------------------------------------ Admin (Tuần 5). Mới ngoài danh sách SDD 10.2, chờ nhóm xác nhận
 @admin_w3_bp.route('/reconcile', methods=['GET'])
 @require_auth('admin')
@@ -189,3 +200,45 @@ def admin_assign_shipper(order_code):
 def my_notifications():
     """Thông báo của chính người gọi (ví dụ: đơn đã giao kèm hạn khiếu nại). Danh tính chỉ từ token."""
     return jsonify(_container().notification_service().list_for_user(g.user_id)), 200
+
+
+# ------------------------------------------------------------------ UC-06 (Tuần 6, A)
+@disputes_bp.route('/<order_code>/submit', methods=['POST'])
+@require_auth(*BUYER_ROLES, 'admin')
+def dispute_submit(order_code):
+    """Relayer nộp `resolveDispute` khi đủ chữ ký của hai bên khác nhau. Danh tính chỉ từ token; thân yêu cầu bị bỏ qua.
+    Trạng thái đề xuất sang EXECUTED do Indexer (BR-09), nên trả outcome + tx_hash. B thêm GET/signatures vào cùng blueprint này."""
+    return jsonify(_container().dispute_submit_service().submit(g.user_id, g.role, order_code)), 200
+
+
+@admin_w3_bp.route('/disputes', methods=['GET'])
+@require_auth('admin')
+def admin_disputes():
+    """Các đơn đang DISPUTED kèm ghi chú của Buyer, đề xuất mới nhất và các bên đã ký (màn hình Admin). Mới ngoài SDD 10.2."""
+    return jsonify(_container().dispute_admin_service().list_open()), 200
+
+
+# ------------------------------------------------------------------ UC-06 (Tuần 6, B): đề xuất + chữ ký + xem
+@admin_w3_bp.route('/disputes/<order_code>/proposal', methods=['POST'])
+@require_auth('admin')
+def admin_dispute_proposal(order_code):
+    """Admin chọn bên nhận tiền (`payout_to`: 'BUYER' | 'MERCHANT' | đúng địa chỉ ví của bên đó); Trọng tài ký ngay (UC-06 bước 1-2)."""
+    body = json_body()
+    return jsonify(_container().dispute_service().propose(g.user_id, order_code, body.get('payout_to'), body.get('reason_note'))), 201
+
+
+@disputes_bp.route('/<order_code>', methods=['GET'])
+@require_auth(*BUYER_ROLES, 'admin')
+def get_dispute(order_code):
+    """Đề xuất + danh sách chữ ký (không có chữ ký thô) + ghi chú khiếu nại. Chỉ Buyer/Merchant của đơn hoặc Admin."""
+    return jsonify(_container().dispute_service().get(g.user_id, g.role, order_code)), 200
+
+
+@disputes_bp.route('/<order_code>/signatures', methods=['POST'])
+@require_auth(*BUYER_ROLES)
+def add_dispute_signature(order_code):
+    """Bên (Buyer/Merchant) được xác định từ token, không do client chọn (SDD 10.2). Admin không ký thay."""
+    body = json_body()
+    rid = as_int(body.get('resolution_id'), 'resolution_id', minimum=1)
+    return jsonify(_container().dispute_service().add_signature(g.user_id, order_code, rid, body.get('signature'))), 200
+

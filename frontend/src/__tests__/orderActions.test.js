@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-    ACTION_STEP, ORDER_ACTION, clearDisputeDraft, initialActionState, isActionBusy, loadDisputeDraft, mapOrderActionError,
+    ACTION_STEP, ORDER_ACTION, TARGET_STATUS, clearDisputeDraft, initialActionState, isActionBusy, loadDisputeDraft, mapOrderActionError,
     orderActionReducer, runOrderAction, saveDisputeDraft, validateDisputeForm,
 } from '../lib/orderActions';
 
@@ -143,5 +143,47 @@ describe('bản nháp khiếu nại (sessionStorage)', () => {
         expect(() => saveDisputeDraft('o', { reason: 'r' }, broken)).not.toThrow();
         expect(loadDisputeDraft('o', broken)).toBeNull();
         expect(() => clearDisputeDraft('o', broken)).not.toThrow();
+    });
+});
+
+// ---- Tuần 7 [C] (UC-07): "Hủy đơn" quá 14 ngày chưa giao = cancelIfUnfulfilled ----------------------------------------------------------
+describe('cancelIfUnfulfilled (CANCEL_UNFULFILLED)', () => {
+    it('đích là REFUNDED: chỉ khi API (Indexer) báo REFUNDED mới coi là xong', () => {
+        expect(TARGET_STATUS[ORDER_ACTION.CANCEL_UNFULFILLED]).toBe('REFUNDED');
+    });
+    it('runOrderAction gọi đúng hàm với BigInt, không đụng hàm khác, dừng ở MINED', async () => {
+        const events = [];
+        const escrow = { cancelIfUnfulfilled: vi.fn(async () => tx('0xca')), earlyRelease: vi.fn(), raiseDispute: vi.fn() };
+        const r = await runOrderAction({ kind: ORDER_ACTION.CANCEL_UNFULFILLED, onchainOrderId: '100002', escrow, dispatch: (e) => events.push(e) });
+        expect(escrow.cancelIfUnfulfilled).toHaveBeenCalledWith(100002n);
+        expect(escrow.earlyRelease).not.toHaveBeenCalled();
+        expect(escrow.raiseDispute).not.toHaveBeenCalled();
+        expect(r).toEqual({ hash: '0xca' });
+        expect(events.map((e) => e.type)).toEqual(['START', 'SENT', 'MINED']);
+        expect(events[0]).toMatchObject({ type: 'START', kind: ORDER_ACTION.CANCEL_UNFULFILLED });
+    });
+    it('luồng reducer: SIGNING -> CONFIRMING -> WAITING_INDEXER -> DONE', () => {
+        const s = [{ type: 'START', kind: ORDER_ACTION.CANCEL_UNFULFILLED }, { type: 'SENT', hash: '0x1' }, { type: 'MINED' }, { type: 'INDEXED' }].reduce(orderActionReducer, initialActionState());
+        expect(s).toMatchObject({ step: ACTION_STEP.DONE, kind: ORDER_ACTION.CANCEL_UNFULFILLED });
+    });
+    it('người dùng hủy trong ví: FAIL userRejected, không phải lỗi hệ thống', async () => {
+        const events = [];
+        const escrow = { cancelIfUnfulfilled: vi.fn(async () => { throw Object.assign(new Error('rejected'), { code: 4001 }); }) };
+        await expect(runOrderAction({ kind: ORDER_ACTION.CANCEL_UNFULFILLED, onchainOrderId: 1, escrow, dispatch: (e) => events.push(e) })).rejects.toBeTruthy();
+        expect(events.at(-1)).toMatchObject({ type: 'FAIL', error: { code: 'USER_REJECTED', userRejected: true } });
+    });
+    it.each([
+        [{ reason: 'Timeout not reached' }, /Chưa quá 14 ngày/],
+        [{ shortMessage: 'execution reverted: "Timeout not reached"' }, /Chưa quá 14 ngày/],
+        [{ reason: 'Not locked' }, /không còn ở trạng thái chờ giao/],
+        [{ reason: 'Unauthorized' }, /Chỉ ví đã ký quỹ/],
+    ])('revert của contract %j được dịch sang tiếng Việt', (err, re) => {
+        const m = mapOrderActionError(err);
+        expect(m).toMatchObject({ code: 'TX_REVERTED', userRejected: false });
+        expect(m.message).toMatch(re);
+    });
+    it('lý do revert cũ không bị đổi nghĩa bởi ba cụm mới', () => {
+        expect(mapOrderActionError({ reason: 'Not delivered' }).message).toMatch(/không còn ở trạng thái chờ kiểm tra/);
+        expect(mapOrderActionError({ reason: 'Under inspection' }).message).toMatch(/Chưa hết thời hạn kiểm tra/);
     });
 });

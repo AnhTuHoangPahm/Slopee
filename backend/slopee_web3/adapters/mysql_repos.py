@@ -275,7 +275,7 @@ class MySqlCheckoutRepo:
 
     def order_status_row(self, order_id):
         self.cur.execute(
-            "SELECT order_id, buyer_user_id, merchant_user_id, status, delivered_at, inspection_duration, disputed_at, "
+            "SELECT order_id, buyer_user_id, merchant_user_id, status, chain_created_at, delivered_at, inspection_duration, disputed_at, "
             "dispute_timeout, anomaly_flag FROM order_web3 WHERE order_id=%s", (order_id,))
         return self.cur.fetchone()
 
@@ -311,6 +311,18 @@ def reserve_order_stock(cur, order_id):
     return ok
 
 
+def _order_items(cur, order_ids):
+    """Dòng hàng của các đơn (tên chụp lúc mua, số lượng, biến thể) -> {order_id: [..]}. Dùng chung cho cổng Shipper và Merchant."""
+    if not order_ids:
+        return {}
+    cur.execute("SELECT orderId, snapshotProductName AS name, quantity, selectedVariants FROM orderLines "
+                f"WHERE orderId IN ({_marks(len(order_ids))}) ORDER BY orderId, id", tuple(order_ids))
+    out = {}
+    for r in cur.fetchall():
+        out.setdefault(r['orderId'], []).append({'name': r['name'], 'quantity': int(r['quantity']), 'variants': r['selectedVariants']})
+    return out
+
+
 class MySqlShipperRepo:
     def __init__(self, cur):
         self.cur = cur
@@ -337,15 +349,7 @@ class MySqlShipperRepo:
         return rows
 
     def _items(self, order_ids):
-        if not order_ids:
-            return {}
-        self.cur.execute("SELECT orderId, snapshotProductName AS name, quantity, selectedVariants FROM orderLines "
-                         f"WHERE orderId IN ({_marks(len(order_ids))}) ORDER BY orderId, id", tuple(order_ids))
-        out = {}
-        for r in self.cur.fetchall():
-            out.setdefault(r['orderId'], []).append(
-                {'name': r['name'], 'quantity': int(r['quantity']), 'variants': r['selectedVariants']})
-        return out
+        return _order_items(self.cur, order_ids)
 
     def assigned_order(self, order_id, shipper_user_id, lock=False):
         self.cur.execute(
@@ -364,6 +368,42 @@ class MySqlShipperRepo:
             "INSERT INTO shipper_assignments (order_id, shipper_user_id, assigned_by) VALUES (%s, %s, %s) "
             "ON DUPLICATE KEY UPDATE shipper_user_id=VALUES(shipper_user_id), assigned_by=VALUES(assigned_by), "
             "assigned_at=CURRENT_TIMESTAMP", (order_id, shipper_user_id, assigned_by))
+
+
+class MySqlMerchantRepo:
+    """Đơn Web3 của Merchant (Tuần 7). Quyền xem = `order_web3.merchant_user_id` (= shops.sellerId), không bao giờ nhận id từ client."""
+
+    def __init__(self, cur):
+        self.cur = cur
+
+    def merchant_orders(self, merchant_user_id, statuses, limit):
+        if not statuses:
+            return []
+        self.cur.execute(
+            "SELECT w.order_id, w.onchain_order_id, w.status, w.amount_raw, w.token_symbol, w.token_address, w.price_vnd, w.fee_bps, "
+            "w.merchant_wallet, w.inspection_duration, w.dispute_timeout, w.chain_created_at, w.delivered_at, w.disputed_at, "
+            "w.closed_at, bu.name AS buyer_name "
+            "FROM order_web3 w LEFT JOIN users bu ON bu.id = w.buyer_user_id "
+            f"WHERE w.merchant_user_id=%s AND w.status IN ({_marks(len(statuses))}) "
+            "ORDER BY w.onchain_order_id DESC LIMIT %s", (merchant_user_id, *statuses, int(limit)))
+        rows = list(self.cur.fetchall())
+        items = _order_items(self.cur, [r['order_id'] for r in rows])
+        for r in rows:
+            r['items'] = items.get(r['order_id'], [])
+        return rows
+
+    def merchant_wallets(self, merchant_user_id):
+        """Ví đang liên kết VÀ mọi ví từng dùng làm `merchant` trên đơn của shop (số dư chờ rút gắn với ví nhận tiền thật sự trên chuỗi)."""
+        self.cur.execute("SELECT address FROM user_wallets WHERE user_id=%s AND is_active=1 "
+                         "UNION SELECT merchant_wallet FROM order_web3 WHERE merchant_user_id=%s", (merchant_user_id, merchant_user_id))
+        return sorted({str(r['address']).lower() for r in self.cur.fetchall()})
+
+    def pending_for_addresses(self, addresses):
+        if not addresses:
+            return []
+        self.cur.execute(f"SELECT token_address, address, amount_raw FROM pending_balances WHERE address IN ({_marks(len(addresses))})",
+                         tuple(addresses))
+        return [r for r in self.cur.fetchall() if int(r['amount_raw']) > 0]
 
 
 class MySqlOutboxRepo:
@@ -526,6 +566,137 @@ class MySqlDisputeNoteRepo:
         return self.cur.fetchone()
 
 
+def resolution_executed(cur, order_id, payout_to):
+    """Indexer thấy DisputeResolved: đề xuất KHỚP bên nhận tiền -> EXECUTED từ BẤT KỲ trạng thái nào (A: relayer chỉ đặt SUBMITTED; tác vụ
+    hết hạn có thể đã đặt EXPIRED khi giao dịch gửi kịp hạn nhưng vào chuỗi muộn). Chuỗi là sự thật (BR-09) nên kể cả đề xuất đã CANCELLED vẫn
+    ghi EXECUTED. Trả: 'OK' (khớp, hoặc đã EXECUTED từ trước nên replay vô hại) | 'WAS_CANCELLED' (đề xuất đã bị Admin hủy mà vẫn được thi hành
+    bằng chữ ký cũ) | 'NONE' (không có đề xuất nào của sàn khớp: ai đó nộp chữ ký ngoài sàn). Hai kết quả sau đều cần anomaly."""
+    for statuses, result in ((('SUBMITTED', 'READY', 'PROPOSED', 'EXPIRED'), 'OK'), (('CANCELLED',), 'WAS_CANCELLED')):
+        cur.execute(f"UPDATE dispute_resolutions SET status='EXECUTED' WHERE order_id=%s AND LOWER(payout_to)=LOWER(%s) "
+                    f"AND status IN ({_marks(len(statuses))}) ORDER BY FIELD(status, {', '.join(['%s'] * len(statuses))}), id DESC LIMIT 1",
+                    (order_id, payout_to, *statuses, *statuses))
+        if cur.rowcount:
+            return result
+    cur.execute("SELECT 1 AS x FROM dispute_resolutions WHERE order_id=%s AND LOWER(payout_to)=LOWER(%s) AND status='EXECUTED' LIMIT 1",
+                (order_id, payout_to))
+    return 'OK' if cur.fetchone() else 'NONE'
+
+
+def resolution_unexecuted(cur, order_id, payout_to):
+    """Reorg: block chứa DisputeResolved bị bỏ -> đề xuất EXECUTED quay về trạng thái trước (SUBMITTED nếu relayer đã nộp, ngược lại READY)."""
+    cur.execute("UPDATE dispute_resolutions SET status=IF(submitted_tx_hash IS NULL, 'READY', 'SUBMITTED') "
+                "WHERE order_id=%s AND LOWER(payout_to)=LOWER(%s) AND status='EXECUTED' ORDER BY id DESC LIMIT 1", (order_id, payout_to))
+    return cur.rowcount
+
+
+def resolutions_superseded(cur, order_id):
+    """Indexer thấy ArbitratorForceResolved: Trọng tài xử đơn phương nên mọi đề xuất đang hoạt động hết ý nghĩa -> CANCELLED."""
+    cur.execute("UPDATE dispute_resolutions SET status='CANCELLED' WHERE order_id=%s AND status IN ('PROPOSED','READY','SUBMITTED')", (order_id,))
+    return cur.rowcount
+
+
+class MySqlDisputeRepo:
+    """dispute_resolutions + dispute_signatures (Tuần 6, A: phần đọc/nộp). Số token đọc ra `int`; mốc thời gian là giây UTC."""
+
+    def __init__(self, cur):
+        self.cur = cur
+
+    def order_for_dispute(self, order_id, lock=False):
+        self.cur.execute(
+            "SELECT order_id, onchain_order_id, buyer_user_id, merchant_user_id, buyer_wallet, merchant_wallet, status, "
+            "amount_raw, token_symbol, fee_bps, disputed_at, dispute_timeout FROM order_web3 WHERE order_id=%s" + (" FOR UPDATE" if lock else ""),
+            (order_id,))
+        return self.cur.fetchone()
+
+    _COLS = ("SELECT id, order_id, payout_to, amount_raw, nonce, deadline, status, reason_note, submitted_tx_hash, "
+             "UNIX_TIMESTAMP(created_at) AS created_at")
+
+    @staticmethod
+    def _resolution(r):
+        r = dict(r)
+        r['amount_raw'] = int(r['amount_raw'])
+        r['nonce'], r['deadline'] = int(r['nonce']), int(r['deadline'])
+        if r.get('created_at') is not None:
+            r['created_at'] = int(r['created_at'])
+        return r
+
+    def latest_resolution(self, order_id, lock=False):
+        self.cur.execute(
+            f"{self._COLS} FROM dispute_resolutions WHERE order_id=%s ORDER BY id DESC LIMIT 1" + (" FOR UPDATE" if lock else ""),
+            (order_id,))
+        row = self.cur.fetchone()
+        return self._resolution(row) if row else None
+
+    def get_resolution(self, resolution_id):
+        self.cur.execute(f"{self._COLS} FROM dispute_resolutions WHERE id=%s", (resolution_id,))
+        row = self.cur.fetchone()
+        return self._resolution(row) if row else None
+
+    def create_resolution(self, order_id, payout_to, amount_raw, nonce, deadline, reason_note, admin_id):
+        self.cur.execute("INSERT INTO dispute_resolutions (order_id, payout_to, amount_raw, nonce, deadline, status, reason_note, "
+                         "created_by_admin) VALUES (%s, %s, %s, %s, %s, 'PROPOSED', %s, %s)",
+                         (order_id, payout_to, str(amount_raw), int(nonce), int(deadline), reason_note, admin_id))
+        return int(self.cur.lastrowid)
+
+    def add_signature(self, resolution_id, party, signer_address, signature):
+        """UNIQUE(resolution_id, party): INSERT IGNORE trả False khi bên đó đã ký (service quyết định idempotent hay lỗi)."""
+        self.cur.execute("INSERT IGNORE INTO dispute_signatures (resolution_id, party, signer_address, signature) "
+                         "VALUES (%s, %s, %s, %s)", (resolution_id, party, signer_address.lower(), signature))
+        return self.cur.rowcount == 1
+
+    def expire_due(self, now, limit):
+        """PROPOSED/READY quá `deadline` -> EXPIRED (contract chỉ nhận khi block.timestamp <= deadline). Không đụng SUBMITTED/EXECUTED."""
+        self.cur.execute("UPDATE dispute_resolutions SET status='EXPIRED' WHERE status IN ('PROPOSED','READY') AND deadline < %s "
+                         "ORDER BY id LIMIT %s", (int(now), int(limit)))
+        return self.cur.rowcount
+
+    def signatures(self, resolution_id):
+        self.cur.execute("SELECT party, signer_address, signature, UNIX_TIMESTAMP(created_at) AS signed_at FROM dispute_signatures "
+                         "WHERE resolution_id=%s ORDER BY id", (resolution_id,))
+        return list(self.cur.fetchall())
+
+    def transition_resolution(self, resolution_id, from_states, to_status, tx_hash=None):
+        """UPDATE có điều kiện trạng thái cũ (SDD 7.5). True nếu chuyển được; False nếu đã bị đổi (Indexer đặt EXECUTED, v.v.)."""
+        if not from_states:
+            return False
+        self.cur.execute(
+            "UPDATE dispute_resolutions SET status=%s, submitted_tx_hash=COALESCE(%s, submitted_tx_hash) "
+            f"WHERE id=%s AND status IN ({_marks(len(from_states))})", (to_status, tx_hash, resolution_id, *from_states))
+        return self.cur.rowcount == 1
+
+    def open_disputes(self):
+        self.cur.execute(
+            "SELECT w.order_id, w.onchain_order_id, w.amount_raw, w.token_symbol, w.price_vnd, w.buyer_wallet, w.merchant_wallet, "
+            "w.disputed_at, w.dispute_timeout, s.name AS shop_name, bu.name AS buyer_name "
+            "FROM order_web3 w LEFT JOIN shops s ON s.id = w.shop_id LEFT JOIN users bu ON bu.id = w.buyer_user_id "
+            "WHERE w.status='DISPUTED' ORDER BY w.disputed_at, w.onchain_order_id")
+        rows = list(self.cur.fetchall())
+        ids = [r['order_id'] for r in rows]
+        notes, latest, sigs = {}, {}, {}
+        if ids:
+            self.cur.execute(f"SELECT order_id, reason, evidence_url FROM dispute_notes WHERE order_id IN ({_marks(len(ids))})", tuple(ids))
+            notes = {r['order_id']: r for r in self.cur.fetchall()}
+            self.cur.execute(
+                "SELECT id, order_id, payout_to, amount_raw, nonce, deadline, status, reason_note, submitted_tx_hash "
+                f"FROM dispute_resolutions WHERE order_id IN ({_marks(len(ids))}) ORDER BY id", tuple(ids))
+            for r in self.cur.fetchall():
+                latest[r['order_id']] = self._resolution(r)            # id tăng dần nên bản cuối là mới nhất
+            if latest:
+                rid = [r['id'] for r in latest.values()]
+                self.cur.execute(f"SELECT resolution_id, party FROM dispute_signatures WHERE resolution_id IN ({_marks(len(rid))})",
+                                 tuple(rid))
+                for r in self.cur.fetchall():
+                    sigs.setdefault(r['resolution_id'], []).append(r['party'])
+        for r in rows:
+            r['amount_raw'], r['price_vnd'] = int(r['amount_raw']), int(r['price_vnd'])
+            r['note'] = notes.get(r['order_id'])
+            res = latest.get(r['order_id'])
+            if res:
+                res['signed_by'] = sigs.get(res['id'], [])
+            r['resolution'] = res
+        return rows
+
+
 class MySqlUnitOfWork:
     """Một kết nối + một transaction. Thoát khối `with` mà chưa `commit()` thì ROLLBACK (lỗi bất kỳ -> rollback cả lô)."""
 
@@ -541,11 +712,13 @@ class MySqlUnitOfWork:
         self.policies = MySqlPolicyRepo(self.cur)
         self.checkout = MySqlCheckoutRepo(self.cur)
         self.shipper = MySqlShipperRepo(self.cur)
+        self.merchant = MySqlMerchantRepo(self.cur)
         self.outbox = MySqlOutboxRepo(self.cur)
         self.notifications = MySqlNotificationRepo(self.cur)
         self.jobs = MySqlJobsRepo(self.cur)
         self.reconcile = MySqlReconcileRepo(self.cur)
         self.dispute_notes = MySqlDisputeNoteRepo(self.cur)
+        self.disputes = MySqlDisputeRepo(self.cur)
         return self
 
     def commit(self):

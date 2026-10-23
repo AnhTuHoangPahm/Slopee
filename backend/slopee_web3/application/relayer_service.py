@@ -19,6 +19,7 @@ log = logging.getLogger('slopee.web3')
 
 KIND_DELIVER = 'DELIVER'
 KIND_RELEASE = 'RELEASE'
+KIND_RESOLVE = 'RESOLVE'
 SHIPPER_ROLE = 'shipper'
 
 
@@ -61,6 +62,40 @@ class RelayerService:
                                    timeout=self._queue_timeout)
         except TimeoutError:
             raise DomainError('CHAIN_UNAVAILABLE', 'Hệ thống đang bận gửi giao dịch lên blockchain, hãy kiểm tra lại sau ít phút.')
+
+    # ------------------------------------------------------------------ UC-06 (A, tuần 6)
+    def resolve_dispute(self, order_id, onchain_order_id, payout_to, deadline, sig1, sig2, nonce):
+        """Nộp `resolveDispute(orderId, payoutTo, deadline, sig1, sig2)` (ai cũng nộp được; relayer trả gas). Người gọi PHẢI đã kiểm
+        chữ ký ở tầng ứng dụng (DisputeSubmitService); ở đây chỉ kiểm phần chuỗi: đơn còn DISPUTED và `disputeNonces` còn đúng
+        `nonce` mà chữ ký mang. Trả {'outcome': 'SENT'|'ALREADY_RESOLVED', 'tx_hash', 'outbox_id'}."""
+        onchain_order_id, nonce = int(onchain_order_id), int(nonce)
+        sender = self._shipper_address()
+        args = [onchain_order_id, payout_to, int(deadline), bytes.fromhex(sig1[2:] if sig1.startswith('0x') else sig1),
+                bytes.fromhex(sig2[2:] if sig2.startswith('0x') else sig2)]
+
+        def check(oid):
+            return self._check_resolve_state(oid, nonce)
+
+        early = check(onchain_order_id)
+        if early is not None:
+            return early
+        try:
+            return self._queue.run(self._guarded(lambda: self._send_job(
+                KIND_RESOLVE, 'resolveDispute', check, order_id, onchain_order_id, sender,
+                'Hợp đồng từ chối phán quyết (chữ ký, hạn hoặc nonce không hợp lệ).',
+                'Giao dịch phán quyết bị hoàn tác trên blockchain.', args=args)), timeout=self._queue_timeout)
+        except TimeoutError:
+            raise DomainError('CHAIN_UNAVAILABLE', 'Hệ thống đang bận gửi giao dịch lên blockchain, hãy kiểm tra lại sau ít phút.')
+
+    def _check_resolve_state(self, onchain_order_id, nonce):
+        state = self._chain.get_order_state(onchain_order_id)
+        if state in ('COMPLETED', 'REFUNDED'):
+            return {'outcome': 'ALREADY_RESOLVED', 'tx_hash': None, 'outbox_id': None, 'chain_state': state}
+        if state != 'DISPUTED':
+            raise DomainError('INVALID_STATE', 'Đơn không ở trạng thái tranh chấp.', {'chain_state': state})
+        if int(self._chain.dispute_nonce(onchain_order_id)) != nonce:
+            raise DomainError('DISPUTE_STALE', 'Đề xuất phán quyết đã cũ (nonce trên chuỗi đã đổi), cần đề xuất mới.')
+        return None
 
     # ------------------------------------------------------------------ nội bộ
     def _guarded(self, job):
@@ -117,13 +152,13 @@ class RelayerService:
                               sender, 'Hợp đồng từ chối giao dịch giải ngân.',
                               'Giao dịch giải ngân bị hoàn tác trên blockchain.')
 
-    def _send_job(self, kind, fn_name, check, order_id, onchain_order_id, sender, msg_rejected, msg_reverted):
+    def _send_job(self, kind, fn_name, check, order_id, onchain_order_id, sender, msg_rejected, msg_reverted, args=None):
         early = check(onchain_order_id)                      # kiểm lại trong hàng đợi (xem docstring đầu tệp)
         if early is not None:
             return early
         outbox_id = self._log(lambda ob: ob.insert(kind, order_id))
         try:
-            tx_hash = self._chain.send_tx(fn_name, [onchain_order_id], sender,
+            tx_hash = self._chain.send_tx(fn_name, [onchain_order_id] if args is None else args, sender,
                                           lambda tx: self._signer.sign_transaction(SHIPPER_ROLE, tx))
         except ChainTxFailed as e:
             self._fail(outbox_id, f'revert: {e}')

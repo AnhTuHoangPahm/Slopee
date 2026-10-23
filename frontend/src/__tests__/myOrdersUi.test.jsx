@@ -303,6 +303,13 @@ describe('MyOrders — các trạng thái khác', () => {
         expect(inPanel('o1').queryByTestId('receive-btn')).toBeNull();
         expect(inPanel('o1').queryByTestId('countdown')).toBeNull();
     });
+    it('DISPUTED: có liên kết sang màn hình phán quyết /disputes/:code; trạng thái khác thì không', async () => {
+        await show([order('o1', web3({ status: 'DISPUTED', disputed_at: NOW + 5 })), order('o2', web3({ onchain_order_id: 2 }))],
+            { fetchStatus: serverState({ o1: { status: 'DISPUTED' } }).fetchStatus, connect: false, saveNote: vi.fn(async () => ({})) });
+        const link = await inPanel('o1').findByTestId('dispute-link');
+        expect(link.getAttribute('href')).toBe('/disputes/o1');
+        expect(inPanel('o2').queryByTestId('dispute-link')).toBeNull();
+    });
     it('PENDING_PAYMENT: không poll, hướng dẫn hoàn tất thanh toán', async () => {
         const srv = serverState();
         await show([order('o1', web3({ status: 'PENDING_PAYMENT', delivered_at: null }))], { fetchStatus: srv.fetchStatus, connect: false });
@@ -315,5 +322,160 @@ describe('MyOrders — các trạng thái khác', () => {
         await show([order('o1', web3({ status: 'LOCKED', delivered_at: null }))], { fetchStatus, connect: false });
         expect(await inPanel('o1').findByText(/đang thử lại/)).toBeTruthy();
         expect(inPanel('o1').getByTestId('status-badge').dataset.status).toBe('LOCKED');
+    });
+});
+
+// ---- Tuần 7 [C] (UC-07, BR-05): "Hủy đơn & nhận lại tiền" khi đơn LOCKED quá 14 ngày chưa giao (cancelIfUnfulfilled) -----------------------
+describe('MyOrders — Hủy đơn chưa giao quá 14 ngày (cancelIfUnfulfilled, UC-07)', () => {
+    const DAY = 86400;
+    // server_time mặc định của apiStatus = NOW + 60. created = NOW - 15 ngày => đã quá mốc; NOW - 10 ngày => còn ~4 ngày.
+    const locked = (createdAgoDays, over = {}) => ({ status: 'LOCKED', delivered_at: null, chain_created_at: NOW - createdAgoDays * DAY, ...over });
+    const lockedWeb3 = (createdAgoDays, over = {}) => web3({ status: 'LOCKED', delivered_at: null, chain_created_at: NOW - createdAgoDays * DAY, ...over });
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    it('chưa tới 14 ngày: hiện đồng hồ giao hàng, nút Hủy đơn bị khóa, không có Đã nhận hàng/Khiếu nại', async () => {
+        const { fetchStatus } = serverState({ o1: locked(10) });
+        const escrow = { cancelIfUnfulfilled: vi.fn(async () => tx()) };
+        await show([order('o1', lockedWeb3(10))], { fetchStatus, escrow });
+        const t = await inPanel('o1').findByTestId('delivery-countdown');
+        await waitFor(() => expect(t.textContent).toMatch(/3 ngày 23:5\d:\d\d/));
+        expect(inPanel('o1').getByTestId('cancel-btn').disabled).toBe(true);
+        expect(inPanel('o1').queryByTestId('receive-btn')).toBeNull();
+        expect(inPanel('o1').queryByTestId('dispute-btn')).toBeNull();
+        fireEvent.click(inPanel('o1').getByTestId('cancel-btn'));
+        expect(inPanel('o1').queryByTestId('cancel-confirm-box')).toBeNull();
+        expect(escrow.cancelIfUnfulfilled).not.toHaveBeenCalled();
+    });
+
+    it('quá 14 ngày: nút bật, có lời giải thích, hết đồng hồ giao hàng', async () => {
+        const { fetchStatus } = serverState({ o1: locked(15) });
+        await show([order('o1', lockedWeb3(15))], { fetchStatus });
+        await waitFor(() => expect(inPanel('o1').getByTestId('cancel-btn').disabled).toBe(false));
+        expect(inPanel('o1').queryByTestId('delivery-countdown')).toBeNull();
+        expect(inPanel('o1').getByTestId('phase-text').textContent).toMatch(/quá 14 ngày/);
+    });
+
+    it('đường vui: bấm -> xác nhận NGAY TRONG trang (không window.confirm) -> cancelIfUnfulfilled đúng id -> chỉ REFUNDED khi API báo', async () => {
+        const srv = serverState({ o1: locked(15) });
+        const escrow = { cancelIfUnfulfilled: vi.fn(async () => tx()), earlyRelease: vi.fn(), raiseDispute: vi.fn() };
+        await show([order('o1', lockedWeb3(15))], { fetchStatus: srv.fetchStatus, escrow });
+        await waitFor(() => expect(inPanel('o1').getByTestId('cancel-btn').disabled).toBe(false));
+        fireEvent.click(inPanel('o1').getByTestId('cancel-btn'));
+        expect(inPanel('o1').getByTestId('cancel-confirm-box').textContent).toMatch(/hoàn lại cho ví của bạn/);
+        expect(escrow.cancelIfUnfulfilled).not.toHaveBeenCalled();          // mới chỉ hỏi, chưa mở ví
+        fireEvent.click(inPanel('o1').getByTestId('cancel-confirm'));
+
+        await waitFor(() => expect(escrow.cancelIfUnfulfilled).toHaveBeenCalledWith(100001n));
+        expect(window.confirm).not.toHaveBeenCalled();                      // quy tắc Web3: không dùng confirm của trình duyệt
+        await waitFor(() => expect(inPanel('o1').getByTestId('action-progress').dataset.step).toBe('WAITING_INDEXER'));
+        // biên nhận đã có nhưng API vẫn LOCKED: KHÔNG tự coi là đã hoàn tiền (DD-04, BR-09)
+        expect(inPanel('o1').getByTestId('status-badge').dataset.status).toBe('LOCKED');
+        expect(inPanel('o1').getByTestId('cancel-btn').disabled).toBe(true);   // khóa trong lúc chờ: không bấm dồn
+        expect(inPanel('o1').queryByTestId('cancel-confirm-box')).toBeNull();
+        expect(escrow.earlyRelease).not.toHaveBeenCalled();
+        expect(escrow.raiseDispute).not.toHaveBeenCalled();
+
+        srv.st.o1 = { status: 'REFUNDED', delivered_at: null, chain_created_at: NOW - 15 * DAY };   // Indexer ghi OrderRefunded
+        await waitFor(() => expect(inPanel('o1').getByTestId('status-badge').dataset.status).toBe('REFUNDED'));
+        await waitFor(() => expect(inPanel('o1').getByTestId('action-progress').dataset.step).toBe('DONE'));
+        expect(inPanel('o1').getByTestId('action-progress').textContent).toMatch(/Hủy đơn/);
+        expect(inPanel('o1').queryByTestId('cancel-btn')).toBeNull();
+        expect(inPanel('o1').getByTestId('phase-text').textContent).toMatch(/hoàn lại cho bạn/);
+        const calls = srv.fetchStatus.mock.calls.length;
+        await wait(120);
+        expect(srv.fetchStatus.mock.calls.length).toBe(calls);               // trạng thái cuối: polling dừng hẳn
+    });
+
+    it('"Không hủy": đóng khung xác nhận, không gọi ví', async () => {
+        const escrow = { cancelIfUnfulfilled: vi.fn(async () => tx()) };
+        await show([order('o1', lockedWeb3(15))], { fetchStatus: serverState({ o1: locked(15) }).fetchStatus, escrow });
+        await waitFor(() => expect(inPanel('o1').getByTestId('cancel-btn').disabled).toBe(false));
+        fireEvent.click(inPanel('o1').getByTestId('cancel-btn'));
+        fireEvent.click(inPanel('o1').getByTestId('cancel-abort'));
+        await wait(60);
+        expect(inPanel('o1').queryByTestId('cancel-confirm-box')).toBeNull();
+        expect(escrow.cancelIfUnfulfilled).not.toHaveBeenCalled();
+        expect(inPanel('o1').queryByTestId('action-progress')).toBeNull();
+    });
+
+    it('ví khác ví đã ký quỹ: cảnh báo, nút Hủy đơn khóa', async () => {
+        const escrow = { cancelIfUnfulfilled: vi.fn(async () => tx()) };
+        await show([order('o1', lockedWeb3(15))], { fetchStatus: serverState({ o1: locked(15) }).fetchStatus, escrow, account: OTHER });
+        expect(await inPanel('o1').findByTestId('gate-wrong-account')).toBeTruthy();
+        expect(inPanel('o1').getByTestId('cancel-btn').disabled).toBe(true);
+        fireEvent.click(inPanel('o1').getByTestId('cancel-btn'));
+        expect(escrow.cancelIfUnfulfilled).not.toHaveBeenCalled();
+    });
+
+    it('sai mạng: có nút chuyển mạng, Hủy đơn khóa', async () => {
+        await show([order('o1', lockedWeb3(15))], { fetchStatus: serverState({ o1: locked(15) }).fetchStatus, chainId: '0x1' });
+        expect(await inPanel('o1').findByTestId('gate-switch')).toBeTruthy();
+        expect(inPanel('o1').getByTestId('cancel-btn').disabled).toBe(true);
+    });
+
+    it('người dùng hủy trong MetaMask: thông báo nhẹ, đóng được, bấm lại để thử tiếp', async () => {
+        const escrow = { cancelIfUnfulfilled: vi.fn(async () => { throw Object.assign(new Error('rejected'), { code: 4001 }); }) };
+        await show([order('o1', lockedWeb3(15))], { fetchStatus: serverState({ o1: locked(15) }).fetchStatus, escrow });
+        await waitFor(() => expect(inPanel('o1').getByTestId('cancel-btn').disabled).toBe(false));
+        fireEvent.click(inPanel('o1').getByTestId('cancel-btn'));
+        fireEvent.click(inPanel('o1').getByTestId('cancel-confirm'));
+        await waitFor(() => expect(inPanel('o1').getByTestId('action-progress').dataset.step).toBe('FAILED'));
+        expect(inPanel('o1').getByTestId('action-progress').textContent).toMatch(/Bạn đã hủy thao tác/);
+        expect(inPanel('o1').getByTestId('cancel-btn').disabled).toBe(false);
+    });
+
+    it('contract từ chối "Timeout not reached" (đồng hồ chuỗi chậm hơn dự đoán): báo rõ bằng tiếng Việt, tiền không đổi', async () => {
+        const escrow = { cancelIfUnfulfilled: vi.fn(async () => ({ hash: '0x1', wait: async () => { throw Object.assign(new Error('x'), { reason: 'Timeout not reached' }); } })) };
+        await show([order('o1', lockedWeb3(15))], { fetchStatus: serverState({ o1: locked(15) }).fetchStatus, escrow });
+        await waitFor(() => expect(inPanel('o1').getByTestId('cancel-btn').disabled).toBe(false));
+        fireEvent.click(inPanel('o1').getByTestId('cancel-btn'));
+        fireEvent.click(inPanel('o1').getByTestId('cancel-confirm'));
+        await waitFor(() => expect(inPanel('o1').getByTestId('action-progress').textContent).toMatch(/Chưa quá 14 ngày/));
+        expect(inPanel('o1').getByTestId('status-badge').dataset.status).toBe('LOCKED');
+    });
+
+    it('bấm dồn nhanh chỉ gửi MỘT giao dịch', async () => {
+        let release;
+        const escrow = { cancelIfUnfulfilled: vi.fn(() => new Promise((r) => { release = () => r(tx()); })) };
+        await show([order('o1', lockedWeb3(15))], { fetchStatus: serverState({ o1: locked(15) }).fetchStatus, escrow });
+        await waitFor(() => expect(inPanel('o1').getByTestId('cancel-btn').disabled).toBe(false));
+        fireEvent.click(inPanel('o1').getByTestId('cancel-btn'));
+        const confirm = inPanel('o1').getByTestId('cancel-confirm');
+        fireEvent.click(confirm); fireEvent.click(confirm); fireEvent.click(confirm);
+        await waitFor(() => expect(escrow.cancelIfUnfulfilled).toHaveBeenCalledTimes(1));
+        release();
+    });
+
+    it('đơn thiếu chain_created_at (dữ liệu cũ): không hiện phần Hủy đơn, không đoán theo created_at của đơn', async () => {
+        const { fetchStatus } = serverState({ o1: { status: 'LOCKED', delivered_at: null } });
+        await show([order('o1', web3({ status: 'LOCKED', delivered_at: null }))], { fetchStatus, connect: false });
+        await waitFor(() => expect(fetchStatus).toHaveBeenCalled());
+        await wait(80);
+        expect(inPanel('o1').queryByTestId('cancel-section')).toBeNull();
+        expect(inPanel('o1').queryByTestId('cancel-btn')).toBeNull();
+    });
+
+    it('đơn đã giao hoặc đã xong không có nút Hủy đơn, dù đã quá 14 ngày kể từ lúc ký quỹ', async () => {
+        const delivered = { status: 'DELIVERED', chain_created_at: NOW - 20 * DAY };
+        await show([order('o1', web3({ chain_created_at: NOW - 20 * DAY })), order('o2', web3({ status: 'COMPLETED', chain_created_at: NOW - 20 * DAY }))],
+            { fetchStatus: serverState({ o1: delivered }).fetchStatus, connect: false });
+        await waitFor(() => expect(inPanel('o1').getByTestId('receive-btn')).toBeTruthy());
+        expect(inPanel('o1').queryByTestId('cancel-btn')).toBeNull();
+        expect(inPanel('o2').queryByTestId('cancel-btn')).toBeNull();
+    });
+
+    it('hai đơn trong một lô: hủy đơn shop A không đổi đơn shop B (BR-11)', async () => {
+        const srv = serverState({ a: locked(15), b: locked(10) });
+        const escrow = { cancelIfUnfulfilled: vi.fn(async () => tx()) };
+        const orders = [order('a', lockedWeb3(15, { onchain_order_id: 111 })), order('b', lockedWeb3(10, { onchain_order_id: 222 }), { items: [{ productName: 'Quần', quantity: 1, unitPrice: 1, shopName: 'Shop B' }] })];
+        await show(orders, { fetchStatus: srv.fetchStatus, escrow });
+        await waitFor(() => expect(inPanel('a').getByTestId('cancel-btn').disabled).toBe(false));
+        expect(inPanel('b').getByTestId('cancel-btn').disabled).toBe(true);         // shop B mới 10 ngày
+        fireEvent.click(inPanel('a').getByTestId('cancel-btn'));
+        fireEvent.click(inPanel('a').getByTestId('cancel-confirm'));
+        await waitFor(() => expect(escrow.cancelIfUnfulfilled).toHaveBeenCalledTimes(1));
+        expect(escrow.cancelIfUnfulfilled).toHaveBeenCalledWith(111n);
+        expect(inPanel('b').getByTestId('status-badge').dataset.status).toBe('LOCKED');
+        expect(inPanel('b').queryByTestId('action-progress')).toBeNull();
     });
 });

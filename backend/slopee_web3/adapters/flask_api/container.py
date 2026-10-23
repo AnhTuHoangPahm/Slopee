@@ -6,13 +6,17 @@ Chưa cấu hình Web3 (chưa chạy bootstrap) -> WEB3_NOT_CONFIGURED 503, ứn
 import logging
 import threading
 
+from ...application.dispute_admin_service import DisputeAdminService
 from ...application.dispute_note_service import DisputeNoteService
-from ...application.jobs import AutoRelease, DeliveryTimeoutReminder, QuoteExpirySweeper
+from ...application.dispute_service import DisputeService
+from ...application.dispute_submit_service import DisputeSubmitService
+from ...application.jobs import AutoRelease, DeliveryTimeoutReminder, DisputeSigExpiry, QuoteExpirySweeper
 from ...application.notification_service import NotificationService
 from ...application.order_status_service import OrderStatusService
 from ...application.quote_service import QuoteService
 from ...application.reconcile_service import ReconcileService
 from ...application.relayer_service import RelayerService
+from ...application.merchant_service import MerchantService
 from ...application.shipper_service import ShipperService
 from ...application.wallet_service import WalletService
 from ...domain.errors import DomainError
@@ -46,8 +50,21 @@ class Web3Container:
     def relayer_service(self):
         return RelayerService(self.uow_factory, self.chain, self.signer, self.relayer_queue, job_guard=self.job_guard)
 
+    def dispute_submit_service(self):
+        return DisputeSubmitService(self.uow_factory, self.chain, self.signer, self.clock, self.relayer_service())
+
+    def dispute_admin_service(self):
+        return DisputeAdminService(self.uow_factory, self.clock)
+
     def shipper_service(self):
         return ShipperService(self.uow_factory, self.relayer_service())
+
+    def merchant_service(self):
+        return MerchantService(self.uow_factory, tokens={self.settings.token_address: {'symbol': self.settings.token_symbol,
+                                                                                       'decimals': self.settings.token_decimals}})
+
+    def dispute_service(self):
+        return DisputeService(self.uow_factory, self.chain, self.signer, self.clock, token_decimals=self.settings.token_decimals)
 
     def dispute_note_service(self):
         return DisputeNoteService(self.uow_factory)
@@ -60,11 +77,12 @@ class Web3Container:
                                 confirmations=self.settings.confirmations)
 
     def jobs(self):
-        """Danh sách tác vụ nền cho Scheduler (SDD 5.5). DisputeSigExpiry thuộc Tuần 6."""
+        """Danh sách tác vụ nền cho Scheduler (SDD 5.5)."""
         s = self.settings
         sweeper = QuoteExpirySweeper(self.uow_factory, self.chain, self.clock, grace=s.quote_expiry_grace_seconds)
         release = AutoRelease(self.uow_factory, self.chain, self.clock, self.relayer_service())
         reminder = DeliveryTimeoutReminder(self.uow_factory, self.chain, self.clock)
+        dispute_expiry = DisputeSigExpiry(self.uow_factory, self.clock)
 
         def reconcile_snapshot():
             r = self.reconcile_service().run()
@@ -74,6 +92,7 @@ class Web3Container:
         return [Job('QuoteExpirySweeper', s.quote_sweep_seconds, sweeper.run_once),
                 Job('AutoRelease', s.auto_release_seconds, release.run_once),
                 Job('DeliveryTimeoutReminder', s.timeout_reminder_seconds, reminder.run_once),
+                Job('DisputeSigExpiry', s.dispute_expiry_seconds, dispute_expiry.run_once),
                 Job('ReconcileSnapshot', s.reconcile_seconds, reconcile_snapshot)]
 
     def order_status_service(self):

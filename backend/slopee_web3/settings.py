@@ -28,6 +28,7 @@ class Web3Settings:
     auto_release_seconds: float = 60.0
     timeout_reminder_seconds: float = 3600.0
     reconcile_seconds: float = 600.0
+    dispute_expiry_seconds: float = 300.0
     quote_expiry_grace_seconds: int = 30
     relayer_lock_seconds: int = 30            # chờ khóa GET_LOCK của relayer tối đa chừng này giây
 
@@ -57,6 +58,7 @@ class Web3Settings:
             auto_release_seconds=float(env.get('AUTO_RELEASE_SECONDS', 60)),
             timeout_reminder_seconds=float(env.get('TIMEOUT_REMINDER_SECONDS', 3600)),
             reconcile_seconds=float(env.get('RECONCILE_SECONDS', 600)),
+            dispute_expiry_seconds=float(env.get('DISPUTE_SIG_EXPIRY_SECONDS', 300)),
             quote_expiry_grace_seconds=int(env.get('QUOTE_EXPIRY_GRACE_SECONDS', 30)),
             relayer_lock_seconds=int(env.get('RELAYER_LOCK_SECONDS', 30)),
         )

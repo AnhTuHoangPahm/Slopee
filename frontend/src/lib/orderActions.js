@@ -1,4 +1,5 @@
-// Hành động on-chain của Buyer sau khi đơn đã giao (UC-04 kịch bản 1, UC-05): `earlyRelease` ("Đã nhận hàng") và `raiseDispute` ("Khiếu nại").
+// Hành động on-chain của Buyer trên đơn Web3: `earlyRelease` ("Đã nhận hàng", UC-04) và `raiseDispute` ("Khiếu nại", UC-05) sau khi đơn đã giao;
+// `cancelIfUnfulfilled` ("Hủy đơn", UC-07) khi đơn còn LOCKED quá 14 ngày mà chưa được giao (Tuần 7).
 // Cùng nguyên tắc với depositFlow: hàm thuần + `runOrderAction` nhận hợp đồng qua tham số (test không cần Anvil).
 // Giao diện KHÔNG tự đặt COMPLETED/DISPUTED theo biên nhận của ví: chỉ trạng thái do API (Indexer ghi) mới quyết định (DD-04, BR-09).
 import { revertText } from './depositFlow';
@@ -7,12 +8,14 @@ import { isUserRejection } from './errors';
 export const ORDER_ACTION = Object.freeze({
     EARLY_RELEASE: 'EARLY_RELEASE',
     RAISE_DISPUTE: 'RAISE_DISPUTE',
+    CANCEL_UNFULFILLED: 'CANCEL_UNFULFILLED',
 });
 
 /** Trạng thái đơn mà API phải báo thì mới coi là Indexer đã ghi nhận hành động. */
 export const TARGET_STATUS = Object.freeze({
     [ORDER_ACTION.EARLY_RELEASE]: 'COMPLETED',
     [ORDER_ACTION.RAISE_DISPUTE]: 'DISPUTED',
+    [ORDER_ACTION.CANCEL_UNFULFILLED]: 'REFUNDED',
 });
 
 export const ACTION_STEP = Object.freeze({
@@ -60,6 +63,9 @@ const REVERT_MESSAGES = [
     [/Only buyer/i, 'Chỉ ví đã ký quỹ đơn này mới thao tác được. Hãy chọn đúng ví trong MetaMask.'],
     [/Expired/i, 'Đã quá thời hạn kiểm tra nên không thể khiếu nại nữa.'],
     [/Under inspection/i, 'Chưa hết thời hạn kiểm tra.'],
+    [/Timeout not reached/i, 'Chưa quá 14 ngày kể từ lúc ký quỹ nên chưa thể hủy đơn. Hãy thử lại khi đồng hồ đếm về 0.'],
+    [/Not locked/i, 'Đơn không còn ở trạng thái chờ giao (có thể đã được giao, đã hoàn tiền hoặc đã khiếu nại). Hãy tải lại trang.'],
+    [/Unauthorized/i, 'Chỉ ví đã ký quỹ đơn này mới hủy được. Hãy chọn đúng ví trong MetaMask.'],
 ];
 
 /** Lỗi bất kỳ -> { code, message, userRejected }. 4001 là người dùng hủy, không phải lỗi hệ thống. */
@@ -87,6 +93,7 @@ export async function runOrderAction({ kind, onchainOrderId, escrow, dispatch })
         let tx;
         if (kind === ORDER_ACTION.EARLY_RELEASE) tx = await escrow.earlyRelease(id);
         else if (kind === ORDER_ACTION.RAISE_DISPUTE) tx = await escrow.raiseDispute(id);
+        else if (kind === ORDER_ACTION.CANCEL_UNFULFILLED) tx = await escrow.cancelIfUnfulfilled(id);
         else throw new Error(`Hành động không hỗ trợ: ${String(kind)}`);
         dispatch({ type: 'SENT', hash: tx.hash });
         await tx.wait();
@@ -105,6 +112,14 @@ export const DISPUTE_REASON_MIN = 10;
 export const DISPUTE_REASON_MAX = 1000;
 export const EVIDENCE_URL_MAX = 500;
 
+/** URL http/https hợp lệ (chặn javascript:, data:, file:, ...). Dùng cả khi NHẬP và khi HIỂN THỊ liên kết bằng chứng do người khác gửi. */
+export function isHttpUrl(value) {
+    try {
+        const parsed = new URL(String(value).trim());
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch { return false; }
+}
+
 /** @returns {{ ok: boolean, errors: {reason?: string, evidenceUrl?: string}, value: {reason: string, evidenceUrl: string} }} */
 export function validateDisputeForm({ reason = '', evidenceUrl = '' } = {}) {
     const r = String(reason).trim();
@@ -114,12 +129,7 @@ export function validateDisputeForm({ reason = '', evidenceUrl = '' } = {}) {
     else if (r.length > DISPUTE_REASON_MAX) errors.reason = `Lý do tối đa ${DISPUTE_REASON_MAX} ký tự.`;
     if (u) {
         // Chỉ nhận http(s), cùng quy tắc validate_url của backend (P0-06): chặn javascript:, data:, file:...
-        let ok = false;
-        try {
-            const parsed = new URL(u);
-            ok = parsed.protocol === 'http:' || parsed.protocol === 'https:';
-        } catch { /* không phải URL */ }
-        if (!ok) errors.evidenceUrl = 'Đường dẫn bằng chứng phải bắt đầu bằng http:// hoặc https://.';
+        if (!isHttpUrl(u)) errors.evidenceUrl = 'Đường dẫn bằng chứng phải bắt đầu bằng http:// hoặc https://.';
         else if (u.length > EVIDENCE_URL_MAX) errors.evidenceUrl = `Đường dẫn tối đa ${EVIDENCE_URL_MAX} ký tự.`;
     }
     return { ok: Object.keys(errors).length === 0, errors, value: { reason: r, evidenceUrl: u } };

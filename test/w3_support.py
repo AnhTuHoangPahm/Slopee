@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pymysql
 from eth_account import Account
-from eth_account.messages import encode_defunct
+from eth_account.messages import encode_defunct, encode_typed_data
 
 from slopee_web3.adapters.clock import FixedClock
 from slopee_web3.adapters.env_signer import EnvKeySigner, recover_personal_sign
@@ -155,6 +155,7 @@ class FakeEscrowChain(FakeChain):
         self.pending = {}              # {(token, to): amount} cho PayoutDeferred
         self.eth_balance = 0           # số dư ETH của contract (chỉ để test đối soát nhánh ETH; không theo block)
         self.sent_txs = []
+        self.dispute_nonces = {}       # {onchain_id: nonce} như `disputeNonces`
 
     # ---- đồng hồ / block
     def get_block(self, number):
@@ -190,6 +191,10 @@ class FakeEscrowChain(FakeChain):
             return {'state': 'NONE', 'amount': 0, 'created_at': 0, 'delivered_at': 0, 'disputed_at': 0,
                     'dispute_timeout': 0, 'inspection_duration': 0, 'fee_bps': 0, 'buyer': '', 'merchant': '', 'token': ''}
         return dict(o)
+
+    def dispute_nonce(self, onchain_order_id):
+        self._check()
+        return self.dispute_nonces.get(int(onchain_order_id), 0)
 
     def balance_of(self, token_address, at_block=None):
         self._check()
@@ -248,6 +253,17 @@ class FakeEscrowChain(FakeChain):
         self._balance_delta(-o['amount'])
         return blk
 
+    def arbitrator_force_resolve(self, oid, payout_to):
+        """UC-07: Trọng tài xử đơn phương, chỉ khi đã qua disputedAt + disputeTimeout. Sự kiện đặt SAU OrderCompleted/OrderRefunded như contract."""
+        oid, o = int(oid), self.orders[int(oid)]
+        if o['state'] != 'DISPUTED' or self.now < o['disputed_at'] + o['dispute_timeout']:
+            raise ChainTxFailed('execution reverted: Dispute timeout not reached')
+        if str(payout_to).lower() == o['buyer'].lower():
+            self._refund(oid, o)
+        else:
+            self._complete(oid, o)
+        return self._mine(('ArbitratorForceResolved', dict(orderId=oid, payoutTo=payout_to)))
+
     def defer_payout(self, token, to, amount):
         """ETH: người nhận từ chối -> sổ chờ rút (PayoutDeferred)."""
         self.pending[(token, to)] = self.pending.get((token, to), 0) + int(amount)
@@ -282,13 +298,150 @@ class FakeEscrowChain(FakeChain):
             if self.now < o['delivered_at'] + o['inspection_duration']:
                 raise ChainTxFailed('execution reverted: Under inspection')
             self._complete(oid, o)
+        elif fn == 'resolveDispute':
+            self._resolve_dispute(oid, o, args)
         else:
             raise AssertionError(fn)
         self.sent_txs.append((fn, oid, sender))
         return '0x' + format(len(self.sent_txs), '064x')
 
+    def _resolve_dispute(self, oid, o, args):
+        """Mô hình `resolveDispute` của contract: cùng thứ tự kiểm, cùng thông điệp revert; chữ ký khôi phục bằng eth_account trực tiếp."""
+        _, payout, deadline, sig1, sig2 = args
+        deadline = int(deadline)
+        if o['state'] != 'DISPUTED':
+            raise ChainTxFailed('execution reverted: Not disputed')
+        if str(payout).lower() not in (o['buyer'].lower(), o['merchant'].lower()):
+            raise ChainTxFailed('execution reverted: Invalid payout recipient')
+        if self.now > deadline:
+            raise ChainTxFailed('execution reverted: Signature expired')
+        if not deadline < o['disputed_at'] + o['dispute_timeout']:
+            raise ChainTxFailed('execution reverted: Deadline must be before dispute timeout')
+        nonce = self.dispute_nonces.get(oid, 0)
+        parties = {o['buyer'].lower(): 1, o['merchant'].lower(): 2, ADDR['arbitrator'].lower(): 3}
+        got = []
+        for sig in (sig1, sig2):
+            try:
+                who = Account.recover_message(encode_typed_data(full_message=dispute_typed_data(oid, payout, o['amount'], nonce, deadline)),
+                                              signature=bytes(sig))
+            except Exception:
+                raise ChainTxFailed('execution reverted: ECDSAInvalidSignature')
+            got.append(parties.get(who.lower(), 0))
+        if 0 in got or got[0] == got[1]:
+            raise ChainTxFailed('execution reverted: Need two distinct parties')
+        self.dispute_nonces[oid] = nonce + 1               # chỉ ghi khi KHÔNG revert (revert hoàn tác mức tăng nonce)
+        if str(payout).lower() == o['buyer'].lower():
+            self._refund(oid, o)
+        else:
+            self._complete(oid, o)
+        self._mine(('DisputeResolved', dict(orderId=oid, payoutTo=payout, amount=o['amount'])))
+
     def wait_receipt(self, tx_hash, timeout):
         return {'status': 1, 'block_number': self.head}
+
+
+class MemoryOutbox:
+    """Bảng tx_outbox trong bộ nhớ, đúng máy trạng thái của MySqlOutboxRepo (chuyển có điều kiện trạng thái cũ)."""
+
+    def __init__(self):
+        self.rows = []
+        self.lock = threading.Lock()
+
+    def insert(self, kind, order_id):
+        with self.lock:
+            self.rows.append({'id': len(self.rows) + 1, 'kind': kind, 'order_id': order_id, 'tx_hash': None,
+                              'status': 'PENDING', 'error': None})
+            return len(self.rows)
+
+    def _row(self, oid):
+        return self.rows[oid - 1]
+
+    def mark_sent(self, oid, tx_hash):
+        r = self._row(oid)
+        if r['status'] == 'PENDING':
+            r.update(status='SENT', tx_hash=tx_hash)
+
+    def mark_confirmed(self, oid):
+        r = self._row(oid)
+        if r['status'] == 'SENT':
+            r['status'] = 'CONFIRMED'
+
+    def mark_failed(self, oid, error):
+        r = self._row(oid)
+        if r['status'] in ('PENDING', 'SENT'):
+            r.update(status='FAILED', error=str(error))
+
+    def recent_for_order(self, order_id, limit=20):
+        return [r for r in reversed(self.rows) if r['order_id'] == order_id][:limit]
+
+
+class MemoryUow:
+    def __init__(self, outbox, commits):
+        self.outbox, self._commits = outbox, commits
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return None
+
+    def commit(self):
+        self._commits.append(1)
+
+
+class MemoryDisputeRepo:
+    """DisputeRepo trong bộ nhớ, cùng ngữ nghĩa với MySqlDisputeRepo (chuyển trạng thái có điều kiện trạng thái cũ)."""
+
+    def __init__(self):
+        self.orders, self.resolutions, self.sigs = {}, [], {}
+
+    def order_for_dispute(self, order_id, lock=False):
+        return self.orders.get(order_id)
+
+    def latest_resolution(self, order_id, lock=False):
+        rows = [r for r in self.resolutions if r['order_id'] == order_id]
+        return dict(rows[-1]) if rows else None
+
+    def signatures(self, resolution_id):
+        return [dict(s) for s in self.sigs.get(resolution_id, [])]
+
+    def transition_resolution(self, resolution_id, from_states, to_status, tx_hash=None):
+        r = next(x for x in self.resolutions if x['id'] == resolution_id)
+        if r['status'] not in from_states:
+            return False
+        r['status'] = to_status
+        if tx_hash:
+            r['submitted_tx_hash'] = tx_hash
+        return True
+
+    def open_disputes(self):
+        return []
+
+
+class MemoryDisputeUow(MemoryUow):
+    def __init__(self, outbox, commits, disputes):
+        super().__init__(outbox, commits)
+        self.disputes = disputes
+
+
+def dispute_typed_data(order_id, payout_to, amount, nonce, deadline):
+    """Thông điệp EIP-712 DisputeResolution dựng thẳng từ shared/eip712/types.json (không qua EnvKeySigner) để test chéo."""
+    types = json.loads((ROOT / 'shared' / 'eip712' / 'types.json').read_text(encoding='utf-8'))['types']
+    return {
+        'types': {'EIP712Domain': [{'name': 'name', 'type': 'string'}, {'name': 'version', 'type': 'string'},
+                                   {'name': 'chainId', 'type': 'uint256'}, {'name': 'verifyingContract', 'type': 'address'}],
+                  'DisputeResolution': types['DisputeResolution']},
+        'primaryType': 'DisputeResolution',
+        'domain': {'name': 'SlopeeEscrow', 'version': '1', 'chainId': CHAIN_ID, 'verifyingContract': ESCROW},
+        'message': {'orderId': int(order_id), 'payoutTo': payout_to, 'amount': int(amount), 'nonce': int(nonce), 'deadline': int(deadline)},
+    }
+
+
+def sign_dispute_as(key_name, order_id, payout_to, amount, nonce, deadline):
+    """Chữ ký phán quyết của Buyer/Merchant/Arbitrator như MetaMask `eth_signTypedData_v4` (khóa thử công khai của Anvil)."""
+    signed = Account.sign_message(encode_typed_data(full_message=dispute_typed_data(order_id, payout_to, amount, nonce, deadline)),
+                                  KEYS[key_name])
+    return with_0x(signed.signature.hex())
 
 
 def event(name, block, log_index=0, tx=None, **args):

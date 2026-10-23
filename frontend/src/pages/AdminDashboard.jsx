@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getStatsAPI, getUsersAPI, deleteUserAPI, fetchAdminCategoriesAPI, addCategoryAPI, updateCategoryAPI, deleteCategoryAPI } from '../api/admin';
 import '../assets/admin.css';
 import { getUser, clearSession } from '../api/http';
+import AdminDisputes from '../components/AdminDisputes';
 
 export default function AdminDashboard() {
     const user = getUser();
@@ -119,6 +120,8 @@ export default function AdminDashboard() {
                     <p>{stats.products}</p>
                 </div>
             </div>
+
+            <AdminDisputes />
 
             <div className="admin-table-container">
                 <h2>Requested Account Wipe</h2>

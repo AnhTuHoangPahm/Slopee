@@ -113,3 +113,20 @@ class DeliveryTimeoutReminder:
                 uow.commit()
             stats['reminded' if sent else 'skipped'] += 1
         return stats
+
+
+class DisputeSigExpiry:
+    """Đề xuất PROPOSED/READY quá `deadline` -> EXPIRED (SDD 5.5). Contract chỉ nhận chữ ký khi `block.timestamp <= deadline` nên sau mốc đó
+    chữ ký vô dụng; Admin có thể tạo đề xuất mới. UPDATE có điều kiện trạng thái nên chạy lặp/song song với relayer đều vô hại (SUBMITTED không
+    bị đụng tới). Nếu một giao dịch đã gửi kịp hạn vào chuỗi sau khi job này đặt EXPIRED, Indexer vẫn đặt EXECUTED (chuỗi là sự thật)."""
+
+    def __init__(self, uow_factory, clock, batch=100):
+        self._uow, self._clock, self._batch = uow_factory, clock, batch
+
+    def run_once(self):
+        now = self._clock.now_chain()
+        with self._uow() as uow:
+            n = uow.disputes.expire_due(now, self._batch)
+            uow.commit()
+        return {'expired': n}
+

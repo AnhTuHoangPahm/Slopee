@@ -40,11 +40,11 @@ Quy tắc thư viện: dùng thư viện chuẩn/đã liệt kê; muốn thêm d
 ```
 React (Vite, :5173) ──REST/JSON + Bearer token──▶ Flask (:5000) ──SQL──▶ MySQL
         │                                              │
-        └── MetaMask (ví người dùng, 🔲)               ├──▶ Anvil RPC (🔲: ChainPort, Signer, Relayer)
-                                                       └── Indexer / Scheduler (🔲, tiến trình riêng)
+        └── MetaMask (ví người dùng, ✅)               ├──▶ Anvil RPC (✅: ChainPort, Signer, Relayer)
+                                                       └── Indexer / Scheduler (✅, tiến trình riêng)
 ```
 
-Tiến trình khi chạy: `web` (Flask) ✅ · `indexer` 🔲 (đúng 1 thể hiện, khóa `GET_LOCK('slopee_indexer')`) · `scheduler` 🔲 · `mysql` ✅ · `anvil` 🔲 · `frontend` ✅.
+Tiến trình khi chạy: `web` (Flask) ✅ · `indexer` ✅ (đúng 1 thể hiện, khóa `GET_LOCK('slopee_indexer')`; `python -m slopee_web3.adapters.indexer`) · `scheduler` ✅ (đúng 1 thể hiện, `GET_LOCK('slopee_scheduler')`; `python -m slopee_web3.adapters.scheduler`) · `mysql` ✅ · `anvil` ✅ (`scripts/bootstrap.sh`) · `frontend` ✅.
 
 ### 2.1. Backend hiện tại ✅ — "Blueprint + transaction script" (MVC rút gọn, không có tầng service)
 
@@ -68,23 +68,23 @@ JSON response ({"error": "...", "code": "..."} hoặc payload) + HTTP status
 - "View" là JSON; giao diện nằm ở frontend riêng.
 - Đây là **nền Slopee gốc**. Không refactor hàng loạt sang Hexagonal; chỉ áp dụng kiến trúc mới cho mô-đun Web3 (2.2).
 
-### 2.2. Mô-đun Web3 🔲 — Hexagonal (DD-01, SDD mục 3.3)
+### 2.2. Mô-đun Web3 ✅ — Hexagonal (DD-01, SDD mục 3.3)
 
 ```
 backend/slopee_web3/
-  domain/        thực thể + quy tắc thuần, KHÔNG I/O   money, policy, quote, dispute, order_state
-  application/   ca sử dụng, điều phối các cổng       wallet_service, quote_service, order_service,
-                                                       shipper_service, dispute_service, settings_service,
-                                                       reconcile_service
-  ports/         giao diện trừu tượng                 chain_port, signer_port, clock_port,
-                                                       repositories, notification_port
-  adapters/      hiện thực cổng                       web3_chain, env_signer, mysql_repos, hybrid clock
-  flask_api/     blueprint, schema, ánh xạ lỗi HTTP
-  indexer/       vòng lặp + handler từng sự kiện
-  jobs/          tác vụ nền
+  domain/        thực thể + quy tắc thuần, KHÔNG I/O   money, policy, quote, order_state, release, reconcile, dispute,
+                                                        dispute_note, timefmt, wallet, errors
+  application/   ca sử dụng, điều phối các cổng       wallet_service, quote_service, order_status_service, shipper_service, merchant_service,
+                                                        relayer_service, dispute_service, dispute_admin_service,
+                                                        dispute_submit_service, dispute_note_service, notification_service,
+                                                        reconcile_service, jobs (tác vụ nền)
+  ports/         giao diện trừu tượng                 chain_port, signer_port, clock_port, repositories, relayer_port
+  adapters/      hiện thực cổng + điểm vào            web3_chain, env_signer, mysql_repos, clock, legacy_sync, advisory_lock,
+                                                        relayer_queue, flask_api/ (routes, container, ánh xạ lỗi HTTP),
+                                                        indexer/ (vòng lặp + handler từng sự kiện), scheduler/ (vòng lặp tác vụ nền)
 ```
 
-Quy tắc phụ thuộc (có test kiểm import `T-ARCH-01`): `domain` chỉ import thư viện chuẩn → `application` chỉ phụ thuộc `domain` + `ports` → `adapters`, `flask_api`, `indexer`, `jobs` phụ thuộc vào tất cả bên trong.
+Quy tắc phụ thuộc (có test kiểm import `T-ARCH-01`): `domain` chỉ import thư viện chuẩn → `application` chỉ phụ thuộc `domain` + `ports` → `adapters` (gồm `flask_api`, `indexer`, `scheduler`) phụ thuộc vào tất cả bên trong.
 
 Điểm nối duy nhất với lõi Slopee: tạo đơn (`orders`), danh mục sản phẩm, vai trò người dùng, `sync_legacy_status()` (ghi `orders.status`), và `GET /api/payments/orders` (LEFT JOIN `order_web3`).
 
@@ -101,7 +101,7 @@ App.jsx (Routes)
   └─ lib/chain.js (deployments/local.json) · lib/eip712.js (shared/eip712/types.json)
 ```
 
-Frontend 🔲 theo SDD thêm: `lib/` (client, chain, eip712, errors, format), `hooks/` (useWallet, useEscrow, usePolling, useOrderStatus, useSignDispute, useServerClock, useAuth), `components/` (RequireRole, TxStepper, CountdownTimer, StatusBadge, AddressTag, AmountView), `mocks/` (fetch mock theo hợp đồng API, tuần 1–3). Máy trạng thái nạp tiền là **hàm thuần** `depositReducer(state, event)`; trang chỉ gọi reducer và thực hiện hiệu ứng.
+Frontend ✅ (thực tế, theo SDD): `lib/` (client, chain, eip712, errors, format, serverClock, orderTimer, orderActions, disputeSign, disputeFlow, web3Checkout, …), `hooks/` (useWallet, useEscrow, usePolling, useOrderStatus, useOrderActions, useDispute, useSignDispute; đồng hồ máy chủ là `lib/serverClock`, không phải hook), `components/` (RequireRole, TxStepper, CountdownTimer, StatusBadge, Web3CheckoutPanel, Web3OrderPanel, DisputeDialog, AdminDisputes), `mocks/` (fetch mock theo hợp đồng API, tuần 1–3). Máy trạng thái nạp tiền là **hàm thuần** `depositReducer(state, event)`; trang chỉ gọi reducer và thực hiện hiệu ứng.
 
 ---
 
@@ -111,7 +111,7 @@ Frontend 🔲 theo SDD thêm: `lib/` (client, chain, eip712, errors, format), `h
 - **Input:** JSON body (`request.get_json(silent=True) or {}`), path param, query string, header `Authorization: Bearer <token>`.
 - **Output thành công:** JSON + status (200/201). Tiền trả dạng **số nguyên** (VND) nhờ `SlopeeJSONProvider`.
 - **Output lỗi (hiện tại):** `{"error": "<thông báo>"}`; lỗi xác thực có thêm `"code"` ∈ `auth_required | token_expired | token_invalid | forbidden`.
-- **Output lỗi (Web3 🔲):** `{"code": "<MÃ_LỖI>", "message": "<tiếng Việt>"}`, ánh xạ ở một chỗ (SDD 5.4).
+- **Output lỗi (Web3 ✅):** `{"code": "<MÃ_LỖI>", "message": "<tiếng Việt>"}`, ánh xạ ở một chỗ (SDD 5.4).
 - **Trách nhiệm:** xác thực/ủy quyền, validate đầu vào, trả đúng mã HTTP. Route mới **không** nhận `userId` từ client.
 
 ### 3.2. Tầng xác thực ✅ (`auth_utils.py`)
@@ -129,16 +129,17 @@ Frontend 🔲 theo SDD thêm: `lib/` (client, chain, eip712, errors, format), `h
 
 ### 3.4. Tầng dữ liệu
 - ✅ **Hiện tại:** SQL trực tiếp trong route; transaction bằng `conn.commit()/rollback()`; `DictCursor` trả dict theo tên cột.
-- 🔲 **Web3:** `Repositories` (mỗi bảng một repo) + `UnitOfWork`; chuyển trạng thái dùng `UPDATE ... WHERE status=:old` và kiểm `rowcount`; `UNIQUE(onchain_order_id)`, `UNIQUE(tx_hash, log_index)`, `UNIQUE(address)` là lớp chống trùng cuối.
+- ✅ **Web3:** `Repositories` (mỗi bảng một repo) + `UnitOfWork`; chuyển trạng thái dùng `UPDATE ... WHERE status=:old` và kiểm `rowcount`; `UNIQUE(onchain_order_id)`, `UNIQUE(tx_hash, log_index)`, `UNIQUE(address)` là lớp chống trùng cuối.
 
-### 3.5. Các cổng Web3 🔲
+### 3.5. Các cổng Web3 ✅
 | Cổng | Phương thức chính | Input → Output | Adapter MVP |
 | --- | --- | --- | --- |
-| `ChainPort` | `get_order(id)`, `get_logs(from,to)`, `get_block(n)`, `send_tx(fn,args,role)`, `balance_of(token)`, `dispute_nonce(id)` | tham số on-chain → dữ liệu chuỗi / biên nhận | `web3.py` → Anvil RPC |
-| `SignerPort` | `sign_quote(quote)`, `sign_dispute(res)`, `sender_address(role)` | dữ liệu đã validate → chữ ký 65 byte (không bao giờ trả khóa) | `EnvKeySigner` (khóa từ env) |
+| `ChainPort` | `get_order_state(id)`, `get_order(id)`, `get_logs(from,to)`, `get_block(n)`, `latest_block()`, `has_role(role, addr)`, `send_tx(fn,args,sender,sign)`, `wait_receipt(hash,timeout)`, `balance_of(token, at_block)`, `dispute_nonce(id)` | tham số on-chain → dữ liệu chuỗi / biên nhận | `web3.py` → Anvil RPC |
+| `SignerPort` | `sign_quote(quote)`, `sign_dispute(res)`, `recover_dispute_signer(res, sig)`, `sign_transaction(role, tx)`, `sender_address(role)` | dữ liệu đã validate → chữ ký 65 byte (không bao giờ trả khóa) | `EnvKeySigner` (khóa từ env) |
 | `ClockPort` | `now_system()`, `now_chain()` | — → giây UTC (int) | `HybridClock`: `now_chain = max(hệ thống, block mới nhất)` |
 | `Repositories` | mỗi bảng một repo | entity ↔ SQL tham số hóa | MySQL |
-| `NotificationPort` | `notify_buyer_delivered(order)` | order → ghi bảng thông báo | bảng thông báo Slopee |
+| `MerchantRepo` (tuần 7) | `merchant_orders(merchant_user_id, statuses, limit)`, `merchant_wallets(merchant_user_id)`, `pending_for_addresses(addresses)` | id Merchant lấy từ token → đơn của shop (`order_web3.merchant_user_id`), ví liên kết ∪ ví từng dùng trên đơn, số dư chờ rút > 0 | MySQL; chỉ SELECT, `MerchantService` không ghi gì |
+| `NotificationRepo` | `add(user_id, order_id, kind, message)`, `list_for_user(user_id, limit)` | thông báo → dòng `notifications` (UNIQUE chống gửi trùng) | MySQL; không có `NotificationPort` riêng, Indexer ghi bằng `add_notification(cur, …)` |
 
 Dùng `now_system()` cho nonce ví, phiên, rate limit; dùng `now_chain()` cho hạn báo giá, hạn chữ ký phán quyết, tác vụ nền, `server_time`.
 
@@ -171,13 +172,13 @@ Dùng `now_system()` cho nonce ví, phiên, rate limit; dùng `now_chain()` cho 
 
 ### JSON / API
 - **API Slopee gốc ✅:** khóa `camelCase` (`cartItemIds`, `paymentMethodId`, `unitPrice`, `inStock`), thông báo `{"error"}`.
-- **API Web3 🔲 (SDD 10.2):** khóa `snake_case` (`checkout_group_id`, `amount_raw`, `price_vnd`, `fee_bps`, `inspection_duration`), lỗi `{code, message}`. Hai phong cách cùng tồn tại; **không đổi API cũ**, và API Web3 mới theo SDD.
+- **API Web3 ✅ (SDD 10.2):** khóa `snake_case` (`checkout_group_id`, `amount_raw`, `price_vnd`, `fee_bps`, `inspection_duration`), lỗi `{code, message}`. Hai phong cách cùng tồn tại; **không đổi API cũ**, và API Web3 mới theo SDD.
 - Số uint256 trong JSON là **chuỗi thập phân**; thời gian là **giây UTC (int)**; địa chỉ ví **chữ thường** (checksum chỉ để hiển thị).
 - URL: danh từ số nhiều, kebab-case cho cụm từ (`/api/checkout-groups/:id`); tài nguyên của người đăng nhập dùng `/me` hoặc bỏ tham số, **không** có `userId` trong URL.
 
 ### CSDL
 - Bảng/cột Slopee gốc: `camelCase` (`userId`, `cartItems`, `unitPrice`), khóa chính `VARCHAR(36)` UUID (riêng `products.id` là `VARCHAR(15)`, `categories.id` là INT).
-- Bảng/cột Web3 🔲: `snake_case` (`order_web3`, `checkout_groups`, `onchain_order_id`, `amount_raw`).
+- Bảng/cột Web3 ✅: `snake_case` (`order_web3`, `checkout_groups`, `onchain_order_id`, `amount_raw`).
 - Tiền: `DECIMAL(15,0)` (VND) cho 4 cột Slopee; `VARCHAR(78)` cho số lượng token on-chain; mốc thời gian on-chain `BIGINT UNSIGNED` (giây UTC).
 - Migration ✅ (P0-04): `migrations/NNNN_tên.sql|.py` chạy bằng `python migrate.py` (không có route HTTP), tên tệp ghi vào `schema_migrations`, khóa `GET_LOCK`, **idempotent** (DDL MySQL tự commit nên không rollback được). Hiện có `0001`–`0020`: `0001`–`0005` là Slopee cũ, `0006`–`0020` là Web3 (SRS `001_wallets`…`015_shipper`, bù +5; tuần 2). Migration có khóa ngoại tới bảng Slopee là `.py` đọc kiểu/charset/collation cột cha qua `dbschema.column_like` và dừng nếu bảng cha không phải InnoDB (SDD Q-06). `schema.sql` luôn là lược đồ mới nhất cho DB tạo mới và `init_db.py` đánh dấu các migration hiện có là đã áp dụng; thêm migration phải đồng thời cập nhật `schema.sql` (test `test_web3_migrations.py` so khớp hai đường). Bảng hạ tầng: `schema_migrations`, `authAttempts`.
 
@@ -186,13 +187,13 @@ Dùng `now_system()` cho nonce ví, phiên, rate limit; dùng `now_chain()` cho 
 | --- | --- | --- |
 | Component, trang | `PascalCase.jsx`, `export default` | `Checkout.jsx`, `Navbar.jsx` |
 | Hàm gọi API | `<động từ><Đối tượng>API` | `fetchCartAPI`, `addToCartAPI` |
-| Hook 🔲 | `useXxx` | `usePolling`, `useWallet` |
+| Hook ✅ | `useXxx` | `usePolling`, `useWallet` |
 | Hàm tiện ích | `camelCase` trong `src/utils/` | `formatVND` |
 | Kiểu dữ liệu | JSDoc nếu cần, **không TypeScript** | |
 | Style | CSS thường trong `src/assets/*.css` (Vanilla CSS) | |
 | Lưu trữ phiên | `sessionStorage` khóa `token`, `user` (qua `api/http.js`) | |
 
-### Solidity 🔲
+### Solidity ✅
 Hàm `camelCase`, sự kiện/struct `PascalCase`, hằng `UPPER_SNAKE` (`QUOTE_TYPEHASH`), vai trò `*_ROLE`; một contract `SlopeeEscrowMaster`, `MockUSD` 6 decimals.
 
 ### Test
@@ -206,14 +207,14 @@ Hàm `camelCase`, sự kiện/struct `PascalCase`, hằng `UPPER_SNAKE` (`QUOTE_
 ## 5. Xác thực và phân quyền (cắt ngang mọi tầng)
 
 - Token: `URLSafeTimedSerializer(SECRET_KEY, salt='slopee-auth-token-v1')`, payload `{uid, role}`, hết hạn theo `AUTH_TOKEN_TTL_SECONDS` (mặc định 3600). Token **không** kiểm lại DB.
-- Vai trò tài khoản: `user` (Buyer), `seller` (Merchant), `admin`; 🔲 thêm `shipper` (cuối ENUM `users.role`). Trọng tài là dịch vụ ký phía server, không phải tài khoản đăng nhập.
+- Vai trò tài khoản: `user` (Buyer), `seller` (Merchant), `admin`; ✅ thêm `shipper` (cuối ENUM `users.role`). Trọng tài là dịch vụ ký phía server, không phải tài khoản đăng nhập.
 - Ma trận: route công khai (đăng nhập, đăng ký, sản phẩm, danh mục, `/api/health`) · `@require_auth` (mọi user) · `@require_auth('seller')` (shop/sản phẩm) · `admin_bp` (`before_request` chỉ cho `admin`).
 - Quyền sở hữu tài nguyên ✅ (P0-03): id người dùng luôn lấy từ token (`g.user_id`), không từ body/URL. Cart item, đơn, phương thức thanh toán lọc theo `userId`; sản phẩm/ảnh/biến thể kiểm qua `products → shops.sellerId`. Tài nguyên không thuộc người gọi trả **404** (như không tồn tại), không phải 403. Đơn có dòng `order_web3` không đổi được bằng `PUT /api/payments/orders/:id` (`409 WEB3_ORDER_MANAGED`), và chuyển trạng thái theo bảng `paid|shipped→received`, `pending|paid→cancelled` (`409 INVALID_STATE`).
 - Chống dò mật khẩu/PIN ✅ (P0-05): sai 5 lần liên tiếp (`AUTH_MAX_ATTEMPTS`) → khóa `AUTH_LOCK_SECONDS` (mặc định 900 s), `429 too_many_attempts` + `Retry-After`, kể cả khi nhập đúng lúc đang khóa. Đăng nhập/đổi mật khẩu/xin xóa tài khoản dùng chung bộ đếm theo tài khoản (scope `password`); PIN thanh toán dùng scope `pin`; username không tồn tại cũng bị đếm (lưu băm). Bộ đếm `commit` riêng nên không bị rollback.
 
 ## 6. Xử lý lỗi
 - ✅ Hiện tại (P0-06): `{"error": ..., "code": ...}` + 400/401/403/404/409/413/429/500. Route ném `ApiError` cho lỗi người dùng; mọi ngoại lệ khác → `500 {"code": "internal_error"}` với thông báo chung, chi tiết + traceback chỉ ghi log máy chủ (`errors.py`, gắn vào từng blueprint bằng `register_blueprint_errors` và vào app bằng `register_app_errors`). **Không** trả `str(e)`. Body phải là JSON object (`json_body()` → `400 invalid_body`); giới hạn body 1 MB. Mã hiện có: `invalid_body`, `missing_field`, `invalid_field`, `not_found`, `already_exists`, `invalid_pin`, `pin_not_set`, `invalid_credentials`, `too_many_attempts`, `insufficient_stock`, `insufficient_funds`, `checkout_conflict`, `INVALID_STATE`, `WEB3_ORDER_MANAGED`, `internal_error`. Frontend chỉ xóa phiên với các mã trong `SESSION_ERROR_CODES` (401 sai PIN/mật khẩu **không** đăng xuất).
-- 🔲 Web3: ngoại lệ miền → mã HTTP + `code` (`WALLET_NOT_LINKED 409`, `WALLET_TAKEN 409`, `NONCE_INVALID 400`, `BAD_SIGNATURE 400`, `QUOTE_EXPIRED 410`, `INVALID_STATE 409`, `FORBIDDEN 403`, `POLICY_OUT_OF_RANGE 422`, `CHAIN_TX_FAILED 502`, `FEE_CAP_CHANGED 409`, `BATCH_TOO_LARGE 422`, `WEB3_ORDER_MANAGED`). Frontend ánh xạ lỗi contract/ví sang tiếng Việt ở một nơi (`lib/errors.js`).
+- ✅ Web3: ngoại lệ miền → mã HTTP + `code` (`WALLET_NOT_LINKED 409`, `WALLET_TAKEN 409`, `NONCE_INVALID 400`, `BAD_SIGNATURE 400`, `QUOTE_EXPIRED 410`, `INVALID_STATE 409`, `FORBIDDEN 403`, `POLICY_OUT_OF_RANGE 422`, `CHAIN_TX_FAILED 502`, `FEE_CAP_CHANGED 409`, `BATCH_TOO_LARGE 422`, `WEB3_ORDER_MANAGED`; tuần 5-6 thêm `ORDER_NOT_FOUND 404`, `INVALID_SHIPPER 422`, `INVALID_DISPUTE_NOTE 422`, `INVALID_PAYOUT 422`, `DISPUTE_NOT_FOUND 404`, `DISPUTE_NOT_READY 409`, `DISPUTE_STALE 409`, `DISPUTE_EXPIRED 410`, `DISPUTE_WINDOW_CLOSED 409`, `SIGNATURE_EXPIRED 409`, `ALREADY_SIGNED 409`). Frontend ánh xạ lỗi contract/ví sang tiếng Việt ở một nơi (`lib/errors.js`).
 
 ## 7. Cấu hình
 | Biến | Mặc định | Dùng ở |
@@ -227,7 +228,7 @@ Hàm `camelCase`, sự kiện/struct `PascalCase`, hằng `UPPER_SNAKE` (`QUOTE_
 | `WALLET_LINK_DOMAIN` (mặc định `localhost:5173`, tên miền trong thông điệp SIWE), `WALLET_NONCE_MAX_PER_MINUTE` (5), `TOKEN_DECIMALS` (6), `TOKEN_SYMBOL` (mUSD), `SLOPEE_SKIP_WEB3_BOOT` (bỏ qua xác minh khóa lúc khởi động, chỉ cho công cụ/test) | tùy chọn; đọc bởi `slopee_web3/settings.py` |
 | `RPC_URL`, `CHAIN_ID`, `ESCROW_ADDRESS`, `MOCKUSD_ADDRESS`, `QUOTE_SIGNER_KEY`, `ARBITRATOR_KEY`, `SHIPPER_KEY`, `POLL_SECONDS`, `CONFIRMATIONS`, `REORG_DEPTH`, `INDEXER_START_BLOCK` | `bootstrap.sh` sinh `backend/.env.web3` (gitignore) | Web3 (backend đọc từ tuần 3) |
 | `VITE_API_BASE`, `VITE_RPC_URL` (frontend) | `http://localhost:5000`, `http://127.0.0.1:8545` | `lib/client.js`, `lib/chain.js` |
-| 🔲 `platform_settings` (DB) | `FX_VND_PER_TOKEN` (25000), `PLATFORM_FEE_BPS` (300), `QUOTE_TTL_SECONDS` (900), `DISPUTE_SIG_TTL_SECONDS` (604800); gieo sẵn trong migration `0014` | Admin đổi không cần restart |
+| ✅ `platform_settings` (DB) | `FX_VND_PER_TOKEN` (25000), `PLATFORM_FEE_BPS` (300), `QUOTE_TTL_SECONDS` (900), `DISPUTE_SIG_TTL_SECONDS` (604800); gieo sẵn trong migration `0014` | Admin đổi không cần restart |
 
 Khóa vận hành chỉ đọc một lần lúc khởi động vào `EnvKeySigner`; `.env` không commit.
 
