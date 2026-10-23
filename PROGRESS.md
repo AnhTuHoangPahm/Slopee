@@ -345,6 +345,11 @@
 - Toàn bộ backend `pytest test`: **960 pass, 24 skip** (các ca skip đều do thiếu Anvil/.env.web3).
 - 8 test Anvil chuỗi thật trong `orderActions.anvil.test.js` tự động skip khi thiếu node Anvil, sẽ được kích hoạt khi chạy `REQUIRE_ANVIL=1`.
 
+### 1.1. Khắc phục lỗi Flaky Test đồng hồ đếm ngược (F-07 / `web3Ui.test.jsx`)
+- **Hiện tượng:** Test ca *"đồng hồ không giật: sau khi nhận báo giá mới luôn bắt đầu đúng 15:00..."* pass ở local nhưng fail ngẫu nhiên trên GitHub Actions (`expected '... 15:00' to contain '14:59'`).
+- **Nguyên nhân:** CPU của CI runner xử lý queue async chậm hơn, khiến DOM chưa kịp flush render nhịp tick kế tiếp ngay sau `vi.advanceTimersByTime(1000)`.
+- **Giải pháp:** Sử dụng `await waitFor(() => expect(...))` thay vì gọi `expect(...)` đồng bộ ngay sau `act()`. Chuẩn hóa quy ước này cho toàn bộ các bài test có đếm ngược thời gian trong repo.
+
 ## 2. Nút "Hủy đơn & nhận lại tiền" (UC-07, BR-05, T-14)
 
 `Web3OrderPanel` cho đơn `LOCKED` hiện đồng hồ "Cửa hàng còn … để giao hàng" và nút hủy.
