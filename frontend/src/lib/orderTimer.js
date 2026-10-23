@@ -1,7 +1,7 @@
 // Hàm thuần cho màn hình đơn Web3 của Buyer (SDD 9.3, 9.4, SRS 8). Không I/O, không đọc đồng hồ máy ngầm định.
 // Mốc thời gian lấy từ GET /api/orders/:code/status: delivered_at, inspection_duration, server_time (= now_chain()).
 // Đếm ngược tính theo ĐỒNG HỒ MÁY CHỦ (F-06) nên đúng cả khi đồng hồ máy người dùng sai hoặc Anvil bị tua thời gian.
-import { secondsRemaining } from './web3Checkout';
+import { remainingSec } from './serverClock';
 
 export const ORDER_STATUS = Object.freeze({
     PENDING_PAYMENT: 'PENDING_PAYMENT',
@@ -25,13 +25,38 @@ export function inspectionDeadline(status) {
 }
 
 /**
- * Số giây còn lại của thời hạn kiểm tra theo đồng hồ máy chủ; null khi chưa giao hoặc chưa có đồng hồ (chưa poll lần nào).
- * `clock` = { serverTime, receivedAtMs } của LẦN POLL GẦN NHẤT.
+ * Số giây NGUYÊN còn lại của thời hạn kiểm tra theo đồng hồ máy chủ ước lượng (`offset` của lib/serverClock: chỉ tăng nên kết quả không
+ * giật lùi); null khi chưa giao hoặc chưa có độ lệch (chưa poll lần nào). Làm tròn XUỐNG để nút "Khiếu nại" khóa sớm chứ không muộn.
  */
-export function inspectionRemaining(status, clock, nowMs = Date.now()) {
+export function inspectionRemainingAt(status, offset, nowMs = Date.now()) {
     const deadline = inspectionDeadline(status);
-    if (deadline === null || !clock || clock.serverTime == null) return null;
-    return secondsRemaining({ deadline, serverTime: clock.serverTime, receivedAtMs: clock.receivedAtMs, nowMs });
+    if (deadline === null) return null;
+    const r = remainingSec(deadline, offset, nowMs);
+    return r === null ? null : Math.floor(r);
+}
+
+// ---- Polling thích ứng (PROGRESS Tuần 5 mục 11) -------------------------------------------------------------------------------------------
+// Thời hạn kiểm tra kéo dài 1-3 ngày nên không cần hỏi 3 giây/lần suốt thời gian đó; nhưng khi sắp/đã hết hạn thì phải bắt chuyển trạng thái ngay.
+// Sau hạn, đơn không sang COMPLETED tức thì: tác vụ AutoRelease chạy mỗi AUTO_RELEASE_SECONDS (mặc định 60 giây) rồi Indexer cần ~2 giây,
+// nên từ lúc `remaining = 0` đến COMPLETED có thể mất tới ~65 giây.
+export const POLL_MS = Object.freeze({ FAST: 3000, SLOW: 15000 });
+export const NEAR_DEADLINE_SEC = 10;       // còn ≤ chừng này giây thì poll nhanh
+export const OVERDUE_FAST_SEC = 120;       // quá hạn tới chừng này giây vẫn poll nhanh (65 giây + dự phòng); lâu hơn thì giãn lại, tránh dồn tải khi AutoRelease hỏng
+export const BOOST_MS = 60_000;            // sau thao tác ví của người dùng: poll nhanh chừng này mili giây
+
+/**
+ * Chờ bao lâu (ms) trước lần poll kế tiếp. Hàm thuần, `remaining` tính tại thời điểm xếp lịch.
+ *  - vừa thao tác ví (`boosted`), chưa có dữ liệu, hoặc đơn chưa ổn định (PENDING_PAYMENT): nhanh;
+ *  - DELIVERED còn nhiều thời gian: chậm, nhưng không ngủ quá mốc `NEAR_DEADLINE_SEC` trước hạn (dậy đúng lúc để chuyển sang nhanh);
+ *  - DELIVERED sắp/đã hết hạn (tới OVERDUE_FAST_SEC): nhanh để thấy COMPLETED/DISPUTED ngay khi Indexer ghi;
+ *  - LOCKED/DISPUTED (chờ Shipper/Admin, có thể hàng giờ): chậm.
+ */
+export function nextPollDelayMs(statusName, remaining, { boosted = false, fast = POLL_MS.FAST, slow = POLL_MS.SLOW } = {}) {
+    if (boosted || !statusName || statusName === ORDER_STATUS.PENDING_PAYMENT) return fast;
+    if (statusName !== ORDER_STATUS.DELIVERED) return slow;
+    if (remaining === null || remaining === undefined) return fast;               // chưa đồng bộ giờ: hỏi nhanh để có độ lệch
+    if (remaining > NEAR_DEADLINE_SEC) return Math.min(slow, Math.max(fast, (remaining - NEAR_DEADLINE_SEC) * 1000));
+    return remaining >= -OVERDUE_FAST_SEC ? fast : slow;
 }
 
 /** 'AWAITING_DELIVERY' | 'SYNCING' | 'INSPECTING' | 'INSPECTION_OVER' | 'DISPUTED' | 'COMPLETED' | 'REFUNDED' | 'PENDING_PAYMENT' | 'EXPIRED' */

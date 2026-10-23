@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createDisputeProposalAPI, fetchAdminDisputesAPI, submitDisputeAPI } from '../api/disputes';
 import { usePolling } from '../hooks/usePolling';
+import { createServerClock } from '../lib/serverClock';
 import { Web3ApiError, toUserMessage } from '../lib/errors';
 import { formatVND, shortHash } from '../lib/format';
 import { REASON_NOTE_MAX, PAYOUT_SIDES, STAGE, canPropose, canResubmit, canSubmit, disputeStage, notReadyMessage, safeEvidenceUrl,
@@ -95,17 +96,23 @@ function SubmitDialog({ dispute, busy, onCancel, onConfirm }) {
 
 /** UC-06 phía Admin: các đơn đang tranh chấp, bằng chứng của Buyer, tạo đề xuất phán quyết và thi hành khi đủ chữ ký. */
 export default function AdminDisputes() {
-    const { data, error, refresh } = usePolling(() => fetchAdminDisputesAPI(), { intervalMs: POLL_MS });
-    const [clock, setClock] = useState(null);                 // { serverTime, receivedAtMs } của lần poll gần nhất
+    const clockRef = useRef(null);
+    if (clockRef.current === null) clockRef.current = createServerClock();
+    // Đồng hồ được tính NGAY TRONG hàm poll, cùng nhịp với danh sách: không có lần render nào có dữ liệu mà chưa có đồng hồ (trước đây `clock` được đặt
+    // trong một useEffect SAU render nên có một nhịp thiếu "mốc thoát hiểm"). Độ lệch chỉ tăng (lib/serverClock) nên mốc không giật lùi khi poll trễ.
+    const { data, error, refresh } = usePolling(async () => {
+        const res = await fetchAdminDisputesAPI();
+        const receivedAtMs = Date.now();
+        const offset = res.serverTime == null ? clockRef.current.offset : clockRef.current.observe(Number(res.serverTime), receivedAtMs);
+        return { ...res, clock: offset == null ? null : { serverTime: receivedAtMs / 1000 + offset, receivedAtMs } };
+    }, { intervalMs: POLL_MS });
+    const clock = data?.clock ?? null;                         // { serverTime, receivedAtMs } của lần poll gần nhất (đã làm mượt)
     const [dialog, setDialog] = useState(null);               // { kind: 'propose' | 'submit', code }
     const [busy, setBusy] = useState(false);
     const [notice, setNotice] = useState({});                 // { [code]: { kind: 'ok'|'error', text } }
     const [, tick] = useState(0);
     const inFlight = useRef(false);                           // cờ đồng bộ chống bấm đúp
 
-    useEffect(() => {
-        if (data?.serverTime != null) setClock({ serverTime: Number(data.serverTime), receivedAtMs: Date.now() });
-    }, [data]);
     useEffect(() => {                                         // làm tươi đếm ngược mỗi 30 giây (hiển thị theo phút/giờ nên không cần dày hơn)
         const id = setInterval(() => tick((n) => n + 1), 30000);
         return () => clearInterval(id);

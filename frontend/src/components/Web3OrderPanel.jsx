@@ -49,12 +49,12 @@ function useDelayedFlag(active, ms) {
  * @param {Function} [props.escrowFactory]  chỉ dùng khi test
  * @param {Function} [props.fetchStatus]    chỉ dùng khi test
  * @param {Function} [props.saveNote]       chỉ dùng khi test
- * @param {number} [props.pollMs=3000]      chu kỳ polling trạng thái (SDD: 2-3 giây); test đặt nhỏ
+ * @param {number} [props.pollMs]          chu kỳ polling CỐ ĐỊNH (chỉ dùng khi test); bỏ trống thì thích ứng theo trạng thái (lib/orderTimer::nextPollDelayMs)
  */
-export default function Web3OrderPanel({ orderCode, web3, escrowFactory, fetchStatus, saveNote = saveDisputeNoteAPI, pollMs = 3000 }) {
+export default function Web3OrderPanel({ orderCode, web3, escrowFactory, fetchStatus, saveNote = saveDisputeNoteAPI, pollMs }) {
     const w = useWallet();
     const live = web3.status !== ORDER_STATUS.PENDING_PAYMENT && !isTerminalStatus(web3.status);
-    const { status: polled, error: pollError, remaining } = useOrderStatus(orderCode, { enabled: live, fetchStatus, intervalMs: pollMs });
+    const { status: polled, error: pollError, remaining, boost } = useOrderStatus(orderCode, { enabled: live, fetchStatus, intervalMs: pollMs });
     const statusName = polled?.status ?? web3.status;
     const phase = orderPhase(statusName, remaining);
     const can = availableActions(statusName, remaining);
@@ -68,6 +68,8 @@ export default function Web3OrderPanel({ orderCode, web3, escrowFactory, fetchSt
         const target = TARGET_STATUS[state.kind];
         if (target && statusName === target && (state.step === ACTION_STEP.CONFIRMING || state.step === ACTION_STEP.WAITING_INDEXER)) markIndexed();
     }, [statusName, state.kind, state.step, markIndexed]);
+    // Vừa thao tác ví: poll nhanh để thấy Indexer ghi trạng thái đích ngay, dù đơn đang ở trạng thái ổn định (polling thích ứng giãn 15 giây)
+    useEffect(() => { if (busy) boost(); }, [busy, state.step, boost]);
     const slow = useDelayedFlag(state.step === ACTION_STEP.WAITING_INDEXER, INDEXER_SLOW_AFTER_MS);
 
     // ---- Khiếu nại: lý do chỉ lưu lên sàn SAU khi Indexer ghi DISPUTED (SEQ-02)

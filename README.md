@@ -132,3 +132,19 @@ npm run test:e2e:ui
 ```  
 _See the magic yourself_  
 > That's it for now
+
+### Running the Web3 escrow stack (weeks 4-6)
+
+Each long-running process is its own command, run from `backend/` after `./scripts/bootstrap.sh` has produced `backend/.env.web3`:
+
+```bash
+python -m slopee_web3.adapters.indexer            # event indexer (one instance, GET_LOCK); add --once for a single pass
+python -m slopee_web3.adapters.scheduler          # background jobs (one instance, GET_LOCK); add --once to run every job once
+flask --app app seed-shipper                      # create a shipper account (>= 12 char password; or set SHIPPER_PASSWORD)
+```
+
+* Assign an order to a shipper with `PUT /api/admin/orders/<code>/shipper` (admin). The shipper then sees it at `GET /api/shipper/orders` and confirms delivery with `POST /api/shipper/orders/<code>/deliver` (a relayer sends `confirmDelivery`; the Indexer is the only writer of order state).
+* Scheduler jobs and their env overrides: `QuoteExpirySweeper` (`QUOTE_SWEEP_SECONDS`, default 60), `AutoRelease` (`AUTO_RELEASE_SECONDS`, 60), `DeliveryTimeoutReminder` (`TIMEOUT_REMINDER_SECONDS`, 3600), `DisputeSigExpiry` (`DISPUTE_SIG_EXPIRY_SECONDS`, 300), `ReconcileSnapshot` (`RECONCILE_SECONDS`, 600). Also `QUOTE_EXPIRY_GRACE_SECONDS` (30) and `RELAYER_LOCK_SECONDS` (30).
+* Reconciliation (contract balance vs open orders, read at the Indexer's block): `GET /api/admin/reconcile[?deep=1]`.
+* Dispute resolution (2-of-3 EIP-712 signatures): admin `POST /api/admin/disputes/<code>/proposal` (the arbitrator signs immediately), buyer/merchant `POST /api/disputes/<code>/signatures`, then `POST /api/disputes/<code>/submit` (the relayer calls `resolveDispute`). Raw signatures are never returned by the API.
+* Tests: `pytest test` runs everything; tests marked `anvil` need a running Anvil with the contracts deployed (`./scripts/bootstrap.sh`) and **advance Anvil's clock permanently** (reset with `./scripts/bootstrap.sh --fresh`). Frontend: `cd frontend && npx vitest run`.

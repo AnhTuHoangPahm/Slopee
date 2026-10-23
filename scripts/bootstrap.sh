@@ -132,4 +132,4 @@ ENVEOF
 fi
 
 log "XONG. Tài khoản thử: buyer 0x9965…A4dc (đã mint MockUSD), merchant 0x976E…0aa9."
-log "Chưa tự chạy ở tuần 1: migration MySQL Web3, web/indexer/scheduler. Chạy backend + frontend thủ công như README."
+log "Bootstrap KHÔNG tự chạy: migration MySQL Web3, backend, indexer, scheduler, frontend. Xem README, mục 'Running the Web3 escrow stack'."

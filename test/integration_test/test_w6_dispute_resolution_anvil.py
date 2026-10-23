@@ -111,7 +111,10 @@ def test_e03_refund_buyer_full_flow_and_other_shop_order_is_untouched(svc):
 
     _index(chain)
     done = _db_status(buyer_id, a['order_id'], clock)
-    assert done['status'] == 'REFUNDED' and done['anomaly'] is False
+    # Test này nộp resolveDispute THẲNG lên chuỗi, không qua đề xuất của sàn (không có dòng dispute_resolutions): chữ ký Trọng tài chỉ máy chủ có,
+    # nên một phán quyết xuất hiện ngoài sàn là điều Admin phải được cảnh báo ⇒ handler DisputeResolved của B gắn anomaly_flag (đơn vẫn REFUNDED/COMPLETED).
+    # Luồng ĐÚNG qua sàn (propose -> ký -> submit -> EXECUTED, không anomaly) do test_w3_dispute_b_anvil.py kiểm.
+    assert done['status'] == 'REFUNDED' and done['anomaly'] is True
     assert _db_status(buyer_id, b['order_id'], clock)['status'] == 'LOCKED'
 
     # phát lại chữ ký không chuyển tiền lần hai
@@ -142,7 +145,10 @@ def test_e03_pay_merchant_full_flow_charges_the_fee(svc):
 
     _index(chain)
     done = _db_status(buyer_id, o['order_id'], clock)
-    assert done['status'] == 'COMPLETED' and done['anomaly'] is False
+    # Test này nộp resolveDispute THẲNG lên chuỗi, không qua đề xuất của sàn (không có dòng dispute_resolutions): chữ ký Trọng tài chỉ máy chủ có,
+    # nên một phán quyết xuất hiện ngoài sàn là điều Admin phải được cảnh báo ⇒ handler DisputeResolved của B gắn anomaly_flag (đơn vẫn REFUNDED/COMPLETED).
+    # Luồng ĐÚNG qua sàn (propose -> ký -> submit -> EXECUTED, không anomaly) do test_w3_dispute_b_anvil.py kiểm.
+    assert done['status'] == 'COMPLETED' and done['anomaly'] is True
 
 
 def test_e03_deadline_exactly_one_second_before_the_dispute_timeout_is_accepted(svc):
