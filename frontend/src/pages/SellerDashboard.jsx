@@ -3,6 +3,7 @@ import { getShopAPI, setupShopAPI, addProductAPI, updateShopNameAPI, updateProdu
 import { fetchCategoriesAPI } from '../api/products';
 import { fetchPaymentMethodsAPI, addPaymentMethodAPI } from '../api/payments';
 import Navbar from '../components/Navbar';
+import MerchantWeb3Panel from '../components/MerchantWeb3Panel';
 import { getUser } from '../api/http';
 import { formatVND } from '../utils/formatVND';
 
@@ -197,6 +198,10 @@ export default function SellerDashboard() {
                 </div>
 
                 <p style={{ color: '#666', fontStyle: 'italic', marginTop: '10px' }}>{shop.description}</p>
+                <hr style={{ margin: '20px 0' }} />
+
+                {/* UC-07 (Tuần 7): đơn thanh toán Web3 của shop + khoản chờ rút (claimPending) */}
+                <MerchantWeb3Panel />
                 <hr style={{ margin: '20px 0' }} />
 
                 <div style={{ background: '#fff', padding: '30px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', borderTop: '4px solid #ee4d2d' }}>

@@ -18,6 +18,23 @@ const err = (status, code, message, extra = {}) => json(status, { code, message,
 export function installWeb3Mock({ ttlSeconds = 900, latencyMs = 120, shops, fxVndPerToken = 25000, unlinkedShopIds = [] } = {}) {
     const realFetch = globalThis.fetch;
     const state = { linked: null, nonces: new Map(), groups: new Map(), unlinkedShopIds: new Set(unlinkedShopIds), now: () => Math.floor(Date.now() / 1000) };
+    // Dữ liệu mẫu cho SellerDashboard (VITE_WEB3_MOCK=true): 1 đơn đang chờ giao, 1 đơn đã giao, 1 khoản chờ rút ETH
+    const sellerWallet = `0x${'6'.repeat(40)}`;
+    const mockOrder = (i, status, extra = {}) => ({
+        order_id: `mock-merchant-order-${i}`, onchain_order_id: String(100100 + i), status, buyer_name: 'Nguyễn An',
+        items: [{ name: 'Áo thun', quantity: 2, variants: null }], price_vnd: 399000, amount_raw: '15960000', net_amount_raw: '15481200',
+        fee_amount_raw: '478800', fee_bps: 300, token: TOKEN.toLowerCase(), symbol: 'mUSD', decimals: 6, merchant_wallet: sellerWallet,
+        inspection_duration: 259200, dispute_timeout: 2592000, chain_created_at: 1_800_000_000, delivered_at: null, disputed_at: null,
+        closed_at: null, delivery_deadline: null, release_at: null, force_resolve_at: null, ...extra,
+    });
+    state.merchant = {
+        wallet: sellerWallet,
+        orders: [
+            mockOrder(2, 'DELIVERED', { delivered_at: 1_800_100_000, release_at: 1_800_359_200 }),
+            mockOrder(1, 'LOCKED', { delivery_deadline: 1_800_000_000 + 14 * 86400 }),
+        ],
+        pending: [{ token: 'ETH', address: sellerWallet, amount_raw: '5000000000000000', symbol: 'ETH', decimals: 18 }],
+    };
     const lots = shops ?? [
         { shop_id: 'mock-shop-1', shop_name: 'Cửa hàng Mẫu A', price_vnd: 399000 },
         { shop_id: 'mock-shop-2', shop_name: 'Cửa hàng Mẫu B', price_vnd: 120000 },
@@ -81,6 +98,9 @@ export function installWeb3Mock({ ttlSeconds = 900, latencyMs = 120, shops, fxVn
             state.groups.set(id, { status: 'PENDING_PAYMENT', group });
             return json(201, group);
         }
+        if (path === '/api/merchant/orders' && method === 'GET') {   // UC-07 (Tuần 7): sửa được lúc chạy qua state.merchant
+            return json(200, state.merchant);
+        }
         const m = path.match(/^\/api\/checkout-groups\/([^/]+)(\/quote)?$/);
         if (m) {
             const entry = state.groups.get(decodeURIComponent(m[1]));
@@ -101,7 +121,7 @@ export function installWeb3Mock({ ttlSeconds = 900, latencyMs = 120, shops, fxVn
         const method = (init.method ?? 'GET').toUpperCase();
         let body;
         try { body = init.body ? JSON.parse(init.body) : undefined; } catch { body = undefined; }
-        if (/^\/api\/(wallet|orders|checkout-groups)/.test(url.pathname)) {
+        if (/^\/api\/(wallet|orders|checkout-groups|merchant)/.test(url.pathname)) {
             await new Promise((r) => setTimeout(r, latencyMs));
             const res = await handle(url.pathname, method, body);
             if (res) return res;

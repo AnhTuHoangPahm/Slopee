@@ -74,7 +74,7 @@ JSON response ({"error": "...", "code": "..."} hoặc payload) + HTTP status
 backend/slopee_web3/
   domain/        thực thể + quy tắc thuần, KHÔNG I/O   money, policy, quote, order_state, release, reconcile, dispute,
                                                         dispute_note, timefmt, wallet, errors
-  application/   ca sử dụng, điều phối các cổng       wallet_service, quote_service, order_status_service, shipper_service,
+  application/   ca sử dụng, điều phối các cổng       wallet_service, quote_service, order_status_service, shipper_service, merchant_service,
                                                         relayer_service, dispute_service, dispute_admin_service,
                                                         dispute_submit_service, dispute_note_service, notification_service,
                                                         reconcile_service, jobs (tác vụ nền)
@@ -138,6 +138,7 @@ Frontend ✅ (thực tế, theo SDD): `lib/` (client, chain, eip712, errors, for
 | `SignerPort` | `sign_quote(quote)`, `sign_dispute(res)`, `recover_dispute_signer(res, sig)`, `sign_transaction(role, tx)`, `sender_address(role)` | dữ liệu đã validate → chữ ký 65 byte (không bao giờ trả khóa) | `EnvKeySigner` (khóa từ env) |
 | `ClockPort` | `now_system()`, `now_chain()` | — → giây UTC (int) | `HybridClock`: `now_chain = max(hệ thống, block mới nhất)` |
 | `Repositories` | mỗi bảng một repo | entity ↔ SQL tham số hóa | MySQL |
+| `MerchantRepo` (tuần 7) | `merchant_orders(merchant_user_id, statuses, limit)`, `merchant_wallets(merchant_user_id)`, `pending_for_addresses(addresses)` | id Merchant lấy từ token → đơn của shop (`order_web3.merchant_user_id`), ví liên kết ∪ ví từng dùng trên đơn, số dư chờ rút > 0 | MySQL; chỉ SELECT, `MerchantService` không ghi gì |
 | `NotificationRepo` | `add(user_id, order_id, kind, message)`, `list_for_user(user_id, limit)` | thông báo → dòng `notifications` (UNIQUE chống gửi trùng) | MySQL; không có `NotificationPort` riêng, Indexer ghi bằng `add_notification(cur, …)` |
 
 Dùng `now_system()` cho nonce ví, phiên, rate limit; dùng `now_chain()` cho hạn báo giá, hạn chữ ký phán quyết, tác vụ nền, `server_time`.

@@ -3,7 +3,7 @@ import logging
 
 from ...ports.chain_port import ChainUnavailable
 from . import container
-from .routes import admin_w3_bp, disputes_bp, groups_bp, notifications_bp, orders_bp, shipper_bp, wallet_bp
+from .routes import admin_w3_bp, disputes_bp, groups_bp, merchant_bp, notifications_bp, orders_bp, shipper_bp, wallet_bp
 
 log = logging.getLogger('slopee.web3')
 
@@ -13,6 +13,7 @@ def register_web3(app, *, eager=False):
     app.register_blueprint(orders_bp, url_prefix='/api/orders')
     app.register_blueprint(groups_bp, url_prefix='/api/checkout-groups')
     app.register_blueprint(shipper_bp, url_prefix='/api/shipper')
+    app.register_blueprint(merchant_bp, url_prefix='/api/merchant')
     app.register_blueprint(admin_w3_bp, url_prefix='/api/admin')
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
     app.register_blueprint(disputes_bp, url_prefix='/api/disputes')

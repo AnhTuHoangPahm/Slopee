@@ -18,6 +18,7 @@ class OrderStatusService:
             return None if v is None else int(v)
         return {
             'order_id': row['order_id'], 'status': row['status'],
+            'chain_created_at': opt(row.get('chain_created_at')),   # mốc ký quỹ theo block; Frontend tính hạn hủy đơn quá 14 ngày theo server_time
             'delivered_at': opt(row['delivered_at']), 'inspection_duration': int(row['inspection_duration']),
             'disputed_at': opt(row['disputed_at']), 'dispute_timeout': int(row['dispute_timeout']),
             'anomaly': bool(row['anomaly_flag']), 'server_time': self._clock.now_chain(),

@@ -1,4 +1,4 @@
-// Hai thao tác ví của Buyer trên MỘT đơn: "Đã nhận hàng" (earlyRelease) và "Khiếu nại" (raiseDispute). Mỗi đơn dùng một instance
+// Ba thao tác ví của Buyer trên MỘT đơn: "Đã nhận hàng" (earlyRelease), "Khiếu nại" (raiseDispute) và "Hủy đơn quá hạn giao" (cancelIfUnfulfilled). Mỗi đơn dùng một instance
 // riêng nên thao tác trên đơn của shop này không đổi trạng thái đơn của shop khác (BR-11, SDD 9.3).
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { Contract } from 'ethers';

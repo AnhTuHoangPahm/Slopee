@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     BOOST_MS, NEAR_DEADLINE_SEC, OVERDUE_FAST_SEC, POLL_MS, availableActions, formatInspectionCountdown, inspectionDeadline, inspectionRemainingAt,
     isTerminalStatus, needsPolling, nextPollDelayMs, orderPhase, walletGate,
+    DELIVERY_TIMEOUT_SEC, canCancelUnfulfilled, deliveryDeadline, deliveryRemainingAt,
 } from '../lib/orderTimer';
 
 // Tuần 5 [F]: đồng hồ kiểm tra theo giờ MÁY CHỦ (F-06) và quy tắc bật/tắt nút "Đã nhận hàng"/"Khiếu nại" (SDD 9.4).
@@ -121,4 +122,61 @@ describe('walletGate', () => {
     it('sai mạng', () => expect(walletGate({ ...ok, isCorrectChain: false })).toBe('WRONG_CHAIN'));
     it('ví khác ví đã ký quỹ', () => expect(walletGate({ ...ok, account: '0x976EA74026E726554dB657fA54763abd0C3a0aa9' })).toBe('WRONG_ACCOUNT'));
     it('không biết ví ký quỹ thì không chặn (contract vẫn kiểm Only buyer)', () => expect(walletGate({ ...ok, buyerWallet: null })).toBe('OK'));
+});
+
+// ---- Tuần 7 [C] (UC-07, BR-05, T-14): hủy đơn chưa giao quá 14 ngày ----------------------------------------------------------------------
+describe('hạn hủy đơn chưa giao (cancelIfUnfulfilled)', () => {
+    const CREATED = 1_800_000_000;
+    const DEADLINE = CREATED + 14 * 86400;
+    const at = (sec) => sec * 1000;
+
+    it('hằng số khớp contract: DELIVERY_TIMEOUT = 14 ngày', () => expect(DELIVERY_TIMEOUT_SEC).toBe(1_209_600));
+
+    it('deliveryDeadline = chain_created_at + 14 ngày; thiếu/sai mốc thì null (không đoán)', () => {
+        expect(deliveryDeadline({ chain_created_at: CREATED })).toBe(DEADLINE);
+        expect(deliveryDeadline({ chain_created_at: String(CREATED) })).toBe(DEADLINE);
+        for (const bad of [{}, null, undefined, { chain_created_at: null }, { chain_created_at: 0 }, { chain_created_at: 'abc' }]) expect(deliveryDeadline(bad)).toBeNull();
+    });
+
+    it('deliveryRemainingAt: số giây nguyên theo đồng hồ máy chủ, null khi chưa có độ lệch', () => {
+        expect(deliveryRemainingAt({ chain_created_at: CREATED }, 0, at(DEADLINE - 100))).toBe(100);
+        expect(deliveryRemainingAt({ chain_created_at: CREATED }, 0, at(DEADLINE))).toBe(0);
+        expect(deliveryRemainingAt({ chain_created_at: CREATED }, 0, at(DEADLINE + 5))).toBe(-5);
+        expect(deliveryRemainingAt({ chain_created_at: CREATED }, null, at(DEADLINE))).toBeNull();
+        expect(deliveryRemainingAt({}, 0, at(DEADLINE))).toBeNull();
+    });
+
+    it('đồng hồ máy khách sai nhiều năm vẫn đúng (chỉ dùng độ lệch với server_time)', () => {
+        const clientNow = at(DEADLINE - 100) + 5 * 365 * 86400 * 1000;        // máy khách nhanh 5 năm
+        const offset = (DEADLINE - 100) - clientNow / 1000;                    // = server_time - giờ máy, đúng như serverClock.observe
+        expect(deliveryRemainingAt({ chain_created_at: CREATED }, offset, clientNow)).toBe(100);
+    });
+
+    it('làm tròn LÊN: còn 0,4 giây vẫn là 1 nên nút chưa bật (không bật sớm hơn contract)', () => {
+        expect(deliveryRemainingAt({ chain_created_at: CREATED }, 0, at(DEADLINE) - 400)).toBe(1);
+        expect(canCancelUnfulfilled('LOCKED', deliveryRemainingAt({ chain_created_at: CREATED }, 0, at(DEADLINE) - 400))).toBe(false);
+        expect(canCancelUnfulfilled('LOCKED', deliveryRemainingAt({ chain_created_at: CREATED }, 0, at(DEADLINE)))).toBe(true);
+    });
+
+    it('canCancelUnfulfilled: chỉ đơn LOCKED và đã tới mốc; chưa biết đồng hồ thì chưa bật', () => {
+        expect(canCancelUnfulfilled('LOCKED', 0)).toBe(true);
+        expect(canCancelUnfulfilled('LOCKED', -3600)).toBe(true);
+        expect(canCancelUnfulfilled('LOCKED', 1)).toBe(false);
+        expect(canCancelUnfulfilled('LOCKED', null)).toBe(false);
+        expect(canCancelUnfulfilled('LOCKED', undefined)).toBe(false);
+        for (const s of ['DELIVERED', 'DISPUTED', 'COMPLETED', 'REFUNDED', 'PENDING_PAYMENT', 'EXPIRED']) expect(canCancelUnfulfilled(s, -100)).toBe(false);
+    });
+
+    it('availableActions KHÔNG đổi hình dạng (hủy đơn là hàm riêng)', () => {
+        expect(availableActions('LOCKED', null)).toEqual({ earlyRelease: false, dispute: false });
+    });
+
+    it('orderPhase: LOCKED quá hạn là DELIVERY_OVERDUE; còn hạn/không biết vẫn AWAITING_DELIVERY; trạng thái khác không đổi', () => {
+        expect(orderPhase('LOCKED', null, 0)).toBe('DELIVERY_OVERDUE');
+        expect(orderPhase('LOCKED', null, -10)).toBe('DELIVERY_OVERDUE');
+        expect(orderPhase('LOCKED', null, 10)).toBe('AWAITING_DELIVERY');
+        expect(orderPhase('LOCKED', null, null)).toBe('AWAITING_DELIVERY');
+        expect(orderPhase('DELIVERED', 5, -10)).toBe('INSPECTING');
+        expect(orderPhase('REFUNDED', null, -10)).toBe('REFUNDED');
+    });
 });

@@ -16,7 +16,7 @@ def _line(order_id, status='paid', name='Áo'):
 
 def _web3_row(order_id, **over):
     row = {'order_id': order_id, 'onchain_order_id': 100001, 'checkout_group_id': 'g1', 'buyer_wallet': '0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc', 'status': 'DELIVERED',
-           'delivered_at': 1_800_000_000, 'inspection_duration': 259200, 'disputed_at': None, 'dispute_timeout': 2592000,
+           'chain_created_at': 1_799_000_000, 'delivered_at': 1_800_000_000, 'inspection_duration': 259200, 'disputed_at': None, 'dispute_timeout': 2592000,
            'fee_bps': 300, 'amount_raw': '15960000', 'token_symbol': 'mUSD', 'anomaly_flag': 0}
     row.update(over)
     return row
@@ -34,7 +34,7 @@ def test_web3_order_gets_summary_and_legacy_order_gets_null(client, db, auth_hea
     by_id = {o['orderId']: o for o in r.get_json()['orders']}
     assert by_id['legacy']['web3'] is None
     w = by_id['w3']['web3']
-    assert w == {'onchain_order_id': 100001, 'checkout_group_id': 'g1', 'buyer_wallet': '0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc', 'status': 'DELIVERED', 'delivered_at': 1_800_000_000,
+    assert w == {'onchain_order_id': 100001, 'checkout_group_id': 'g1', 'buyer_wallet': '0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc', 'status': 'DELIVERED', 'chain_created_at': 1_799_000_000, 'delivered_at': 1_800_000_000,
                  'inspection_duration': 259200, 'disputed_at': None, 'dispute_timeout': 2592000, 'fee_bps': 300,
                  'amount_raw': '15960000', 'token_symbol': 'mUSD', 'anomaly': False}
     assert by_id['w3']['status'] == 'shipped'      # orders.status cũ vẫn là bản chiếu (SRS 5.1), không bị thay
@@ -63,6 +63,15 @@ def test_numbers_are_json_numbers_and_amount_stays_string(client, db, auth_heade
     w = _get(client, auth_headers).get_json()['orders'][0]['web3']
     assert w['onchain_order_id'] == 123 and isinstance(w['onchain_order_id'], int)
     assert w['amount_raw'] == big and w['anomaly'] is True and w['disputed_at'] == 1_800_000_005
+
+
+def test_chain_created_at_is_a_number_or_null(client, db, auth_headers):
+    # Tuần 7 [C]: mốc ký quỹ theo block để Buyer biết khi nào hủy được đơn quá 14 ngày (cancelIfUnfulfilled)
+    db.on("FROM orders o", [_line('a'), _line('b')])
+    db.on("FROM order_web3", [_web3_row('a', status='LOCKED', delivered_at=None, chain_created_at='1799000000'), _web3_row('b', chain_created_at=None)])
+    by_id = {o['orderId']: o['web3'] for o in _get(client, auth_headers).get_json()['orders']}
+    assert by_id['a']['chain_created_at'] == 1_799_000_000 and isinstance(by_id['a']['chain_created_at'], int)
+    assert by_id['b']['chain_created_at'] is None
 
 
 def test_missing_order_web3_table_means_all_legacy(client, db, auth_headers):

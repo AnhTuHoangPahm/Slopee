@@ -61,6 +61,13 @@ class ShipperRepo(Protocol):
     def assign(self, order_id: str, shipper_user_id: str, assigned_by: Optional[str]) -> None: ...
 
 
+class MerchantRepo(Protocol):
+    """Cổng Merchant (Tuần 7, UC-07): đơn Web3 của shop mình + số dư chờ rút. Danh tính luôn là `merchant_user_id` lấy từ token."""
+    def merchant_orders(self, merchant_user_id: str, statuses: tuple, limit: int) -> list: ...   # đơn của shop mình, mới nhất trước
+    def merchant_wallets(self, merchant_user_id: str) -> list: ...                                # ví đang liên kết + ví đã dùng trên đơn (chữ thường)
+    def pending_for_addresses(self, addresses: list) -> list: ...                                 # [{'token_address','address','amount_raw'}] chỉ số dư > 0
+
+
 class OutboxRepo(Protocol):
     """Nhật ký giao dịch relayer (bảng tx_outbox): PENDING -> SENT -> CONFIRMED | FAILED. Chỉ để truy vết/gỡ lỗi."""
     def insert(self, kind: str, order_id: str) -> int: ...                  # trả id, status = PENDING
@@ -120,6 +127,7 @@ class UnitOfWork(Protocol):
     policies: PolicyRepo
     checkout: CheckoutRepo
     shipper: ShipperRepo
+    merchant: MerchantRepo
     outbox: OutboxRepo
     notifications: NotificationRepo
     jobs: JobsRepo

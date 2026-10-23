@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchOrderStatusAPI } from '../api/web3';
 import { createServerClock } from '../lib/serverClock';
-import { BOOST_MS, inspectionRemainingAt, isTerminalStatus, nextPollDelayMs } from '../lib/orderTimer';
+import { BOOST_MS, deliveryRemainingAt, inspectionRemainingAt, isTerminalStatus, nextPollDelayMs } from '../lib/orderTimer';
 import { usePolling } from './usePolling';
 
 /** Đồng hồ máy khách nhảy mỗi `everyMs` khi `active`, để giao diện đếm từng giây. */
@@ -33,8 +33,10 @@ const TICK_MS = 500;
  * @param {boolean} [opts.enabled=true]
  * @param {number}  [opts.intervalMs]  số: chu kỳ cố định (test); bỏ trống: thích ứng theo trạng thái
  * @param {Function} [opts.fetchStatus]  thay cho fetchOrderStatusAPI (chỉ dùng khi test)
- * @returns {{ status: object|null, error, stopped: boolean, offset: number|null, remaining: number|null, boost: Function, refresh: Function }}
+ * @returns {{ status: object|null, error, stopped: boolean, offset: number|null, remaining: number|null, deliveryRemaining: number|null, boost: Function, refresh: Function }}
  *   `remaining`: số giây nguyên còn của hạn kiểm tra, null khi chưa giao hoặc chưa có lần poll nào.
+ *   `deliveryRemaining`: số giây nguyên còn tới mốc được hủy đơn chưa giao (chain_created_at + 14 ngày, làm tròn lên; <= 0 là hủy được); null khi
+ *   chưa biết `chain_created_at` hoặc chưa có lần poll nào. Cùng độ lệch đồng hồ máy chủ với `remaining`.
  *   `boost(ms?)`: gọi ngay sau thao tác ví (earlyRelease, raiseDispute) để poll nhanh trong `ms` (mặc định BOOST_MS) và hỏi lại tức thì.
  */
 export function useOrderStatus(orderCode, { enabled = true, intervalMs, fetchStatus = fetchOrderStatusAPI } = {}) {
@@ -65,7 +67,8 @@ export function useOrderStatus(orderCode, { enabled = true, intervalMs, fetchSta
     }, [refresh]);
 
     const status = poll.data;
-    const ticking = Boolean(status) && status.delivered_at != null && !poll.stopped;
+    // Tick khi có đồng hồ phải đếm: hạn kiểm tra (đã giao) hoặc hạn hủy đơn chưa giao (còn LOCKED, đã biết mốc ký quỹ)
+    const ticking = Boolean(status) && !poll.stopped && (status.delivered_at != null || (status.status === 'LOCKED' && status.chain_created_at != null));
     const nowMs = useNow(ticking, TICK_MS);
     return {
         status,
@@ -74,6 +77,7 @@ export function useOrderStatus(orderCode, { enabled = true, intervalMs, fetchSta
         offset: sample.offset,
         // nowMs có thể "cũ" hơn lần poll gần nhất (vừa bật tick): không để thời gian trôi âm làm đếm ngược nhảy lên
         remaining: status ? inspectionRemainingAt(status, sample.offset, Math.max(nowMs, sample.atMs)) : null,
+        deliveryRemaining: status ? deliveryRemainingAt(status, sample.offset, Math.max(nowMs, sample.atMs)) : null,
         boost,
         refresh,
     };

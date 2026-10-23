@@ -208,3 +208,55 @@ describe('polling thích ứng', () => {
         expect(result.current.status).not.toBeNull();
     });
 });
+
+describe('hạn hủy đơn chưa giao (LOCKED, Tuần 7)', () => {
+    const lockedServer = ({ createdAgoSec, withCreated = true }) => {
+        const nowSec = () => Math.floor(Date.now() / 1000);
+        const created = nowSec() - createdAgoSec;
+        return vi.fn(async () => ({
+            order_id: 'o1', status: 'LOCKED', chain_created_at: withCreated ? created : null, delivered_at: null, inspection_duration: 600, server_time: nowSec(),
+        }));
+    };
+
+    it('đếm ngược tới mốc chain_created_at + 14 ngày theo giờ máy chủ, giảm đều và hạ về 0 đúng mốc', async () => {
+        const fetchStatus = lockedServer({ createdAgoSec: 14 * 86400 - 30 });          // còn 30 giây tới mốc
+        const { result } = renderHook(() => useOrderStatus('o1', { fetchStatus, intervalMs: 3000 }));
+        await tick(0);
+        const first = result.current.deliveryRemaining;
+        expect(first).toBeGreaterThanOrEqual(29);
+        expect(first).toBeLessThanOrEqual(31);
+        expect(result.current.remaining).toBeNull();                                    // chưa giao: chưa có đồng hồ kiểm tra
+        await tick(20_000);
+        expect(result.current.deliveryRemaining).toBeLessThan(first - 15);              // đồng hồ chạy dù đơn chỉ LOCKED (có tick)
+        await tick(15_000);
+        expect(result.current.deliveryRemaining).toBeLessThanOrEqual(0);
+    });
+
+    it('không bao giờ tăng trở lại khi poll lại (cùng nguyên tắc với đồng hồ kiểm tra)', async () => {
+        const fetchStatus = lockedServer({ createdAgoSec: 14 * 86400 - 120 });
+        const { result } = renderHook(() => useOrderStatus('o1', { fetchStatus, intervalMs: 3000 }));
+        await tick(0);
+        let prev = result.current.deliveryRemaining;
+        for (let t = 0; t < 60_000; t += 500) {
+            await tick(500);
+            expect(result.current.deliveryRemaining).toBeLessThanOrEqual(prev);
+            prev = result.current.deliveryRemaining;
+        }
+    });
+
+    it('dữ liệu cũ không có chain_created_at: deliveryRemaining là null (giao diện không hiện nút hủy)', async () => {
+        const fetchStatus = lockedServer({ createdAgoSec: 20 * 86400, withCreated: false });
+        const { result } = renderHook(() => useOrderStatus('o1', { fetchStatus, intervalMs: 3000 }));
+        await tick(10_000);
+        expect(result.current.deliveryRemaining).toBeNull();
+    });
+
+    it('đơn đã giao: deliveryRemaining theo chain_created_at vẫn tính được nhưng chỉ có ý nghĩa với LOCKED (nút do canCancelUnfulfilled quyết định)', async () => {
+        const nowSec = Math.floor(Date.now() / 1000);
+        const fetchStatus = vi.fn(async () => ({ order_id: 'o1', status: 'DELIVERED', chain_created_at: nowSec - 20 * 86400, delivered_at: nowSec - 60, inspection_duration: 600, server_time: nowSec }));
+        const { result } = renderHook(() => useOrderStatus('o1', { fetchStatus, intervalMs: 3000 }));
+        await tick(0);
+        expect(result.current.remaining).toBeGreaterThan(0);
+        expect(result.current.status.status).toBe('DELIVERED');
+    });
+});

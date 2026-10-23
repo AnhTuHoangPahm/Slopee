@@ -20,6 +20,7 @@ from . import container as c
 log = logging.getLogger('slopee.web3')
 
 shipper_bp = Blueprint('w3_shipper', __name__)
+merchant_bp = Blueprint('w3_merchant', __name__)
 admin_w3_bp = Blueprint('w3_admin', __name__)
 notifications_bp = Blueprint('w3_notifications', __name__)
 disputes_bp = Blueprint('w3_disputes', __name__)
@@ -60,7 +61,7 @@ def _on_unexpected(e):
     return _err('internal_error', 'Đã có lỗi phía máy chủ, hãy thử lại sau.', 500)
 
 
-for _bp in (wallet_bp, orders_bp, groups_bp, shipper_bp, admin_w3_bp, notifications_bp, disputes_bp):
+for _bp in (wallet_bp, orders_bp, groups_bp, shipper_bp, merchant_bp, admin_w3_bp, notifications_bp, disputes_bp):
     _bp.register_error_handler(DomainError, _on_domain_error)
     _bp.register_error_handler(ApiError, _on_api_error)
     _bp.register_error_handler(ChainUnavailable, _on_chain_unavailable)
@@ -166,6 +167,15 @@ def shipper_orders():
 def shipper_deliver(order_code):
     """Relayer gửi confirmDelivery; trạng thái đơn do Indexer ghi sau đó (BR-09), nên trả outcome + tx_hash, không trả DELIVERED."""
     return jsonify(_container().shipper_service().deliver(g.user_id, order_code)), 200
+
+
+# ------------------------------------------------------------------ UC-07 (Tuần 7, A): cổng Merchant. CHỈ role `seller`, CHỈ đơn của shop mình.
+@merchant_bp.route('/orders', methods=['GET'])
+@require_auth('seller')
+def merchant_orders():
+    """Đơn Web3 của shop (đã ký quỹ trở đi) + số dư chờ rút. Mới ngoài SDD 10.2 (SDD 9.2 có màn /merchant/orders nhưng không có API), chờ nhóm xác nhận.
+    Danh tính chỉ từ token; mọi query string/body bị bỏ qua."""
+    return jsonify(_container().merchant_service().list_orders(g.user_id)), 200
 
 
 # ------------------------------------------------------------------ Admin (Tuần 5). Mới ngoài danh sách SDD 10.2, chờ nhóm xác nhận

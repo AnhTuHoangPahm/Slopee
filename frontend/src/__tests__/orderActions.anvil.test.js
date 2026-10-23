@@ -122,4 +122,49 @@ describe.skipIf(!up)('Buyer trên chuỗi thật (ethers + ABI + runOrderAction 
         expect(ok.events.map((e) => e.type)).toEqual(['START', 'SENT', 'MINED']);
         expect(await stateOf(id)).toBe(STATE.COMPLETED);
     }, 90_000);
+
+    // ---- Tuần 7 [C] (UC-07, T-14, E-04 phần giao diện): hủy đơn chưa giao quá 14 ngày bằng CHÍNH runOrderAction của giao diện ----------------
+    const DAY = 86400;
+    const balanceOf = (addr) => new Contract(TOKEN, ERC20, provider).balanceOf(addr);
+
+    it('UC-07: chưa tới 14 ngày -> revert THẬT "Timeout not reached" được dịch đúng, đơn vẫn LOCKED', async () => {
+        const id = await lockOrder();
+        const { events, dispatch } = collect();
+        await expect(runOrderAction({ kind: ORDER_ACTION.CANCEL_UNFULFILLED, onchainOrderId: id.toString(), escrow: escrowAs(wallet(KEYS.buyer)), dispatch })).rejects.toBeTruthy();
+        expect(events.at(-1)).toMatchObject({ type: 'FAIL', error: { code: 'TX_REVERTED', userRejected: false } });
+        expect(events.at(-1).error.message).toMatch(/Chưa quá 14 ngày/);
+        expect(await stateOf(id)).toBe(STATE.LOCKED);
+    }, 60_000);
+
+    it('UC-07: quá 14 ngày -> người ngoài bị "Unauthorized", Buyer hủy được và nhận lại ĐỦ tiền ký quỹ (REFUNDED on-chain)', async () => {
+        const amount = 1_234_567n;
+        const id = await lockOrder({ amount });
+        const buyer = wallet(KEYS.buyer);
+        const before = await balanceOf(buyer.address);                    // sau khi ký quỹ (tiền đã nằm trong contract)
+        await provider.send('evm_increaseTime', [14 * DAY + 60]);
+        await provider.send('evm_mine', []);
+
+        const bad = collect();
+        await expect(runOrderAction({ kind: ORDER_ACTION.CANCEL_UNFULFILLED, onchainOrderId: id.toString(), escrow: escrowAs(wallet(KEYS.merchant)), dispatch: bad.dispatch })).rejects.toBeTruthy();
+        expect(bad.events.at(-1).error.message).toMatch(/Chỉ ví đã ký quỹ/);
+        expect(await stateOf(id)).toBe(STATE.LOCKED);                    // revert: tiền không đổi
+
+        const { events, dispatch } = collect();
+        const r = await runOrderAction({ kind: ORDER_ACTION.CANCEL_UNFULFILLED, onchainOrderId: id.toString(), escrow: escrowAs(buyer), dispatch });
+        expect(r.hash).toMatch(/^0x[0-9a-f]{64}$/);
+        expect(events.map((e) => e.type)).toEqual(['START', 'SENT', 'MINED']);
+        expect(await stateOf(id)).toBe(STATE.REFUNDED);
+        expect((await balanceOf(buyer.address)) - before).toBe(amount);   // hoàn đủ, không trừ phí sàn
+    }, 120_000);
+
+    it('UC-07: đơn đã giao thì quá 14 ngày cũng KHÔNG hủy được -> revert THẬT "Not locked" được dịch đúng', async () => {
+        const id = await lockOrder();
+        await deliver(id);
+        await provider.send('evm_increaseTime', [14 * DAY + 60]);
+        await provider.send('evm_mine', []);
+        const { events, dispatch } = collect();
+        await expect(runOrderAction({ kind: ORDER_ACTION.CANCEL_UNFULFILLED, onchainOrderId: id.toString(), escrow: escrowAs(wallet(KEYS.buyer)), dispatch })).rejects.toBeTruthy();
+        expect(events.at(-1).error.message).toMatch(/không còn ở trạng thái chờ giao/);
+        expect(await stateOf(id)).toBe(STATE.DELIVERED);
+    }, 120_000);
 });

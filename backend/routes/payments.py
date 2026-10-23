@@ -375,7 +375,7 @@ def update_order_status(order_id):
 
 
 WEB3_SUMMARY_COLUMNS = (
-    "order_id, onchain_order_id, checkout_group_id, buyer_wallet, status, delivered_at, inspection_duration, disputed_at, "
+    "order_id, onchain_order_id, checkout_group_id, buyer_wallet, status, chain_created_at, delivered_at, inspection_duration, disputed_at, "
     "dispute_timeout, fee_bps, amount_raw, token_symbol, anomaly_flag"
 )
 
@@ -407,6 +407,7 @@ def _web3_summaries(cursor, order_ids):
             'checkout_group_id': r['checkout_group_id'],
             'buyer_wallet': r['buyer_wallet'],      # ví đã ký quỹ: chỉ ví này gọi được earlyRelease/raiseDispute (giao diện kiểm trước khi bật ví)
             'status': r['status'],
+            'chain_created_at': opt(r['chain_created_at']),   # giây UTC theo block lúc ký quỹ: Buyer hủy được khi now_chain >= mốc này + 14 ngày (cancelIfUnfulfilled)
             'delivered_at': opt(r['delivered_at']),
             'inspection_duration': int(r['inspection_duration']),
             'disputed_at': opt(r['disputed_at']),

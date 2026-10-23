@@ -275,7 +275,7 @@ class MySqlCheckoutRepo:
 
     def order_status_row(self, order_id):
         self.cur.execute(
-            "SELECT order_id, buyer_user_id, merchant_user_id, status, delivered_at, inspection_duration, disputed_at, "
+            "SELECT order_id, buyer_user_id, merchant_user_id, status, chain_created_at, delivered_at, inspection_duration, disputed_at, "
             "dispute_timeout, anomaly_flag FROM order_web3 WHERE order_id=%s", (order_id,))
         return self.cur.fetchone()
 
@@ -311,6 +311,18 @@ def reserve_order_stock(cur, order_id):
     return ok
 
 
+def _order_items(cur, order_ids):
+    """Dòng hàng của các đơn (tên chụp lúc mua, số lượng, biến thể) -> {order_id: [..]}. Dùng chung cho cổng Shipper và Merchant."""
+    if not order_ids:
+        return {}
+    cur.execute("SELECT orderId, snapshotProductName AS name, quantity, selectedVariants FROM orderLines "
+                f"WHERE orderId IN ({_marks(len(order_ids))}) ORDER BY orderId, id", tuple(order_ids))
+    out = {}
+    for r in cur.fetchall():
+        out.setdefault(r['orderId'], []).append({'name': r['name'], 'quantity': int(r['quantity']), 'variants': r['selectedVariants']})
+    return out
+
+
 class MySqlShipperRepo:
     def __init__(self, cur):
         self.cur = cur
@@ -337,15 +349,7 @@ class MySqlShipperRepo:
         return rows
 
     def _items(self, order_ids):
-        if not order_ids:
-            return {}
-        self.cur.execute("SELECT orderId, snapshotProductName AS name, quantity, selectedVariants FROM orderLines "
-                         f"WHERE orderId IN ({_marks(len(order_ids))}) ORDER BY orderId, id", tuple(order_ids))
-        out = {}
-        for r in self.cur.fetchall():
-            out.setdefault(r['orderId'], []).append(
-                {'name': r['name'], 'quantity': int(r['quantity']), 'variants': r['selectedVariants']})
-        return out
+        return _order_items(self.cur, order_ids)
 
     def assigned_order(self, order_id, shipper_user_id, lock=False):
         self.cur.execute(
@@ -364,6 +368,42 @@ class MySqlShipperRepo:
             "INSERT INTO shipper_assignments (order_id, shipper_user_id, assigned_by) VALUES (%s, %s, %s) "
             "ON DUPLICATE KEY UPDATE shipper_user_id=VALUES(shipper_user_id), assigned_by=VALUES(assigned_by), "
             "assigned_at=CURRENT_TIMESTAMP", (order_id, shipper_user_id, assigned_by))
+
+
+class MySqlMerchantRepo:
+    """Đơn Web3 của Merchant (Tuần 7). Quyền xem = `order_web3.merchant_user_id` (= shops.sellerId), không bao giờ nhận id từ client."""
+
+    def __init__(self, cur):
+        self.cur = cur
+
+    def merchant_orders(self, merchant_user_id, statuses, limit):
+        if not statuses:
+            return []
+        self.cur.execute(
+            "SELECT w.order_id, w.onchain_order_id, w.status, w.amount_raw, w.token_symbol, w.token_address, w.price_vnd, w.fee_bps, "
+            "w.merchant_wallet, w.inspection_duration, w.dispute_timeout, w.chain_created_at, w.delivered_at, w.disputed_at, "
+            "w.closed_at, bu.name AS buyer_name "
+            "FROM order_web3 w LEFT JOIN users bu ON bu.id = w.buyer_user_id "
+            f"WHERE w.merchant_user_id=%s AND w.status IN ({_marks(len(statuses))}) "
+            "ORDER BY w.onchain_order_id DESC LIMIT %s", (merchant_user_id, *statuses, int(limit)))
+        rows = list(self.cur.fetchall())
+        items = _order_items(self.cur, [r['order_id'] for r in rows])
+        for r in rows:
+            r['items'] = items.get(r['order_id'], [])
+        return rows
+
+    def merchant_wallets(self, merchant_user_id):
+        """Ví đang liên kết VÀ mọi ví từng dùng làm `merchant` trên đơn của shop (số dư chờ rút gắn với ví nhận tiền thật sự trên chuỗi)."""
+        self.cur.execute("SELECT address FROM user_wallets WHERE user_id=%s AND is_active=1 "
+                         "UNION SELECT merchant_wallet FROM order_web3 WHERE merchant_user_id=%s", (merchant_user_id, merchant_user_id))
+        return sorted({str(r['address']).lower() for r in self.cur.fetchall()})
+
+    def pending_for_addresses(self, addresses):
+        if not addresses:
+            return []
+        self.cur.execute(f"SELECT token_address, address, amount_raw FROM pending_balances WHERE address IN ({_marks(len(addresses))})",
+                         tuple(addresses))
+        return [r for r in self.cur.fetchall() if int(r['amount_raw']) > 0]
 
 
 class MySqlOutboxRepo:
@@ -672,6 +712,7 @@ class MySqlUnitOfWork:
         self.policies = MySqlPolicyRepo(self.cur)
         self.checkout = MySqlCheckoutRepo(self.cur)
         self.shipper = MySqlShipperRepo(self.cur)
+        self.merchant = MySqlMerchantRepo(self.cur)
         self.outbox = MySqlOutboxRepo(self.cur)
         self.notifications = MySqlNotificationRepo(self.cur)
         self.jobs = MySqlJobsRepo(self.cur)

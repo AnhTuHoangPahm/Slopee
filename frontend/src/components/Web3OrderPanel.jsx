@@ -12,7 +12,7 @@ import { INDEXER_SLOW_AFTER_MS } from '../lib/depositFlow';
 import { formatTokenAmount } from '../lib/web3Checkout';
 import { shortAddress, shortHash } from '../lib/format';
 import { ACTION_STEP, ORDER_ACTION, TARGET_STATUS, clearDisputeDraft, loadDisputeDraft, saveDisputeDraft } from '../lib/orderActions';
-import { ORDER_STATUS, availableActions, isTerminalStatus, orderPhase, walletGate } from '../lib/orderTimer';
+import { ORDER_STATUS, availableActions, canCancelUnfulfilled, formatInspectionCountdown, isTerminalStatus, orderPhase, walletGate } from '../lib/orderTimer';
 
 const btn = { padding: '6px 12px', borderRadius: '3px', cursor: 'pointer', fontWeight: 'bold', border: 'none' };
 const disabledStyle = { opacity: 0.5, cursor: 'not-allowed' };
@@ -21,12 +21,13 @@ const PHASE_TEXT = {
     PENDING_PAYMENT: 'Chưa ký quỹ. Hãy hoàn tất thanh toán ở trang Thanh toán.',
     EXPIRED: 'Báo giá đã hết hạn nên đơn này không được tạo.',
     AWAITING_DELIVERY: 'Tiền đã được khóa an toàn trong hợp đồng. Đang chờ Shipper giao hàng.',
+    DELIVERY_OVERDUE: 'Đơn đã quá 14 ngày kể từ lúc ký quỹ mà chưa được giao. Bạn có thể hủy đơn để nhận lại toàn bộ tiền ký quỹ.',
     INSPECTION_OVER: 'Đã hết hạn kiểm tra. Hệ thống sẽ tự giải ngân cho cửa hàng.',
     DISPUTED: 'Khiếu nại đang được xử lý. Tiền bị đóng băng cho tới khi có phán quyết.',
     COMPLETED: 'Đã giải ngân cho cửa hàng.',
     REFUNDED: 'Tiền ký quỹ đã được hoàn lại cho bạn.',
 };
-const ACTION_TITLE = { [ORDER_ACTION.EARLY_RELEASE]: 'Đã nhận hàng', [ORDER_ACTION.RAISE_DISPUTE]: 'Khiếu nại' };
+const ACTION_TITLE = { [ORDER_ACTION.EARLY_RELEASE]: 'Đã nhận hàng', [ORDER_ACTION.RAISE_DISPUTE]: 'Khiếu nại', [ORDER_ACTION.CANCEL_UNFULFILLED]: 'Hủy đơn' };
 
 /** Bật cờ sau `ms` kể từ lúc `active` chuyển true (dùng cho gợi ý "Indexer chậm" sau 30 giây, SDD 9.3). */
 function useDelayedFlag(active, ms) {
@@ -40,7 +41,8 @@ function useDelayedFlag(active, ms) {
 }
 
 /**
- * Một đơn con Web3 của Buyer (SDD 9.3, 9.4; SRS 8): trạng thái theo polling, đồng hồ kiểm tra riêng, "Đã nhận hàng" và "Khiếu nại".
+ * Một đơn con Web3 của Buyer (SDD 9.3, 9.4; SRS 8): trạng thái theo polling, đồng hồ kiểm tra riêng, "Đã nhận hàng", "Khiếu nại" và
+ * (Tuần 7, UC-07) "Hủy đơn" khi đơn còn LOCKED quá 14 ngày chưa giao (`cancelIfUnfulfilled`).
  * Mỗi đơn có luồng ví riêng nên thao tác trên đơn của shop này không đổi đơn của shop khác (BR-11).
  *
  * @param {object} props
@@ -54,10 +56,11 @@ function useDelayedFlag(active, ms) {
 export default function Web3OrderPanel({ orderCode, web3, escrowFactory, fetchStatus, saveNote = saveDisputeNoteAPI, pollMs }) {
     const w = useWallet();
     const live = web3.status !== ORDER_STATUS.PENDING_PAYMENT && !isTerminalStatus(web3.status);
-    const { status: polled, error: pollError, remaining, boost } = useOrderStatus(orderCode, { enabled: live, fetchStatus, intervalMs: pollMs });
+    const { status: polled, error: pollError, remaining, deliveryRemaining, boost } = useOrderStatus(orderCode, { enabled: live, fetchStatus, intervalMs: pollMs });
     const statusName = polled?.status ?? web3.status;
-    const phase = orderPhase(statusName, remaining);
+    const phase = orderPhase(statusName, remaining, deliveryRemaining);
     const can = availableActions(statusName, remaining);
+    const cancelDue = canCancelUnfulfilled(statusName, deliveryRemaining);
 
     const { state, run, markIndexed, reset, busy } = useOrderActions(escrowFactory ? { escrowFactory } : {});
     const gate = walletGate({ isConnected: w.isConnected, isCorrectChain: w.isCorrectChain, account: w.account, buyerWallet: web3.buyer_wallet });
@@ -110,6 +113,13 @@ export default function Web3OrderPanel({ orderCode, web3, escrowFactory, fetchSt
         if (!window.confirm('Xác nhận bạn đã nhận hàng? Tiền ký quỹ sẽ được giải ngân ngay cho cửa hàng và không thể hoàn lại.')) return;
         run(ORDER_ACTION.EARLY_RELEASE, web3.onchain_order_id);
     };
+    // ---- Hủy đơn quá hạn giao (UC-07): xác nhận NGAY TRONG trang (không dùng window.confirm, xem AI_CONTEXT mục 7)
+    const [cancelConfirm, setCancelConfirm] = useState(false);
+    useEffect(() => { if (!cancelDue || busy) setCancelConfirm(false); }, [cancelDue, busy]);
+    const onCancelConfirmed = () => {
+        setCancelConfirm(false);
+        run(ORDER_ACTION.CANCEL_UNFULFILLED, web3.onchain_order_id);
+    };
     const onDisputeSubmit = (value) => {
         saveDisputeDraft(orderCode, value);
         setDraft(value);
@@ -119,6 +129,7 @@ export default function Web3OrderPanel({ orderCode, web3, escrowFactory, fetchSt
     };
 
     const showActions = statusName === ORDER_STATUS.DELIVERED;
+    const showCancel = statusName === ORDER_STATUS.LOCKED && deliveryRemaining !== null && deliveryRemaining !== undefined;
     const decimals = w.deployment?.token?.decimals ?? 6;
 
     return (
@@ -162,6 +173,40 @@ export default function Web3OrderPanel({ orderCode, web3, escrowFactory, fetchSt
                         <p data-testid="gate-wrong-account" role="alert" style={{ margin: '8px 0 0', color: '#b8860b' }}>
                             Ví đang chọn không phải ví đã ký quỹ đơn này ({shortAddress(web3.buyer_wallet)}). Hãy chọn đúng ví trong MetaMask.
                         </p>
+                    )}
+                </div>
+            )}
+
+            {showCancel && (
+                <div data-testid="cancel-section" style={{ marginTop: '10px' }}>
+                    {!cancelDue && (
+                        <p data-testid="delivery-countdown" role="timer" style={{ margin: '0 0 8px', color: '#555' }}>
+                            Cửa hàng còn <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{formatInspectionCountdown(deliveryRemaining)}</strong> để giao hàng.
+                            Quá 14 ngày kể từ lúc ký quỹ mà chưa giao, bạn có thể hủy đơn để nhận lại toàn bộ tiền.
+                        </p>
+                    )}
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <button type="button" data-testid="cancel-btn" disabled={!cancelDue || !canPress} onClick={() => setCancelConfirm(true)}
+                            title={!cancelDue ? 'Chỉ hủy được sau 14 ngày kể từ lúc ký quỹ nếu đơn chưa được giao' : undefined}
+                            style={{ ...btn, background: '#fff', color: '#d32f2f', border: '1px solid #d32f2f', ...(!cancelDue || !canPress ? disabledStyle : null) }}>
+                            Hủy đơn &amp; nhận lại tiền
+                        </button>
+                        {gate === 'NOT_CONNECTED' && <button type="button" data-testid="gate-connect" onClick={w.connect} style={{ ...btn, background: '#ee4d2d', color: '#fff' }}>Kết nối MetaMask để thao tác</button>}
+                        {gate === 'WRONG_CHAIN' && <button type="button" data-testid="gate-switch" onClick={w.switchToDeployedChain} style={{ ...btn, background: '#ee4d2d', color: '#fff' }}>Chuyển sang mạng Anvil</button>}
+                    </div>
+                    {gate === 'WRONG_ACCOUNT' && (
+                        <p data-testid="gate-wrong-account" role="alert" style={{ margin: '8px 0 0', color: '#b8860b' }}>
+                            Ví đang chọn không phải ví đã ký quỹ đơn này ({shortAddress(web3.buyer_wallet)}). Hãy chọn đúng ví trong MetaMask.
+                        </p>
+                    )}
+                    {cancelConfirm && cancelDue && (
+                        <div data-testid="cancel-confirm-box" role="alertdialog" aria-label="Xác nhận hủy đơn" style={{ marginTop: '8px', padding: '10px', background: '#fff8e1', border: '1px solid #f0c36d', borderRadius: '4px' }}>
+                            <p style={{ margin: '0 0 8px' }}>Hủy đơn này? Toàn bộ tiền ký quỹ sẽ được hoàn lại cho ví của bạn, cửa hàng sẽ không nhận được tiền và việc này không thể hoàn tác.</p>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button type="button" data-testid="cancel-confirm" disabled={!canPress} onClick={onCancelConfirmed} style={{ ...btn, background: '#d32f2f', color: '#fff', ...(!canPress ? disabledStyle : null) }}>Xác nhận hủy đơn</button>
+                                <button type="button" data-testid="cancel-abort" onClick={() => setCancelConfirm(false)} style={{ ...btn, background: '#fff', border: '1px solid #bbb' }}>Không hủy</button>
+                            </div>
+                        </div>
                     )}
                 </div>
             )}

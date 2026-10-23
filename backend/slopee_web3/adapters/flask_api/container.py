@@ -16,6 +16,7 @@ from ...application.order_status_service import OrderStatusService
 from ...application.quote_service import QuoteService
 from ...application.reconcile_service import ReconcileService
 from ...application.relayer_service import RelayerService
+from ...application.merchant_service import MerchantService
 from ...application.shipper_service import ShipperService
 from ...application.wallet_service import WalletService
 from ...domain.errors import DomainError
@@ -57,6 +58,10 @@ class Web3Container:
 
     def shipper_service(self):
         return ShipperService(self.uow_factory, self.relayer_service())
+
+    def merchant_service(self):
+        return MerchantService(self.uow_factory, tokens={self.settings.token_address: {'symbol': self.settings.token_symbol,
+                                                                                       'decimals': self.settings.token_decimals}})
 
     def dispute_service(self):
         return DisputeService(self.uow_factory, self.chain, self.signer, self.clock, token_decimals=self.settings.token_decimals)

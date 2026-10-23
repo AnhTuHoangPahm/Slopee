@@ -260,13 +260,16 @@ def test_status_endpoint_follows_indexer_and_enforces_ownership(env, db, conn):
         body = r.get_json()
         assert r.status_code == 200 and body['status'] == 'PENDING_PAYMENT' and body['anomaly'] is False
         assert body['delivered_at'] is None and body['disputed_at'] is None
+        assert body['chain_created_at'] is None      # chưa ký quỹ nên chưa có mốc block (Tuần 7 [C])
         assert body['inspection_duration'] == int(o['inspection_duration']) and body['dispute_timeout'] == int(o['dispute_timeout'])
         assert body['server_time'] == env.clock.now_chain()
         chain = FakeChain()
         chain.head = 4
         chain.logs = [created_event(o, 3)]
         run(conn, chain)
-        assert c.get(url, headers=hdr(buyer)).get_json()['status'] == 'LOCKED'      # polling thấy LOCKED sau Indexer
+        locked = c.get(url, headers=hdr(buyer)).get_json()
+        assert locked['status'] == 'LOCKED'      # polling thấy LOCKED sau Indexer
+        assert isinstance(locked['chain_created_at'], int) and locked['chain_created_at'] > 0   # mốc ký quỹ = giờ block của OrderCreated
         assert c.get(url, headers=hdr(merchants[0], 'seller')).status_code == 200
         assert c.get(url, headers=hdr(user(db), 'admin')).status_code == 200
         stranger = c.get(url, headers=hdr(user(db)))
