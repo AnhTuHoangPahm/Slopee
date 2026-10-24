@@ -77,7 +77,7 @@ backend/slopee_web3/
   application/   ca sử dụng, điều phối các cổng       wallet_service, quote_service, order_status_service, shipper_service, merchant_service,
                                                         relayer_service, dispute_service, dispute_admin_service,
                                                         dispute_submit_service, dispute_note_service, notification_service,
-                                                        reconcile_service, jobs (tác vụ nền)
+                                                        reconcile_service, dispute_force_service (UC-07), jobs (tác vụ nền)
   ports/         giao diện trừu tượng                 chain_port, signer_port, clock_port, repositories, relayer_port
   adapters/      hiện thực cổng + điểm vào            web3_chain, env_signer, mysql_repos, clock, legacy_sync, advisory_lock,
                                                         relayer_queue, flask_api/ (routes, container, ánh xạ lỗi HTTP),

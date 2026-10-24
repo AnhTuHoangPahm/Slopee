@@ -144,7 +144,7 @@ CREATE TABLE IF NOT EXISTS authAttempts (
 );
 
 -- =====================================================================================================
--- WEB3 ESCROW (migration 0006 .. 0022). Giữ KHỚP với migrations/: test_web3_migrations.py so sánh DB tạo từ file này
+-- WEB3 ESCROW (migration 0006 .. 0023). Giữ KHỚP với migrations/: test_web3_migrations.py so sánh DB tạo từ file này
 -- với DB nâng cấp bằng migrate.py. Sửa một bên thì phải sửa bên kia. Phần trên dấu mốc này là schema Slopee cũ.
 -- =====================================================================================================
 
@@ -372,4 +372,19 @@ CREATE TABLE IF NOT EXISTS dispute_notes (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_dispute_note_order FOREIGN KEY (order_id) REFERENCES order_web3(order_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS dispute_force_resolutions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_id VARCHAR(36) NOT NULL,
+    onchain_order_id BIGINT UNSIGNED NOT NULL,
+    admin_user_id VARCHAR(36) NOT NULL COMMENT 'Admin yêu cầu (từ token)',
+    payout_side ENUM('BUYER','MERCHANT') NOT NULL COMMENT 'BUYER = hoàn tiền, MERCHANT = giải ngân',
+    payout_to CHAR(42) NOT NULL COMMENT 'địa chỉ chữ thường',
+    amount_raw VARCHAR(78) NOT NULL,
+    reason_note TEXT DEFAULT NULL,
+    outbox_id BIGINT DEFAULT NULL COMMENT 'tx_outbox.id',
+    tx_hash CHAR(66) DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_force_order (order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

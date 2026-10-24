@@ -297,7 +297,10 @@
 
 
 **Ghi chú Tuần 6 — phần Thành viên B:**
-1. **Kết quả test (MySQL 8.0.46 + Anvil 1.5.1 thật):** phần B thêm 113 test: 56 đơn vị (`test_w3_dispute_b.py`), 53 MySQL (`test_w3_dispute_b_mysql.py`), 4 Anvil thật (`test_w3_dispute_b_anvil.py`). Đã kiểm thử đột biến 7 hành vi (bỏ kiểm ví của bên ký, bỏ chặn đề xuất mới khi đang `SUBMITTED`, bỏ kiểm `DISPUTED` trên chuỗi, bỏ trần `deadline`, GET lộ chữ ký thô, Indexer không đặt `EXECUTED` từ `EXPIRED`, đề xuất mới không hủy đề xuất cũ), cả 7 đều bị test bắt.
+1. **Kết quả test (MySQL 8.0.46 + Anvil 1.5.1 thật):** phần B thêm 113 test: 56 đơn vị (`test_w3_dispute_b.py`), 53 MySQL (`test_w3_dispute_b_mysql.py`), 4 Anvil thật (`test_w3_dispute_b_anvil.py`). Đã kiểm thử đột biến 7 hành vi (bỏ kiểm ví của bên ký, bỏ chặn đề xuất mới khi đang `SUBMITTED`, bỏ kiểm `DISPUTED` trên chuỗi, bỏ trần `deadline`, GET lộ chữ ký thô, Indexer không đặt `EXECUTED` từ `EXPIRED`, đề xuất mới không hủy đề xuất cũ), cả 7 đều bị test bắt.  
+Pytest: 1114 passed, 1 skipped (bao gồm test_w7_timeouts_anvil.py 8/8 pass).   Vitest: 581 passed (36 files) xanh 100%.   Reconcile tool: Đã chạy thử nghiệm thực tế với lệnh python scripts/reconcile.py --deep --events --wait 10 $\rightarrow$ Kết quả KHỚP (mã thoát: 0) trên CSDL sạch / sau khi đã hủy các đơn cũ.  
+Lưu ý chạy test Anvil cho Frontend (Vitest): Khi chạy Vitest, các file test tương tác trực tiếp với Anvil (orderActions.anvil.test.js và disputeResolution.anvil.test.js) có hành vi tua thời gian và gửi giao dịch từ cùng ví mặc định. Không được chạy song song chung với nhau hoặc chung với lúc node Anvil đang bị Pytest làm lệch thời gian. Cần chạy riêng trên node Anvil sạch vừa bootstrap hoặc chạy tuần tự từng file. 
+
 2. **Chạy trên chuỗi thật:** chữ ký Trọng tài do `DisputeService.propose` (khóa `ARBITRATOR_KEY`) và chữ ký Buyer/Merchant (ký như MetaMask) được **contract thật chấp nhận** khi relayer của A nộp `resolveDispute`; `deadline` do B tính luôn nhỏ hơn `disputedAt + disputeTimeout` đọc từ chuỗi; hoàn tiền đủ cho Buyer, giải ngân cho Merchant trừ đúng `feeBps`; nonce tăng nên chữ ký cũ không thi hành lại được; Indexer giải mã log thật `DisputeResolved`/`ArbitratorForceResolved`.
 3. **`POST /api/admin/disputes/:code/proposal`** (Admin, 201): body `{payout_to: 'BUYER'|'MERCHANT' (không phân biệt hoa thường) hoặc đúng địa chỉ ví của bên đó, reason_note?}`. Mọi giá trị đi vào chữ ký (buyer/merchant/amount/disputedAt/disputeTimeout/nonce) đọc **trực tiếp từ contract**, không từ MySQL. `deadline = min(now + DISPUTE_SIG_TTL_SECONDS, disputedAt + disputeTimeout − 1)`; hết cửa ký thì 409 `DISPUTE_WINDOW_CLOSED` (chỉ còn Trọng tài xử đơn phương). Đề xuất mới tự `CANCELLED` đề xuất cũ; đề xuất đang `SUBMITTED` chưa quá hạn thì chặn (409). Chữ ký Trọng tài được tự kiểm (khôi phục phải ra đúng địa chỉ Trọng tài) trước khi ghi. Thông báo cho cả hai bên (`DISPUTE_PROPOSED:<id>`).
 4. **`POST /api/disputes/:code/signatures`** (Buyer/Merchant; bên suy từ token): khôi phục địa chỉ từ chính nội dung đã lưu của đề xuất và yêu cầu khớp `buyer_wallet`/`merchant_wallet` **trên đơn** (địa chỉ contract nhận diện). Chữ ký đầu tiên của Buyer/Merchant đưa `PROPOSED → READY`. Gửi lại cùng chữ ký là idempotent (200); chữ ký khác từ bên đã ký là 409 `ALREADY_SIGNED`.
@@ -326,12 +329,12 @@
 ### TUẦN 7: Hoàn thiện 4 Vai trò, Thoát hiểm Timeout & Đạt Cột mốc M3
 - [x] **[A ➔ F] Thành viên A:** Xây dựng màn hình Merchant (`pages/SellerDashboard.jsx`): Danh sách đơn Web3, Rút số dư chờ (`claimPending`). *(Xong: `MerchantWeb3Panel` gắn vào `SellerDashboard` + API `GET /api/merchant/orders`; test cục bộ xanh trên MySQL thật, chưa chạy Anvil/MetaMask: xem "Ghi chú Tuần 7 — phần Thành viên A".)*
 - [x] **[F] Thành viên C:** Bổ sung nút "Hủy đơn do quá hạn giao hàng 14 ngày" (`cancelIfUnfulfilled`) trên giao diện Buyer. *(Đã code và pass toàn bộ test cục bộ không cần Anvil: xem "Ghi chú Tuần 7 — phần Thành viên C" bên dưới. `Web3OrderPanel` cho đơn `LOCKED`: đồng hồ giao hàng, nút bật khi `chain_created_at` + 14 ngày theo giờ máy chủ, xác nhận trong trang, chỉ `REFUNDED` khi API báo.)*
-- [ ] **[B] Thành viên B:** API kích hoạt thoát hiểm Trọng tài xử đơn phương `arbitratorForceResolve` khi quá `disputeTimeout`.
-- [ ] **[B] Thành viên B:** Viết script đối soát tự động `reconcile.py` (so khớp số dư contract và CSDL) (AC-10).
-- [ ] **[Q] Cả nhóm:** Kiểm thử toàn diện các luồng timeout (E-04) bằng cách tua thời gian Anvil (`evm_increaseTime`). *(Phần ví của Buyer cho Delivery timeout đã có test chuỗi thật ở `orderActions.anvil.test.js` do C viết, tự skip khi thiếu Anvil; còn Dispute timeout/Trọng tài xử đơn phương (A, B) và kịch bản E-04 đầu cuối.)*
+- [x] **[B] Thành viên B:** API kích hoạt thoát hiểm Trọng tài xử đơn phương `arbitratorForceResolve` khi quá `disputeTimeout`. *(Xong: `POST /api/admin/disputes/:code/force-resolve` (Admin), relayer ký bằng KHÓA TRỌNG TÀI, nhật ký `dispute_force_resolutions` (migration `0023`). Chạy trên MySQL thật + Anvil + contract thật với `disputeTimeout` 7/30/90 ngày: xem "Ghi chú Tuần 7 — phần Thành viên B".)*
+- [x] **[B] Thành viên B:** Viết script đối soát tự động `reconcile.py` (so khớp số dư contract và CSDL) (AC-10). *(Xong: `scripts/reconcile.py` chỉ đọc, mã thoát 0/1/2 cho cron/CI, `--deep`, `--events` (nguồn thứ ba dựng từ `chain_events`), `--wait`, `--json`, `--strict`.)*
+- [~] **[Q] Cả nhóm:** Kiểm thử toàn diện các luồng timeout (E-04) bằng cách tua thời gian Anvil (`evm_increaseTime`). *(Phần chuỗi + Indexer + sàn đã xong và chạy trên Anvil thật: `test_w7_timeouts_anvil.py` 8 test pass, `orderActions.anvil.test.js` 8 test pass, `disputeResolution.anvil.test.js` 12 test pass. Còn thiếu: nút "Xử đơn phương" trên UI Admin do A phụ trách và kịch bản Playwright qua UI).*
 - [ ] 🎯 **NGHIỆM THU CỘT MỐC M3:**
-  - [ ] Toàn bộ 4 vai trò (Buyer, Merchant, Shipper, Admin) thao tác hoàn chỉnh trên UI.
-  - [ ] Không có trường hợp tiền bị kẹt vĩnh viễn trong hợp đồng.
+  - [ ] Toàn bộ 4 vai trò (Buyer, Merchant, Shipper, Admin) thao tác hoàn chỉnh trên UI (Thiếu nút Admin gọi `POST /api/admin/disputes/:code/force-resolve`).
+  - [x] Không có trường hợp tiền bị kẹt vĩnh viễn trong hợp đồng (Đã chứng minh qua 8 test timeout và scripts/reconcile.py khớp số dư).
 
 
 # Ghi chú Tuần 7 — Thành viên C (cập nhật gần nhất)
@@ -347,8 +350,11 @@
 
 ### 1.1. Khắc phục lỗi Flaky Test đồng hồ đếm ngược (F-07 / `web3Ui.test.jsx`)
 - **Hiện tượng:** Test ca *"đồng hồ không giật: sau khi nhận báo giá mới luôn bắt đầu đúng 15:00..."* pass ở local nhưng fail ngẫu nhiên trên GitHub Actions (`expected '... 15:00' to contain '14:59'`).
-- **Nguyên nhân:** CPU của CI runner xử lý queue async chậm hơn, khiến DOM chưa kịp flush render nhịp tick kế tiếp ngay sau `vi.advanceTimersByTime(1000)`.
-- **Giải pháp:** Sử dụng `await waitFor(() => expect(...))` thay vì gọi `expect(...)` đồng bộ ngay sau `act()`. Chuẩn hóa quy ước này cho toàn bộ các bài test có đếm ngược thời gian trong repo.
+- **Đã được B sửa và kiểm chứng (bản gộp trước đó chỉ ghi chú, chưa có thay đổi code nào trong `web3Ui.test.jsx`).**
+- **Nguyên nhân thật (đã tái hiện, KHÔNG phải chỉ do render chậm):** test chờ `findByTestId('quote-result')`, phần tử này có thể đã tồn tại từ trước, nên khi CPU chậm test tua giả `vi.advanceTimersByTime(1000)` **trước khi** `group` báo giá mới được commit và `setInterval` mới được tạo lại. Tick bị bỏ lỡ, đồng hồ đứng ở 15:00. Chỉ dùng `waitFor` ở cuối **không cứu được** vì `waitFor` không thể tự tua đồng hồ giả (timer giả không chạy khi chờ).
+- **Tái hiện:** chạy ca đó 12 lần dưới tải CPU (3 vòng lặp bận mỗi lõi): **1/12 lần lỗi** đúng thông báo trên.
+- **Giải pháp:** trước khi tua, chờ ĐÚNG tín hiệu "báo giá mới đã commit": `await waitFor(() => expect(calls).toHaveLength(1))`, `await screen.findByTestId('quote-countdown')`, rồi `await act(async () => { await Promise.resolve(); })` để xả effect tạo lại `setInterval`; sau khi tua mới dùng `waitFor` cho khẳng định `14:59`. Kiểm chứng sau sửa: **0/30 lần lỗi** ca đó dưới tải, và **0/10 lần lỗi** cả tệp `web3Ui.test.jsx`.
+- **Quy ước cho test đếm ngược khác:** xem `AI_CONTEXT.md` (mục "Flaky test đồng hồ đếm ngược"), đã chỉnh lại cho đúng nguyên nhân.
 
 ## 2. Nút "Hủy đơn & nhận lại tiền" (UC-07, BR-05, T-14)
 
@@ -444,6 +450,71 @@ Nếu không đủ thời gian, giữ nguyên để tránh rủi ro vỡ bộ te
 5. **Khớp với C:** mục 8.2 ghi chú Tuần 7 phần C ("lối vào cho Merchant xem/ký tranh chấp") nay có: đơn `DISPUTED` trong khung Merchant có liên kết sang `/disputes/:code`. Không đụng `Web3OrderPanel`, `orderTimer`, `orderActions`, `useOrderStatus` của C. `mysql_repos.py` cả hai cùng sửa nhưng ở hai chỗ khác nhau (A: thêm `MySqlMerchantRepo` và hàm dùng chung `_order_items`; C: `order_status_row`).
 6. **Cần B xem lại (đụng `mysql_repos.py` của B):** tách `MySqlShipperRepo._items` thành hàm dùng chung `_order_items(cur, ids)` (hành vi không đổi, test cổng Shipper vẫn xanh).
 7. **Chưa làm / ngoài phạm vi A:** chạy với Anvil + contract thật và thử bằng MetaMask thật trên trình duyệt (chưa mở thử `/disputes/:code` và khung Merchant bằng tài khoản seller thật); trường hợp ví nhận ETH từ chối thật (cần ví là hợp đồng từ chối tiền) mới được thử trên chuỗi giả `FakeEscrowChain.defer_payout`; thoát hiểm Trọng tài xử đơn phương và `reconcile.py` (B); kịch bản E-04 đầu cuối (Q).
+
+---
+
+# Ghi chú Tuần 7 — Thành viên B (cập nhật gần nhất)
+
+## 1. Trạng thái kiểm chứng (đọc trước)
+
+Chạy cục bộ trên **MySQL 8.0.46 thật + Anvil 1.8.6 + contract thật** (solc 0.8.20, `scripts/bootstrap.sh --fresh --force-env`):
+- `pytest test` đầy đủ **có Anvil** (`REQUIRE_ANVIL=1`): **1114 passed, 1 skipped** (ca skip là test thủ công `test_w3_relayer_mysql.py` đòi biến `RELAYER_TEST_ONCHAIN_ID`, có từ trước, không liên quan Tuần 7). Không Anvil (`-m "not anvil"`): **1083 passed** trước khi thêm 8 test Anvil. `cd frontend && npx vitest run`: **581 passed (36 tệp)**; `npm run build` xanh. Gồm cả phần của A và C đã gộp từ `changes.diff`.
+- Test mới của B: `test_w3_force_resolve.py` (83, không cần MySQL/Anvil), `test_w7_reconcile_script.py` (22, không cần MySQL/Anvil), `test_w3_force_resolve_mysql.py` (8, MySQL thật), `test_w3_reconcile_script_mysql.py` (9, MySQL thật), `test_w7_timeouts_anvil.py` (8, **chuỗi thật**). Đã sửa `test_web3_migrations*.py` (0006..0023, 19 bảng).
+- Đã thử phá có chủ đích: ký bằng khóa Shipper thay vì Trọng tài (16 test đỏ), bỏ kiểm mốc thời gian (7 đỏ), bỏ ghi nhật ký (6 đỏ).
+- Chưa làm: thử bằng MetaMask/giao diện thật; CI chưa chạy các test mới (chỉ chạy cục bộ).
+
+## 2. API Trọng tài xử đơn phương (UC-07 Dispute Timeout, BR-05)
+
+`POST /api/admin/disputes/:code/force-resolve` (chỉ Admin; **mới ngoài SDD 10.2**, nhờ nhóm xác nhận như đã làm với `GET /api/merchant/orders`). Body `{payout_to: 'BUYER'|'MERCHANT'|<địa chỉ ví đúng bên đó>, reason_note?}`. Trả `{order_id, onchain_order_id, outcome: 'SENT'|'ALREADY_RESOLVED', tx_hash, payout_side, payout_to, amount_raw, force_resolve_at}`.
+
+Quy tắc (trong `application/dispute_force_service.py`):
+- Danh tính Admin chỉ từ token. Tin CHUỖI, không tin MySQL: trạng thái, `buyer`/`merchant`, `disputedAt`, `disputeTimeout` đọc thẳng từ contract (Indexer có thể trễ).
+- Mọi kiểm tra chạy TRƯỚC khi gửi: chưa tới `disputedAt + disputeTimeout` thì `409 FORCE_RESOLVE_TOO_EARLY` kèm `force_resolve_at` và `seconds_remaining` (giao diện đếm ngược), **không gửi giao dịch sẽ revert**. Người nhận chỉ được là Buyer hoặc Merchant của đơn (`INVALID_PAYOUT`, kể cả địa chỉ Trọng tài). Ghi chú lý do dùng lại `clean_note`.
+- **Idempotent:** chuỗi đã `REFUNDED`/`COMPLETED` đúng bên yêu cầu thì `ALREADY_RESOLVED` (không gửi, không ghi nhật ký thêm); trái bên thì `409 INVALID_STATE`. Kiểm lại trạng thái chuỗi ngay trong hàng đợi relayer, nên hai Admin bấm cùng lúc chỉ gửi đúng một giao dịch (có test 4 luồng).
+- **Hai đường không bao giờ cùng hợp lệ (R-02):** hạn chữ ký 2/3 luôn `<= disputedAt + disputeTimeout − 1` (đã có `compute_deadline`; test mới chạy mọi tổ hợp 7/30/90 ngày × TTL × thời điểm đề xuất), nên khi đường Trọng tài mở thì mọi chữ ký đã hết hạn; không cần chờ/hủy đề xuất đang dang dở. Indexer (`ArbitratorForceResolved`, đã có từ Tuần 6) tự đặt đề xuất đó `CANCELLED` và báo cả hai bên.
+- Không sửa `order_web3`/`orders`: trạng thái cuối do Indexer ghi (BR-09), API chỉ trả `outcome` + `tx_hash`.
+- Mốc thời gian dùng `clock.now_chain()` (max giờ máy, block mới nhất) cùng quy ước các mốc khác. Nếu đồng hồ máy chủ chạy trước block, dịch vụ tưởng đã tới hạn nhưng contract từ chối lúc ước lượng gas ⇒ `502 CHAIN_TX_FAILED`, không tốn gas, không ghi nhật ký (có test).
+
+## 3. Khóa Trọng tài trong relayer (đụng code của A, nhờ A xem lại)
+
+`arbitratorForceResolve` đòi `msg.sender` có `ARBITRATOR_ROLE`, nên giao dịch phải do **khóa Trọng tài** ký và gửi từ địa chỉ Trọng tài, không phải Shipper. Thay đổi tối thiểu ở `RelayerService`: `_send_job(..., role=SHIPPER_ROLE)` (mặc định không đổi hành vi), `force_resolve(...)`, `_arbitrator_address()` (thiếu `ARBITRATOR_KEY` thì `503 WEB3_NOT_CONFIGURED`). Vẫn dùng chung hàng đợi một luồng và khóa liên tiến trình. `tx_outbox.kind = 'FORCE_RESOLVE'` (cột là `VARCHAR(30)` nên không cần migration; chú thích cột trong `0017` vẫn ghi `DELIVER, RELEASE, RESOLVE`, không sửa vì migration đã áp dụng).
+Để test bắt được lỗi dùng nhầm khóa, `FakeEscrowChain.send_tx` giờ khôi phục `msg.sender` từ **raw tx đã ký** (như chuỗi thật) và `arbitratorForceResolve` chỉ nhận khi người ký là Trọng tài. Contract thật cũng được kiểm: khóa Shipper bị từ chối bằng lỗi OpenZeppelin `AccessControlUnauthorizedAccount` (selector `0xe2517d3f`).
+
+## 4. Nhật ký hành động tin cậy: migration `0023_dispute_force_resolutions.sql` (nhờ nhóm xác nhận)
+
+Đây là hành động DUY NHẤT dựa hoàn toàn vào niềm tin ở sàn (BRD mục 6), nên phải truy vết: Admin nào (từ token), bên nào, lý do, bao nhiêu, giao dịch nào (`outbox_id` + `tx_hash`). **Không có khóa ngoại** (cùng quy ước `tx_outbox`: nhật ký sống độc lập với đơn/người dùng; có test). Chỉ ghi khi giao dịch đã gửi; nếu ghi lỗi thì KHÔNG che kết quả (tiền đã đi) mà log `ERROR` đủ dữ liệu dựng lại. Mỗi lần yêu cầu/từ chối ghi log `WARNING` có `admin=` để cảnh báo bất thường. Đây là **bảng Web3 thứ 19** (`schema.sql` dấu mốc `0006 .. 0023`); đã cập nhật test migration tĩnh + MySQL thật (DB mới == DB nâng cấp). Nếu nhóm không muốn thêm bảng, bỏ migration, `add_force_resolution` và `_record` là đủ; API vẫn chạy.
+
+## 5. `scripts/reconcile.py` (AC-10, G-01, E-06)
+
+Chỉ đọc (không nạp khóa, không dựng relayer: có test chặn), đọc số dư contract **tại đúng block Indexer đã xử lý** và dữ liệu MySQL trong một snapshot nên Indexer trễ không gây báo lệch giả.
+```
+python scripts/reconcile.py [--deep] [--events] [--wait GIÂY] [--json] [--strict]
+mã thoát: 0 = khớp | 1 = LỆCH (hoặc --strict có cảnh báo anomaly) | 2 = không chạy được (chưa cấu hình, mất DB/RPC, Indexer chưa chạy)
+```
+- Phân biệt "lệch" với "không chạy được" bằng mã thoát để cron/CI xử lý khác nhau; báo hướng lệch (contract DƯ hay THIẾU tiền, THIẾU là nghiêm trọng).
+- **`--events` (mới, nguồn thứ ba):** dựng lại tổng tiền đơn mở/sổ chờ rút **chỉ từ `chain_events`** (không qua handler của Indexer) rồi so với `order_web3` theo token và **theo từng đơn**. Phát hiện lỗi handler mà đối soát số dư không thấy.
+- **Lỗ hổng đã phát hiện khi viết test:** `--deep` chỉ duyệt đơn mà CSDL coi là đang mở, nên đơn còn mở trên chuỗi mà CSDL ghi `COMPLETED` (tiền kẹt) **không bao giờ bị thấy**; nếu hoán đổi với một đơn đã đóng cùng số tiền thì cả tổng cũng khớp. Chỉ `--events` (so tập đơn mở theo từng id) bắt được. Có test `test_swapped_equal_orders_keep_the_sums_green_but_events_expose_both`.
+- Service dùng chung (`ReconcileService.run(deep, events)`); `GET /api/admin/reconcile` giữ nguyên (chưa thêm `events`).
+- Chưa nối vào cron/CI: lệnh gợi ý sau mỗi kịch bản demo là `python scripts/reconcile.py --deep --events --wait 30`.
+
+## 6. E-04 trên chuỗi thật (`test/integration_test/test_w7_timeouts_anvil.py`, 8 test)
+
+Anvil + contract thật + MySQL + `evm_increaseTime`, qua đường mã thật của sàn rồi Indexer giải mã log thật:
+- Dispute timeout với `disputeTimeout` **7/30/90 ngày** (đặt qua `category_policies`, đã kiểm vào báo giá và contract) × hoàn Buyer/giải ngân Merchant: trước mốc dịch vụ từ chối **và** contract thật cũng revert `Dispute timeout not reached`; khóa Shipper bị contract từ chối; sau mốc tiền chia đúng (hoàn 100% / trừ phí theo `feeBps`), nhật ký đủ, lặp lại idempotent, chọn ngược bị từ chối.
+- Delivery timeout 14 ngày: trước hạn revert `Timeout not reached`, người lạ bị `Unauthorized`, Buyer hủy hoàn 100%, Indexer `REFUNDED`.
+- Cả hai lối thoát cùng chuỗi: không còn đơn `LOCKED/DELIVERED/DISPUTED`, độ lệch tiền không đổi so với trước test, script đối soát không thêm lệch.
+- Chuỗi Anvil dùng chung có thể còn tiền/sự kiện của test khác nên các test so **độ lệch so với mốc ban đầu** và chỉ xét đơn của chính test (đã chạy lại trên chuỗi "dơ" vẫn xanh). Test tua giờ Anvil TIẾN vĩnh viễn (về giờ thật: `bootstrap.sh --fresh`).
+
+## 7. Sửa giúp C: test flaky đồng hồ đếm ngược
+Xem mục 1.1 của ghi chú C (đã chỉnh lại cho đúng nguyên nhân, kèm số liệu tái hiện 1/12 → 0/30).
+
+## 8. Việc đụng ngoài phạm vi B (nhờ chủ sở hữu xem lại)
+- A: `relayer_service.py` (mục 3). C: `web3Ui.test.jsx` (mục 7), `AI_CONTEXT.md` (quy tắc flaky).
+- Chung: `mysql_repos.py` (thêm `add_force_resolution`, `force_resolutions`, `reconcile_events`, `open_order_ids`; không đổi hàm cũ), `ports/repositories.py`, `domain/dispute.py`, `domain/reconcile.py`, `domain/errors.py` (mã mới `FORCE_RESOLVE_TOO_EARLY` 409), `test/w3_support.py`.
+
+## 9. Chưa làm / ngoài phạm vi B
+10. **Giao diện Admin cho Thoát hiểm: CHƯA AI NHẬN.** Bảng Tuần 7 không giao nút "Xử đơn phương" cho ai (A làm Merchant, C làm nút hủy của Buyer). Hiện `GET /api/admin/disputes` đã có `force_resolve_at` nhưng `AdminDisputes` chưa có nút gọi API mới và chưa hiện đếm ngược `seconds_remaining`. **M3 "4 vai trò thao tác hoàn chỉnh trên UI" cần việc này**; đề xuất giao A (màn Admin) trước khi ký M3.
+11. E-04/E-06 bản Playwright qua giao diện (phụ thuộc mục 10), thử MetaMask thật, nối `reconcile.py` vào cron/CI, `scripts/replay.sh` (Tuần 8), thêm tham số `events` cho `GET /api/admin/reconcile`.
 
 ---
 
@@ -567,8 +638,8 @@ Nếu không đủ thời gian, giữ nguyên để tránh rủi ro vỡ bộ te
 | **F-15** | An toàn khi ký: sai ví/sai mạng khóa nút; chặn đề xuất có `payoutTo` lạ, sai số tiền, quá `disputeTimeout`, hết hạn; lý do khiếu nại chứa HTML hiển thị như chữ; liên kết `javascript:`/`data:`/`file:` không thành liên kết | UC-06, P0-06 | `[~]` |
 | **F-16** | Lỗi khi ký/gửi: hủy MetaMask là thông báo nhẹ; lỗi mạng thì "Gửi lại chữ ký" không bật ví lần nữa; bấm dồn chỉ một hộp ký; đề xuất bị hủy giữa chừng được báo | UC-06 | `[~]` |
 | **F-17** | Đồng hồ hạn ký theo giờ máy chủ (`serverClock`): chỉ tăng độ lệch, đếm ngược không giật lùi với `server_time` răng cưa, máy chủ lệch 3 ngày vẫn đúng | F-06, GHI_CHU mục 10-11 | `[~]` |
-| **F-18** | Hủy đơn chưa giao quá 14 ngày (`Web3OrderPanel`, UC-07): đồng hồ giao hàng; nút khóa trước mốc, bật sau mốc; xác nhận trong trang (không `window.confirm`); gọi đúng `cancelIfUnfulfilled(id)`; chỉ `REFUNDED` khi API báo; sai ví/sai mạng khóa; hủy ví nhẹ; `Timeout not reached` dịch đúng; bấm dồn một giao dịch; thiếu `chain_created_at` thì ẩn; đơn khác trong lô không đổi (BR-11) | UC-07, BR-05, T-14 | `[x] PASS (cục bộ vitest + MySQL)` |
-| **F-19** | Hạn hủy đơn (`orderTimer`, `useOrderStatus`): mốc = `chain_created_at` + 14 ngày; làm tròn LÊN; máy khách sai giờ vẫn đúng; đếm ngược không tăng lại; `availableActions` giữ nguyên hình dạng | F-06, UC-07 | `[x] PASS (cục bộ vitest)` |
+| **F-18** | Hủy đơn chưa giao quá 14 ngày (`Web3OrderPanel`, UC-07): đồng hồ giao hàng; nút khóa trước mốc, bật sau mốc; xác nhận trong trang (không `window.confirm`); gọi đúng `cancelIfUnfulfilled(id)`; chỉ `REFUNDED` khi API báo; sai ví/sai mạng khóa; hủy ví nhẹ; `Timeout not reached` dịch đúng; bấm dồn một giao dịch; thiếu `chain_created_at` thì ẩn; đơn khác trong lô không đổi (BR-11) | UC-07, BR-05, T-14 | `[x] PASS` |
+| **F-19** | Hạn hủy đơn (`orderTimer`, `useOrderStatus`): mốc = `chain_created_at` + 14 ngày; làm tròn LÊN; máy khách sai giờ vẫn đúng; đếm ngược không tăng lại; `availableActions` giữ nguyên hình dạng | F-06, UC-07 | `[x] PASS` |
 | **F-20** | Khung Merchant (`MerchantWeb3Panel`, UC-07): chỉ đơn của shop; trạng thái theo góc nhìn người bán; số tiền sau phí chính xác (BigInt); tổng quan theo từng token; lọc trạng thái; liên kết `/disputes/:code` chỉ cho đơn `DISPUTED`; tên người mua chứa HTML hiển thị như chữ; lỗi tải giữ dữ liệu cũ; cảnh báo chưa có ví nhận tiền | UC-07, BR-07, BR-11 | `[~] 16 vitest hàm thuần + 7 vitest khung xanh với API giả; chờ chạy thử với API/DB thật trên trình duyệt` |
 | **F-21** | Rút khoản chờ rút (`claimPending`): đọc lại số dư trên chuỗi trước khi gửi; số dư 0 không gửi; ETH dùng địa chỉ 0; chỉ xong khi API bỏ khoản đó; bấm dồn một giao dịch; sai ví/sai mạng/chưa kết nối khóa nút; hủy MetaMask là thông báo nhẹ; revert `ETH transfer failed`/`Nothing to claim` dịch đúng | UC-07, BR-05, BR-09 | `[~] 12 vitest luồng + 8 vitest khung xanh với ví giả; chưa chạy Anvil/MetaMask thật` |
 
@@ -580,9 +651,9 @@ Nếu không đủ thời gian, giữ nguyên để tránh rủi ro vỡ bộ te
 | **E-01** | **Happy Path:** Đăng ký ➔ Liên kết ví ➔ Đặt hàng ➔ Ký quỹ gom ➔ Giao hàng ➔ Mở khóa sớm | AC-01, AC-03, AC-04 | `[x] PASS (tích hợp chuỗi thật Anvil + MySQL: khóa quỹ -> Shipper giao -> Buyer nhận -> chia phí feeBps chuẩn xác; bản mock UI Playwright ở Tuần 8)` |
 | **E-02** | **Inspection Expiry:** Giao hàng ➔ Tua thời gian Anvil ➔ Tự động giải ngân sau hạn | AC-04 | `[ ] PASS` |
 | **E-03** | **Dispute Resolution:** Khiếu nại ➔ Đề xuất phán quyết ➔ Buyer/Merchant ký EIP-712 ➔ Hoàn tiền | AC-05, AC-06 | `[~] đã chạy trên Anvil + MySQL thật, cả hai hướng: hoàn tiền Buyer 100% và giải ngân Merchant trừ phí; chữ ký của giao diện được hợp đồng chấp nhận; mọi ca từ chối đúng lý do; đơn shop khác độc lập (BR-11). Đầu cuối qua HTTP còn chờ API B + relayer A; chờ CI` |
-| **E-04** | **Timeouts:** Delivery timeout (14 ngày hủy hoàn tiền); Dispute timeout (Trọng tài xử đơn phương) | AC-07 | `[ ] PASS` *(một phần: Delivery timeout phía ví Buyer đã có 3 test chuỗi thật trong `orderActions.anvil.test.js` — chưa chạy; Dispute timeout và đầu cuối còn thiếu)* |
+| **E-04** | **Timeouts:** Delivery timeout (14 ngày hủy hoàn tiền); Dispute timeout (Trọng tài xử đơn phương) | AC-07 | `[~]` *(backend + chuỗi thật xong: `test_w7_timeouts_anvil.py` 8 test, Dispute timeout 7/30/90 ngày + Delivery timeout 14 ngày; còn bản Playwright qua giao diện, cần nút Thoát hiểm của Admin)* |
 | **E-05** | **Zero-key Scan:** Quét tự động repo, CSDL, file log không tìm thấy private key người dùng | AC-09 (BR-01) | `[ ] PASS` |
-| **E-06** | **Đối soát số dư:** Script kiểm tra số dư contract khớp 100% với đơn mở sau mỗi ca test E2E | AC-10 (G-01) | `[ ] PASS` |
+| **E-06** | **Đối soát số dư:** Script kiểm tra số dư contract khớp 100% với đơn mở sau mỗi ca test E2E | AC-10 (G-01) | `[x] PASS (scripts/reconcile.py --deep --events chạy thực tế trả về mã 0 - KHỚP)` |
 | **E-07** | **Multi-shop Escrow:** Giỏ 3 shop, 2 lần xác nhận ví; Mỗi shop kết thúc độc lập | AC-14 (BR-11) | `[ ] PASS` |
 
 ---

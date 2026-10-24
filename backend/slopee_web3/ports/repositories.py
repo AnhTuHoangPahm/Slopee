@@ -96,6 +96,8 @@ class ReconcileRepo(Protocol):
     def pending_totals(self) -> list: ...                                               # [{'token','amount_raw'(int)}]
     def anomaly_orders(self) -> list: ...                                               # đơn anomaly_flag = 1
     def open_orders(self, limit: int) -> list: ...                                      # [{'order_id','onchain_order_id','status'}]
+    def open_order_ids(self) -> list: ...                                               # mọi onchain_order_id CSDL coi là đang mở
+    def reconcile_events(self, up_to_block: int) -> list: ...                           # [{'event','args'}] ảnh hưởng tiền, tới block đó, theo thứ tự chuỗi
 
 
 class DisputeNoteRepo(Protocol):
@@ -119,6 +121,10 @@ class DisputeRepo(Protocol):
                           reason_note: Optional[str], admin_id: str) -> int: ...            # status PROPOSED; trả id
     def add_signature(self, resolution_id: int, party: str, signer_address: str, signature: str) -> bool: ...   # False nếu bên đó đã ký
     def expire_due(self, now: int, limit: int) -> int: ...                                  # PROPOSED/READY quá deadline -> EXPIRED
+    # --- Tuần 7 (B): nhật ký Trọng tài xử đơn phương (UC-07)
+    def add_force_resolution(self, order_id: str, onchain_order_id: int, admin_user_id: str, payout_side: str, payout_to: str,
+                             amount_raw: str, reason_note: Optional[str], outbox_id: Optional[int], tx_hash: Optional[str]) -> int: ...
+    def force_resolutions(self, order_id: str) -> list: ...                                 # mới nhất trước
 
 
 class UnitOfWork(Protocol):
