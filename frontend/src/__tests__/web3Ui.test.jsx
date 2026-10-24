@@ -329,11 +329,15 @@ describe('Web3CheckoutPanel: làm mới báo giá của lô đang chờ + chốn
         const refresh = await openPending();
         await act(async () => { vi.advanceTimersByTime(950); }); // chưa tới nhịp 1 giây kế tiếp: state `now` cũ hơn đồng hồ thật ~0,95 giây
         fireEvent.click(refresh);
-        await screen.findByTestId('quote-result');
-        expect(calls).toHaveLength(1);
+        // Chờ ĐÚNG tín hiệu "báo giá mới đã commit": gọi API xong và đồng hồ đã hiện. Không chờ `quote-result` vì phần tử này có thể đã có
+        // sẵn; khi đó test tua giả 1000ms TRƯỚC khi `group` mới được commit (setInterval mới chưa được tạo) nên tick bị bỏ lỡ và đồng hồ
+        // đứng ở 15:00. Lỗi chỉ lộ khi CPU chậm (CI): đã tái hiện 1/12 lần dưới tải, `waitFor` ở cuối KHÔNG cứu được vì nó không tua đồng hồ giả.
+        await waitFor(() => expect(calls).toHaveLength(1));
+        await screen.findByTestId('quote-countdown');
+        await act(async () => { await Promise.resolve(); }); // xả effect còn treo (tạo lại setInterval cho `group` mới) trước khi tua
         expect(screen.getByTestId('quote-countdown').textContent).toContain('15:00'); // không phải 15:01
         await act(async () => { vi.advanceTimersByTime(1000); });
-        expect(screen.getByTestId('quote-countdown').textContent).toContain('14:59');
+        await waitFor(() => expect(screen.getByTestId('quote-countdown').textContent).toContain('14:59'));
     });
 
     it('lỗi tạm thời khi làm mới (chain/mạng): hiện lỗi, nút vẫn còn và dùng lại được, không kẹt ở trạng thái đang tải', async () => {

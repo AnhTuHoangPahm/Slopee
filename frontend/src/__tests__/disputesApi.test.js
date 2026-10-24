@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as web3 from '../api/web3';
-import { createDisputeProposalAPI, fetchAdminDisputesAPI, submitDisputeAPI } from '../api/disputes';
+import { createDisputeProposalAPI, fetchAdminDisputesAPI, forceResolveDisputeAPI, submitDisputeAPI } from '../api/disputes';
 
 vi.mock('../api/web3', () => ({ request: vi.fn() }));
 afterEach(() => vi.resetAllMocks());
@@ -23,5 +23,13 @@ describe('api/disputes', () => {
         expect(await fetchAdminDisputesAPI()).toEqual({ disputes: [{ order_id: 'a' }], serverTime: 5 });
         web3.request.mockResolvedValue({});
         expect(await fetchAdminDisputesAPI()).toEqual({ disputes: [], serverTime: null });
+    });
+
+    it('force-resolve gửi payout_to + reason_note tới đúng đường dẫn, mã đơn được mã hóa, bỏ reason_note rỗng', async () => {
+        web3.request.mockResolvedValue({ outcome: 'SENT' });
+        await forceResolveDisputeAPI('a/b c', { payoutSide: 'MERCHANT', reasonNote: 'Hai bên im lặng' });
+        expect(web3.request).toHaveBeenCalledWith('/api/admin/disputes/a%2Fb%20c/force-resolve', { method: 'POST', body: { payout_to: 'MERCHANT', reason_note: 'Hai bên im lặng' } });
+        await forceResolveDisputeAPI('x', { payoutSide: 'BUYER', reasonNote: '' });
+        expect(web3.request).toHaveBeenLastCalledWith('/api/admin/disputes/x/force-resolve', { method: 'POST', body: { payout_to: 'BUYER' } });
     });
 });

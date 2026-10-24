@@ -9,9 +9,13 @@ Quy tắc:
   một factory context manager bọc quanh mỗi job trong hàng đợi (adapter MySQL GET_LOCK) để Flask và Scheduler, hai tiến trình
   cùng dùng SHIPPER_KEY, không tự đọc nonce song song (hàng đợi một luồng chỉ bảo vệ trong MỘT tiến trình).
 - Relayer KHÔNG sửa order_web3/orders. Trạng thái DELIVERED trong MySQL do Indexer ghi khi thấy sự kiện OrderDelivered (BR-09).
+- Tuần 7 (B) thêm `force_resolve` (UC-07): `arbitratorForceResolve` đòi `msg.sender` có ARBITRATOR_ROLE nên giao dịch này do KHÓA TRỌNG TÀI ký
+  và gửi từ địa chỉ Trọng tài, KHÔNG phải Shipper. Dùng chung hàng đợi một luồng và khóa liên tiến trình (an toàn hơn mức cần: hai tài khoản
+  khác nhau không đụng nonce của nhau, nhưng một đường gửi duy nhất dễ kiểm chứng và không thêm cơ chế mới).
 """
 import logging
 
+from ..domain.dispute import CHAIN_STATE_BY_SIDE
 from ..domain.errors import DomainError
 from ..ports.chain_port import ChainTxFailed, ChainUnavailable
 
@@ -20,7 +24,9 @@ log = logging.getLogger('slopee.web3')
 KIND_DELIVER = 'DELIVER'
 KIND_RELEASE = 'RELEASE'
 KIND_RESOLVE = 'RESOLVE'
+KIND_FORCE = 'FORCE_RESOLVE'
 SHIPPER_ROLE = 'shipper'
+ARBITRATOR_ROLE = 'arbitrator'
 
 
 class RelayerService:
@@ -97,6 +103,40 @@ class RelayerService:
             raise DomainError('DISPUTE_STALE', 'Đề xuất phán quyết đã cũ (nonce trên chuỗi đã đổi), cần đề xuất mới.')
         return None
 
+    # ------------------------------------------------------------------ UC-07 (B, tuần 7)
+    def force_resolve(self, order_id, onchain_order_id, payout_to, side):
+        """Nộp `arbitratorForceResolve(orderId, payoutTo)` bằng KHÓA TRỌNG TÀI. `side` ('BUYER'|'MERCHANT') là bên `payout_to` thuộc về, để nhận ra
+        yêu cầu lặp: chuỗi đã REFUNDED (Buyer) / COMPLETED (Merchant) đúng ý thì trả ALREADY_RESOLVED, trái ý thì INVALID_STATE. Người gọi
+        (DisputeForceResolveService) PHẢI đã kiểm quyền Admin và mốc `disputedAt + disputeTimeout`; ở đây chỉ kiểm phần chuỗi.
+        Trả {'outcome': 'SENT'|'ALREADY_RESOLVED', 'tx_hash', 'outbox_id'[, 'chain_state']}."""
+        onchain_order_id = int(onchain_order_id)
+        sender = self._arbitrator_address()
+
+        def check(oid):
+            return self._check_force_state(oid, side)
+
+        early = check(onchain_order_id)
+        if early is not None:
+            return early
+        try:
+            return self._queue.run(self._guarded(lambda: self._send_job(
+                KIND_FORCE, 'arbitratorForceResolve', check, order_id, onchain_order_id, sender,
+                'Hợp đồng từ chối xử đơn phương (chưa tới hạn tranh chấp hoặc đơn không còn ở trạng thái tranh chấp).',
+                'Giao dịch xử đơn phương bị hoàn tác trên blockchain.', args=[onchain_order_id, payout_to], role=ARBITRATOR_ROLE)),
+                timeout=self._queue_timeout)
+        except TimeoutError:
+            raise DomainError('CHAIN_UNAVAILABLE', 'Hệ thống đang bận gửi giao dịch lên blockchain, hãy kiểm tra lại sau ít phút.')
+
+    def _check_force_state(self, onchain_order_id, side):
+        state = self._chain.get_order_state(onchain_order_id)
+        if state in ('COMPLETED', 'REFUNDED'):
+            if CHAIN_STATE_BY_SIDE.get(side) == state:
+                return {'outcome': 'ALREADY_RESOLVED', 'tx_hash': None, 'outbox_id': None, 'chain_state': state}
+            raise DomainError('INVALID_STATE', 'Đơn đã được xử lý theo cách khác, không còn xử đơn phương được nữa.', {'chain_state': state})
+        if state != 'DISPUTED':
+            raise DomainError('INVALID_STATE', 'Đơn không ở trạng thái tranh chấp.', {'chain_state': state})
+        return None
+
     # ------------------------------------------------------------------ nội bộ
     def _guarded(self, job):
         if self._job_guard is None:
@@ -120,6 +160,12 @@ class RelayerService:
             return self._signer.sender_address(SHIPPER_ROLE)
         except KeyError:
             raise DomainError('WEB3_NOT_CONFIGURED', 'Máy chủ chưa cấu hình khóa giao hàng (SHIPPER_KEY).')
+
+    def _arbitrator_address(self):
+        try:
+            return self._signer.sender_address(ARBITRATOR_ROLE)
+        except KeyError:
+            raise DomainError('WEB3_NOT_CONFIGURED', 'Máy chủ chưa cấu hình khóa Trọng tài (ARBITRATOR_KEY).')
 
     def _check_state(self, onchain_order_id):
         """None nếu đơn đang LOCKED (được gửi); kết quả idempotent nếu đã DELIVERED; còn lại INVALID_STATE."""
@@ -152,14 +198,14 @@ class RelayerService:
                               sender, 'Hợp đồng từ chối giao dịch giải ngân.',
                               'Giao dịch giải ngân bị hoàn tác trên blockchain.')
 
-    def _send_job(self, kind, fn_name, check, order_id, onchain_order_id, sender, msg_rejected, msg_reverted, args=None):
+    def _send_job(self, kind, fn_name, check, order_id, onchain_order_id, sender, msg_rejected, msg_reverted, args=None, role=SHIPPER_ROLE):
         early = check(onchain_order_id)                      # kiểm lại trong hàng đợi (xem docstring đầu tệp)
         if early is not None:
             return early
         outbox_id = self._log(lambda ob: ob.insert(kind, order_id))
         try:
             tx_hash = self._chain.send_tx(fn_name, [onchain_order_id] if args is None else args, sender,
-                                          lambda tx: self._signer.sign_transaction(SHIPPER_ROLE, tx))
+                                          lambda tx: self._signer.sign_transaction(role, tx))
         except ChainTxFailed as e:
             self._fail(outbox_id, f'revert: {e}')
             raise DomainError('CHAIN_TX_FAILED', msg_rejected)

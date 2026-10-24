@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { createDisputeProposalAPI, fetchAdminDisputesAPI, submitDisputeAPI } from '../api/disputes';
+import { createDisputeProposalAPI, fetchAdminDisputesAPI, forceResolveDisputeAPI, submitDisputeAPI } from '../api/disputes';
 import { usePolling } from '../hooks/usePolling';
 import { createServerClock } from '../lib/serverClock';
 import { Web3ApiError, toUserMessage } from '../lib/errors';
 import { formatVND, shortHash } from '../lib/format';
-import { REASON_NOTE_MAX, PAYOUT_SIDES, STAGE, canPropose, canResubmit, canSubmit, disputeStage, notReadyMessage, safeEvidenceUrl,
-    signatureRemaining, submitMessage, validateProposalForm } from '../lib/adminDisputes';
+import { REASON_NOTE_MAX, PAYOUT_SIDES, STAGE, canForceResolve, canPropose, canResubmit, canSubmit, disputeStage, forceResolveMessage, forceResolveRemaining,
+    notReadyMessage, safeEvidenceUrl, signatureRemaining, submitMessage, tooEarlyMessage, validateForceResolveForm, validateProposalForm } from '../lib/adminDisputes';
 import { describeDuration, formatTokenAmount } from '../lib/web3Checkout';
 
 const POLL_MS = 8000;
@@ -79,6 +79,45 @@ function ProposalDialog({ dispute, busy, onCancel, onSubmit }) {
     );
 }
 
+/** UC-07: Trọng tài xử đơn phương sau `disputeTimeout`. Không cần chữ ký Buyer/Merchant, không thể hoàn tác: lý do bắt buộc để truy vết. */
+function ForceResolveDialog({ dispute, busy, onCancel, onSubmit }) {
+    const [payoutSide, setPayoutSide] = useState('');
+    const [reasonNote, setReasonNote] = useState('');
+    const [touched, setTouched] = useState(false);
+    const check = validateForceResolveForm({ payoutSide, reasonNote });
+    const confirm = () => {
+        setTouched(true);
+        if (check.ok) onSubmit(check.value);
+    };
+    return (
+        <Modal title="Xử đơn phương (thoát hiểm timeout)" onCancel={onCancel} onConfirm={confirm} confirmLabel={busy ? 'Đang gửi…' : 'Xử đơn phương'} confirmDisabled={busy}>
+            <p style={{ color: dark.muted, fontSize: 13, marginTop: 0 }}>
+                Đơn {String(dispute.order_id).slice(0, 8)} · {formatTokenAmount(dispute.amount_raw, TOKEN_DECIMALS, dispute.symbol)}
+            </p>
+            <div style={{ background: '#3b1212', border: '1px solid #ef5350', borderRadius: 4, padding: '8px 10px', fontSize: 13, marginBottom: 12 }}>
+                Đây là quyền <strong>đơn phương của sàn</strong>: không cần chữ ký của Buyer hay Merchant. Giao dịch gửi bằng khóa Trọng tài,
+                <strong> không thể hoàn tác</strong> trên blockchain, và được ghi nhật ký kèm tài khoản Admin của bạn.
+            </div>
+            <fieldset style={{ border: 'none', padding: 0, margin: '0 0 12px' }}>
+                <legend style={{ fontSize: 14, marginBottom: 6 }}>Bên nhận tiền</legend>
+                {Object.entries(PAYOUT_SIDES).map(([key, v]) => (
+                    <label key={key} style={{ display: 'block', marginBottom: 6, cursor: 'pointer' }}>
+                        <input type="radio" name="force-payout" value={key} checked={payoutSide === key} onChange={() => setPayoutSide(key)} />{' '}
+                        <strong>{v.label}</strong> <span style={{ color: dark.muted, fontSize: 12 }}>{v.detail}</span>
+                    </label>
+                ))}
+                {touched && check.errors.payoutSide && <div role="alert" style={{ color: '#ef5350', fontSize: 12 }}>{check.errors.payoutSide}</div>}
+            </fieldset>
+            <label style={{ display: 'block', fontSize: 14 }}>
+                Lý do xử đơn phương (bắt buộc)
+                <textarea data-testid="force-note" value={reasonNote} onChange={(e) => setReasonNote(e.target.value)} rows={3} maxLength={REASON_NOTE_MAX + 200}
+                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 4, background: '#121212', color: '#eee', border: '1px solid #555', borderRadius: 4, padding: 8, fontFamily: 'inherit' }} />
+            </label>
+            {touched && check.errors.reasonNote && <div role="alert" style={{ color: '#ef5350', fontSize: 12 }}>{check.errors.reasonNote}</div>}
+        </Modal>
+    );
+}
+
 function SubmitDialog({ dispute, busy, onCancel, onConfirm }) {
     const res = dispute.resolution;
     const side = PAYOUT_SIDES[res.payout_side];
@@ -132,7 +171,8 @@ export default function AdminDisputes() {
             say(code, 'ok', onOk(res));
             setDialog(null);
         } catch (e) {
-            say(code, 'error', e instanceof Web3ApiError && e.code === 'DISPUTE_NOT_READY' ? notReadyMessage(e) : toUserMessage(e));
+            const known = e instanceof Web3ApiError;
+            say(code, 'error', known && e.code === 'DISPUTE_NOT_READY' ? notReadyMessage(e) : known && e.code === 'FORCE_RESOLVE_TOO_EARLY' ? tooEarlyMessage(e) : toUserMessage(e));
             setDialog(null);
         } finally {
             inFlight.current = false;
@@ -143,6 +183,7 @@ export default function AdminDisputes() {
 
     const propose = (code, value) => run(code, () => createDisputeProposalAPI(code, value), () => 'Đã tạo đề xuất và ký phiếu Trọng tài. Chờ Buyer hoặc Merchant ký.');
     const submit = (code) => run(code, () => submitDisputeAPI(code), submitMessage);
+    const forceResolve = (code, value) => run(code, () => forceResolveDisputeAPI(code, value), forceResolveMessage);
 
     return (
         <div className="admin-table-container" style={{ marginBottom: 30 }} data-testid="admin-disputes">
@@ -157,7 +198,8 @@ export default function AdminDisputes() {
                 const [stageLabel, stageColor] = STAGE_TEXT[stage];
                 const evidence = safeEvidenceUrl(d.note?.evidence_url);
                 const remaining = signatureRemaining(d, clock);
-                const forceIn = clock ? d.force_resolve_at - (clock.serverTime + Math.floor((Date.now() - clock.receivedAtMs) / 1000)) : null;
+                const forceIn = forceResolveRemaining(d, clock);
+                const forceOpen = canForceResolve(forceIn);
                 const n = notice[d.order_id];
                 return (
                     <section key={d.order_id} aria-label={`Tranh chấp ${d.order_id}`} data-testid={`dispute-${d.order_id}`}
@@ -169,10 +211,10 @@ export default function AdminDisputes() {
                         <div style={{ fontSize: 13, color: '#bbb', marginTop: 6 }}>
                             <div>Người mua: {d.buyer_name ?? '—'} · Giá trị: {formatTokenAmount(d.amount_raw, TOKEN_DECIMALS, d.symbol)} ({formatVND(d.price_vnd)})</div>
                             {forceIn !== null && (
-                                <div>
-                                    {forceIn > 0
-                                        ? `Trọng tài có quyền xử đơn phương sau ${describeDuration(forceIn)} (thoát hiểm timeout).`
-                                        : 'Đã quá thời hạn tranh chấp: Trọng tài có quyền xử đơn phương (UC-07).'}
+                                <div data-testid={`force-countdown-${d.order_id}`} style={{ color: forceOpen ? dark.warn : undefined }}>
+                                    {forceOpen
+                                        ? 'Đã quá thời hạn tranh chấp: Trọng tài có quyền xử đơn phương (UC-07).'
+                                        : `Trọng tài có quyền xử đơn phương sau ${describeDuration(forceIn)} (thoát hiểm timeout).`}
                                 </div>
                             )}
                         </div>
@@ -217,6 +259,12 @@ export default function AdminDisputes() {
                             {canResubmit(stage) && (
                                 <button type="button" style={btnGhost} onClick={() => setDialog({ kind: 'submit', code: d.order_id })}>Nộp lại</button>
                             )}
+                            {forceIn !== null && (
+                                <button type="button" data-testid={`force-btn-${d.order_id}`} disabled={!forceOpen || busy}
+                                    title={forceOpen ? 'Trọng tài xử đơn phương, không cần chữ ký của hai bên' : `Chỉ dùng được sau ${describeDuration(forceIn)}`}
+                                    style={{ ...btn, background: forceOpen ? '#b71c1c' : '#555', cursor: forceOpen && !busy ? 'pointer' : 'not-allowed', opacity: forceOpen ? 1 : 0.7 }}
+                                    onClick={() => setDialog({ kind: 'force', code: d.order_id })}>Xử đơn phương</button>
+                            )}
                         </div>
                     </section>
                 );
@@ -224,6 +272,9 @@ export default function AdminDisputes() {
 
             {dialog?.kind === 'propose' && current && (
                 <ProposalDialog dispute={current} busy={busy} onCancel={() => !busy && setDialog(null)} onSubmit={(v) => propose(current.order_id, v)} />
+            )}
+            {dialog?.kind === 'force' && current && canForceResolve(forceResolveRemaining(current, clock)) && (
+                <ForceResolveDialog dispute={current} busy={busy} onCancel={() => !busy && setDialog(null)} onSubmit={(v) => forceResolve(current.order_id, v)} />
             )}
             {dialog?.kind === 'submit' && current?.resolution && (
                 <SubmitDialog dispute={current} busy={busy} onCancel={() => !busy && setDialog(null)} onConfirm={() => submit(current.order_id)} />

@@ -145,4 +145,83 @@ describe('AdminDisputes (UC-06)', () => {
         render(<AdminDisputes />);
         expect((await screen.findByRole('alert')).textContent).toMatch(/blockchain/);
     });
+
+    describe('UC-07 thoát hiểm timeout: nút Xử đơn phương', () => {
+        const past = { ...base, disputed_at: SERVER_TIME - 31 * 86400, force_resolve_at: SERVER_TIME - 3600 };       // đã quá hạn 1 giờ
+        const EARLY = { ...base, force_resolve_at: SERVER_TIME + 2 * 86400 + 3 * 3600 };
+
+        it('chưa tới mốc: hiện đếm ngược và nút bị tắt, bấm không mở hộp thoại', async () => {
+            list(EARLY);
+            render(<AdminDisputes />);
+            await screen.findByTestId(`dispute-${code}`);
+            await waitFor(() => expect(screen.getByTestId(`force-countdown-${code}`).textContent).toMatch(/sau 2 ngày 3 giờ/));
+            const btn = screen.getByTestId(`force-btn-${code}`);
+            expect(btn.disabled).toBe(true);
+            fireEvent.click(btn);
+            expect(screen.queryByTestId('admin-dialog')).toBeNull();
+            expect(api.forceResolveDisputeAPI).not.toHaveBeenCalled();
+        });
+
+        it('đã quá hạn: nút bật; phải chọn bên và nhập lý do; gọi API MỘT lần dù bấm đúp', async () => {
+            list(past);
+            let release;
+            api.forceResolveDisputeAPI.mockImplementation(() => new Promise((r) => { release = () => r({ outcome: 'SENT', tx_hash: '0x' + 'ab'.repeat(32) }); }));
+            render(<AdminDisputes />);
+            await screen.findByTestId(`dispute-${code}`);
+            await waitFor(() => expect(screen.getByTestId(`force-btn-${code}`).disabled).toBe(false));
+            expect(screen.getByTestId(`force-countdown-${code}`).textContent).toMatch(/Đã quá thời hạn/);
+            fireEvent.click(screen.getByTestId(`force-btn-${code}`));
+            expect(screen.getByTestId('admin-dialog').textContent).toMatch(/không thể hoàn tác/);
+            const ok = screen.getByTestId('dialog-confirm');
+            fireEvent.click(ok);                                                           // chưa chọn gì
+            expect(api.forceResolveDisputeAPI).not.toHaveBeenCalled();
+            expect(screen.getAllByRole('alert').length).toBe(2);
+            fireEvent.click(screen.getByLabelText(/Giải ngân cho Merchant/));
+            fireEvent.click(ok);                                                           // có bên nhưng thiếu lý do
+            expect(api.forceResolveDisputeAPI).not.toHaveBeenCalled();
+            fireEvent.change(screen.getByTestId('force-note'), { target: { value: '  Hai bên không phản hồi  ' } });
+            fireEvent.click(ok);
+            fireEvent.click(ok);
+            await waitFor(() => expect(api.forceResolveDisputeAPI).toHaveBeenCalledTimes(1));
+            expect(api.forceResolveDisputeAPI).toHaveBeenCalledWith(code, { payoutSide: 'MERCHANT', reasonNote: 'Hai bên không phản hồi' });
+            release();
+            expect((await screen.findByTestId(`notice-${code}`)).textContent).toMatch(/phán quyết đơn phương/);
+            expect(screen.queryByTestId('admin-dialog')).toBeNull();
+        });
+
+        it('vẫn dùng được khi đang có đề xuất 2/3 dang dở (hai đường không cùng hợp lệ nên không cần hủy đề xuất)', async () => {
+            list({ ...past, resolution: resolution({ status: 'EXPIRED' }) });
+            render(<AdminDisputes />);
+            await screen.findByTestId(`dispute-${code}`);
+            await waitFor(() => expect(screen.getByTestId(`force-btn-${code}`).disabled).toBe(false));
+        });
+
+        it('máy chủ từ chối vì chưa tới mốc (đồng hồ lệch): báo còn bao lâu, không gửi giao dịch', async () => {
+            list(past);
+            api.forceResolveDisputeAPI.mockRejectedValue(new Web3ApiError({ code: 'FORCE_RESOLVE_TOO_EARLY', status: 409, extra: { force_resolve_at: 1, seconds_remaining: 5400 } }));
+            render(<AdminDisputes />);
+            await screen.findByTestId(`dispute-${code}`);
+            await waitFor(() => expect(screen.getByTestId(`force-btn-${code}`).disabled).toBe(false));
+            fireEvent.click(screen.getByTestId(`force-btn-${code}`));
+            fireEvent.click(screen.getByLabelText(/Hoàn tiền cho Buyer/));
+            fireEvent.change(screen.getByTestId('force-note'), { target: { value: 'quá hạn' } });
+            fireEvent.click(screen.getByTestId('dialog-confirm'));
+            const n = await screen.findByTestId(`notice-${code}`);
+            expect(n.getAttribute('role')).toBe('alert');
+            expect(n.textContent).toMatch(/còn 1 giờ 30 phút/);
+        });
+
+        it('ALREADY_RESOLVED: báo đã xử lý trước đó', async () => {
+            list(past);
+            api.forceResolveDisputeAPI.mockResolvedValue({ outcome: 'ALREADY_RESOLVED', tx_hash: null });
+            render(<AdminDisputes />);
+            await screen.findByTestId(`dispute-${code}`);
+            await waitFor(() => expect(screen.getByTestId(`force-btn-${code}`).disabled).toBe(false));
+            fireEvent.click(screen.getByTestId(`force-btn-${code}`));
+            fireEvent.click(screen.getByLabelText(/Hoàn tiền cho Buyer/));
+            fireEvent.change(screen.getByTestId('force-note'), { target: { value: 'x' } });
+            fireEvent.click(screen.getByTestId('dialog-confirm'));
+            expect((await screen.findByTestId(`notice-${code}`)).textContent).toMatch(/đã được xử lý trên blockchain/);
+        });
+    });
 });

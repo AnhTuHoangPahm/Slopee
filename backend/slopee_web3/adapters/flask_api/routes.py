@@ -227,6 +227,17 @@ def admin_dispute_proposal(order_code):
     return jsonify(_container().dispute_service().propose(g.user_id, order_code, body.get('payout_to'), body.get('reason_note'))), 201
 
 
+# ------------------------------------------------------------------ UC-07 (Tuần 7, B): Dispute Timeout / thoát hiểm. Mới ngoài SDD 10.2.
+@admin_w3_bp.route('/disputes/<order_code>/force-resolve', methods=['POST'])
+@require_auth('admin')
+def admin_dispute_force_resolve(order_code):
+    """Trọng tài xử đơn phương sau `disputedAt + disputeTimeout` (UC-07). Admin chọn bên nhận tiền (`payout_to`: 'BUYER' | 'MERCHANT' | đúng địa chỉ ví của
+    bên đó) kèm `reason_note` tùy chọn; relayer gửi `arbitratorForceResolve` bằng khóa Trọng tài. Chưa tới mốc -> 409 FORCE_RESOLVE_TOO_EARLY.
+    Trạng thái đơn do Indexer ghi sau đó (BR-09), nên trả outcome + tx_hash, không trả COMPLETED/REFUNDED."""
+    body = json_body()
+    return jsonify(_container().dispute_force_service().force_resolve(g.user_id, order_code, body.get('payout_to'), body.get('reason_note'))), 200
+
+
 @disputes_bp.route('/<order_code>', methods=['GET'])
 @require_auth(*BUYER_ROLES, 'admin')
 def get_dispute(order_code):

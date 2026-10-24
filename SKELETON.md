@@ -42,13 +42,13 @@
 | `json_provider.py` | JSON | `SlopeeJSONProvider` | `Decimal` → `int` (nếu nguyên) / `float` |
 | `admin_seed.py` | Seed admin | `seed_admin(conn, username, password, name, email, phone)` → `user_id` | Validate (username > 3 ký tự, mật khẩu ≥ 12), kiểm trùng, chèn `users` + `credentials` (role `admin`); ném `ValueError` |
 | `init_db.py` | Khởi tạo DB | `create_connection()`, `init_database()` | Tạo DB, chạy `schema.sql` (tách bằng `migrate.split_sql`); DB mới → `mark_applied` mọi migration; DB cũ → nhắc chạy `migrate.py`; **không** tạo admin |
-| `schema.sql` | Lược đồ mới nhất | — | 14 bảng gốc + `authAttempts` (mục 1.4); 4 cột tiền `DECIMAL(15,0)`; `reviews`/`reviewImages` khai báo một lần; `users.role` có `shipper`; sau dấu mốc `WEB3 ESCROW` là 18 bảng Web3 + gieo `PLATFORM_FEE_BPS=300`, `QUOTE_TTL_SECONDS=900`, 4 nhóm `category_policies` |
+| `schema.sql` | Lược đồ mới nhất | — | 14 bảng gốc + `authAttempts` (mục 1.4); 4 cột tiền `DECIMAL(15,0)`; `reviews`/`reviewImages` khai báo một lần; `users.role` có `shipper`; sau dấu mốc `WEB3 ESCROW` là 19 bảng Web3 + gieo `PLATFORM_FEE_BPS=300`, `QUOTE_TTL_SECONDS=900`, 4 nhóm `category_policies` |
 | `migrations/0001_money_to_vnd.sql` | Migration | — | `MODIFY` 4 cột tiền sang `DECIMAL(15,0)` |
 | `migrations/0002_product_fk_snapshots.py` | Migration | `upgrade(cursor)` | (thay route `/migrate` cũ) cột snapshot + backfill; `cartItems.productId` CASCADE; `orderLines.productId` NULL + SET NULL |
 | `migrations/0003_reviews_dedupe.py` | Migration | `upgrade(cursor)` | DB cũ: `comment NOT NULL`, bỏ trùng, `UNIQUE(userId,productId)`, FK `userId` CASCADE |
 | `migrations/0004_auth_attempts.sql` | Migration | — | tạo `authAttempts` |
 | `migrations/0005_order_line_settlement.py` | Migration | — | thêm `orderLines.sellerPaymentMethodId` (FK SET NULL) + `sellerCredit`; backfill đơn cũ đã thanh toán không phải `cash`; idempotent. **Web3 bắt đầu từ `0006`** |
-| `migrations/0006`–`0022` | Migration Web3 (tuần 2) | — | `0006_wallets.py` (user_wallets, wallet_nonces), `0007_checkout_groups.py`, `0008_order_web3.py` (phòng vệ charset/collation/InnoDB, FK `RESTRICT`), `0009_order_quotes.py`, `0010_dispute_resolutions.py`, `0011_dispute_signatures.sql`, `0012_chain_events.sql`, `0013_indexer_cursor.sql`, `0014_platform_settings.sql` (+gieo 4 khóa), `0015_category_policies.sql` (+gieo 4 nhóm), `0016_category_policy_map.sql`, `0017_tx_outbox.sql`, `0018_onchain_id_seq.sql` (bắt đầu 100001), `0019_pending_balances.sql`, `0020_shipper.py` (ENUM `shipper` + `shipper_assignments`), `0021_notifications.py` (thông báo + cờ "đã nhắc"), `0022_dispute_notes.py` (ghi chú khiếu nại của Buyer) |
+| `migrations/0006`–`0023` | Migration Web3 (tuần 2) | — | `0006_wallets.py` (user_wallets, wallet_nonces), `0007_checkout_groups.py`, `0008_order_web3.py` (phòng vệ charset/collation/InnoDB, FK `RESTRICT`), `0009_order_quotes.py`, `0010_dispute_resolutions.py`, `0011_dispute_signatures.sql`, `0012_chain_events.sql`, `0013_indexer_cursor.sql`, `0014_platform_settings.sql` (+gieo 4 khóa), `0015_category_policies.sql` (+gieo 4 nhóm), `0016_category_policy_map.sql`, `0017_tx_outbox.sql`, `0018_onchain_id_seq.sql` (bắt đầu 100001), `0019_pending_balances.sql`, `0020_shipper.py` (ENUM `shipper` + `shipper_assignments`), `0021_notifications.py` (thông báo + cờ "đã nhắc"), `0022_dispute_notes.py` (ghi chú khiếu nại của Buyer), `0023_dispute_force_resolutions.sql` (✅ tuần 7: nhật ký Trọng tài xử đơn phương, không FK) |
 | `dbschema.py` (bổ sung) | Introspection | `require_innodb`, `column_like`, `table_exists`, `SchemaError` | giúp migration FK khớp kiểu/charset/collation cột cha |
 | `.env.example` | Mẫu env | — | `SECRET_KEY`, `AUTH_TOKEN_TTL_SECONDS`, `SLOPEE_ENV`, `DB_*`, `AUTH_MAX_ATTEMPTS`, `AUTH_LOCK_SECONDS` |
 
@@ -162,7 +162,7 @@ Mỗi file có `get_db_connection()` mở kết nối PyMySQL (trừ `products`,
 | `/orders` | `pages/MyOrders.jsx` | danh sách đơn, hủy/đã nhận | `fetchOrdersAPI`, `updateOrderStatusAPI` |
 | `/settings` | `pages/UserSettings.jsx` | tiểu sử, đổi tên đăng nhập/mật khẩu, yêu cầu xóa tài khoản, đánh giá của tôi | `updateProfileAPI`, `updateUsernameAPI`, `updatePasswordAPI`, `requestDeletionAPI`, `fetchUserReviewsAPI` |
 | `/seller` | `pages/SellerDashboard.jsx` | lập shop, quản lý sản phẩm/ảnh/biến thể, liên kết ngân hàng nhận tiền; ✅ **tuần 7:** khung `components/MerchantWeb3Panel.jsx` (đơn Web3 của shop, tổng quan ký quỹ/đã nhận, khoản chờ rút `claimPending`) | `getShopAPI`, `setupShopAPI`, `updateShopNameAPI`, `addProductAPI`, `updateProductAPI`, `deleteProductAPI`, `addProductImageAPI`, `addProductVariantAPI`, `fetchCategoriesAPI`, `fetchPaymentMethodsAPI`, `addPaymentMethodAPI` |
-| `/admin` | `pages/AdminDashboard.jsx` | thống kê, quản lý user, quản lý danh mục, ✅ tranh chấp (`components/AdminDisputes.jsx`, tuần 6) | `getStatsAPI`, `getUsersAPI`, `deleteUserAPI`, `fetchAdminCategoriesAPI`, `addCategoryAPI`, `updateCategoryAPI`, `deleteCategoryAPI` |
+| `/admin` | `pages/AdminDashboard.jsx` | thống kê, quản lý user, quản lý danh mục, ✅ tranh chấp (`components/AdminDisputes.jsx`, tuần 6; tuần 7 thêm nút "Xử đơn phương" UC-07 gọi `forceResolveDisputeAPI`) | `getStatsAPI`, `getUsersAPI`, `deleteUserAPI`, `fetchAdminCategoriesAPI`, `addCategoryAPI`, `updateCategoryAPI`, `deleteCategoryAPI` |
 | `/play/tetris` | `pages/Tetris.jsx` | trò chơi Tetris (độc lập, không API) | — |
 | (mọi trang) | `components/Navbar.jsx` | thanh điều hướng, ô tìm kiếm (điều hướng `/?search=`), giỏ thu nhỏ, menu theo role; liên kết "🦊 Ví" → `/wallet` cho `user`/`seller` | `fetchCartAPI` |
 | (trong `/checkout`) ✅ | `components/Web3CheckoutPanel.jsx` | props `{cartItemIds}`. Cổng điều kiện (không có ví → chưa kết nối → sai mạng → đang kiểm tra liên kết → chưa liên kết → ví khác ví đã liên kết) rồi "Tạo báo giá"; bảng từng shop (giá VND, số token, phí, thời hạn), tổng, tỷ giá, đếm ngược theo `server_time` (<60 giây = sắp hết hạn), "Lấy báo giá mới", **"Làm mới báo giá cho lô này"** khi `PENDING_GROUP_EXISTS` (F-07: xin báo giá MỚI cho lô cũ, không khôi phục phiên; giữ lại khi lỗi tạm thời, bỏ khi `INVALID_STATE`/`GROUP_NOT_FOUND`). Mọi yêu cầu báo giá đi qua `run()` có cờ `inFlight` (ref) nên bấm dồn chỉ gửi một yêu cầu; nhận báo giá thì đặt `receivedAt` và `now` cùng lúc để đồng hồ bắt đầu đúng 15:00. `WALLET_NOT_LINKED` với `extra.party` = merchant (so không phân biệt hoa/thường) → nêu tên shop (`extra.shop_name`), không dẫn tới `/wallet`. **Nút "Ký quỹ" (Tuần 4) chạy approve tổng → `depositEscrowBatch` → chờ API `LOCKED` → chuyển `/orders`** | `createWeb3OrderAPI`, `requoteGroupAPI`, `fetchLinkedWalletAPI` |
@@ -207,7 +207,11 @@ Route guard ✅ `components/RequireRole.jsx` bọc `/admin` (admin), `/seller` (
 | `__tests__/Home.test.jsx`, `Navbar.test.jsx` | test trang Home và Navbar |
 | `__tests__/formatVND.test.js` | test định dạng tiền |
 | `__tests__/tetrisLogic.test.js` | test logic Tetris |
-| `frontend/tests/*.spec.js` | Playwright: luồng đăng ký/đăng nhập và Tetris |
+| `frontend/tests/auth-flow.spec.js`, `tetris-flow.spec.js` | Playwright (project `firefox`): đăng ký/đăng nhập và Tetris |
+| `frontend/tests/e01-happy-path.spec.js` … `e07-multi-shop.spec.js` ✅ viết, chưa chạy (tuần 8, C) | Playwright (project `web3-e2e`, một worker): E-01 happy path, E-02 hết hạn kiểm tra, E-03 tranh chấp (hoàn tiền + giải ngân), E-04 timeouts, E-05 zero-key, E-06 đối soát, E-07 giỏ 3 shop |
+| `frontend/tests/helpers/walletMock.js` | ví thử EIP-1193 tiêm bằng `addInitScript`: ký thật (`personal_sign`, `eth_signTypedData_v4`, `eth_sendTransaction`), chuyển tiếp RPC tới Anvil; `rejectNext`, `setChain`, `switchAccount`, `count` |
+| `frontend/tests/helpers/anvil.js` | RPC Anvil, `testWallet()` (suy từ mnemonic công khai), `fundWallet`, `timeTravel`, đọc `orders(id)` và số dư |
+| `frontend/tests/helpers/api.js`, `flows.js`, `ui.js`, `stack.js`, `scripts.js` | fixture REST (người dùng/shop/ví/giao hàng/đề xuất), kịch bản con (ký quỹ, khiếu nại, ký phán quyết), bước giao diện, kiểm đủ stack (skip hoặc đỏ theo `E2E_REQUIRE_STACK`), chạy `reconcile.py`/`scan_no_user_keys.py` |
 
 ---
 
@@ -220,7 +224,7 @@ Route guard ✅ `components/RequireRole.jsx` bọc `/admin` (admin), `/seller` (
 | `unit_test/auth_test.py` | đăng nhập (trả token), đăng ký (validate) |
 | `unit_test/test_cart.py`, `test_products.py`, `test_checkout.py` | giỏ, sản phẩm (kiểm giá VND), checkout (tổng nguyên VND, thiếu tiền, COD) — mock DB (`checkout_helpers.py` dựng dữ liệu giả dùng chung) |
 | `unit_test/test_p0_03_ownership.py` | A-03: đơn/giỏ/sản phẩm/ảnh/biến thể của người khác → 404 và không ghi gì; chuyển trạng thái đơn; `WEB3_ORDER_MANAGED`; hồ sơ/username chỉ theo token |
-| `unit_test/test_web3_migrations_static.py` | Migration Web3 tĩnh (không cần MySQL): đúng 0006–0022 liên tục, mọi bảng có trong `schema.sql`, chỉ CREATE/INSERT IGNORE, không DROP/DELETE, FK tiền ký quỹ `RESTRICT` |
+| `unit_test/test_web3_migrations_static.py` | Migration Web3 tĩnh (không cần MySQL): đúng 0006–0023 liên tục, mọi bảng có trong `schema.sql`, chỉ CREATE/INSERT IGNORE, không DROP/DELETE, FK tiền ký quỹ `RESTRICT` |
 | `integration_test/test_web3_migrations.py` | MySQL thật: DB mới == DB nâng cấp (parity information_schema), idempotent (không đè giá trị Admin), collation lệch (`unicode_ci`), MyISAM bị chặn, CHECK/UNIQUE/FK/ENUM của từng bảng |
 | `unit_test/test_p0_04_migrations.py` | A-07: route migrate biến mất; `split_sql`; runner (thứ tự, bỏ qua đã chạy, lỗi không ghi nhận, khóa); `dbschema`; `schema.sql` không khai báo trùng; ảnh đánh giá có UUID |
 | `unit_test/test_p0_05_payment_security.py` | A-05/A-06: thứ tự khóa `FOR UPDATE`, `UPDATE` có điều kiện + `rowcount`, deadlock → 409, PIN chưa đặt → 401, khóa 5 lần (PIN, đăng nhập, đổi mật khẩu, xin xóa), mở khóa khi hết hạn |
@@ -239,6 +243,13 @@ Route guard ✅ `components/RequireRole.jsx` bọc `/admin` (admin), `/seller` (
 | `integration_test/test_w3_quote_mysql.py` (53) | **MySQL thật** UC-01 (I-04/I-07) + `check_web3_eligibility` (chỉ đọc, không khóa, khớp quyết định của `create_checkout`): lô nhiều shop, `docHash` tái tạo từ DB, chính sách, phí ≤ trần, giữ chỗ kho, mọi lỗi nghiệp vụ không để dấu vết, rollback giữa chừng, cấp lại báo giá (kể cả lô `EXPIRED`), đua giành món cuối / bấm đúp |
 | `unit_test/test_w7_merchant.py` (16) ✅ | tuần 7 [A]: `MerchantService` (chỉ trạng thái đã ký quỹ, quy đổi chuỗi/phí chính xác với số rất lớn, token ETH/đã biết/lạ, mốc hạn theo từng trạng thái, ví chữ thường, gộp số dư chờ rút, không rò dữ liệu bên khác, chỉ đọc) + route `GET /api/merchant/orders` (401, chỉ seller, danh tính từ token, 405, lỗi theo phong bì `{code,message}`) |
 | `integration_test/test_w3_merchant_mysql.py` (10) ✅ | tuần 7 [A], **MySQL thật**: shop chỉ thấy đơn của mình, số tiền khớp báo giá, trạng thái đi theo chuỗi giả (giao, giải ngân sớm, khiếu nại, hoàn tiền), số dư chờ rút chỉ cho đúng ví (cộng dồn, hết sau `claimPending`, theo ví cũ sau khi đổi ví), HTTP đầu cuối |
+| `unit_test/test_w3_force_resolve.py` (83) ✅ | tuần 7 [B]: mốc `disputedAt + disputeTimeout` (7/30/90 ngày, biên ±1 giây), hạn chữ ký 2/3 luôn trước mốc (R-02), giao dịch ký bằng khóa Trọng tài không phải Shipper, idempotent, 4 luồng đồng thời chỉ gửi một giao dịch, nhật ký, quyền route |
+| `unit_test/test_w7_reconcile_script.py` (22) ✅ | tuần 7 [B]: `totals_from_events`, so tập đơn mở theo id, mã thoát/báo cáo/`--json`/`--wait`/`--strict` của `scripts/reconcile.py`, script không nạp khóa |
+| `integration_test/test_w3_force_resolve_mysql.py` (8) ✅ | tuần 7 [B], **MySQL thật**: xử đơn phương → Indexer REFUNDED/COMPLETED, đề xuất 2/3 dang dở bị CANCELLED, thông báo hai bên, nhật ký, đối soát, HTTP + CORS + quyền |
+| `integration_test/test_w3_reconcile_script_mysql.py` (9) ✅ | tuần 7 [B], **MySQL thật**: đối soát khớp sau mọi cách kết thúc đơn, khoản chờ rút ETH, tiền lạ → mã 1, nguồn sự kiện chỉ ra phía sai, hoán đổi hai đơn mà tổng không thấy, chỉ đọc |
+| `integration_test/test_w7_timeouts_anvil.py` (8) ✅ | tuần 7 [B+Q], **Anvil + contract thật**: E-04 phần chuỗi: Dispute timeout 7/30/90 ngày, Delivery timeout 14 ngày, không còn tiền kẹt |
+| `unit_test/test_w8_api_sweep.py` (19) ✅ | tuần 8 [B]: quét MỌI route của `backend/app.py` thật (không cần DB): 401 (không token / hết hạn / lạ / sai scheme / thiếu uid-role), ma trận 403 theo vai trò SRS 3/7, `signup` từ chối admin/shipper, không có route migrate/cấp số dư, **khóa danh sách 60 route** (Feature Freeze) |
+| `integration_test/test_w8_i_gaps_mysql.py` (4) ✅ | tuần 8 [B], **MySQL thật + chuỗi giả**: I-07 Indexer 3 và 5 shop, I-04 đổi chính sách sau khi đặt, I-03/I-06 replay từ block 0 khớp 100% mọi bảng
 | `integration_test/test_w3_indexer_mysql.py` | **MySQL thật**: `GET_LOCK`, con trỏ, idempotent, cửa sổ, rollback cửa sổ, `ChainReset`, backoff |
 | `integration_test/test_w3_chain_anvil.py` (`-m anvil`) | **Anvil + contract thật**: contract chấp nhận lô do backend ký, từ chối sửa/sai người nạp/hết hạn/phí vượt trần, Indexer giải mã log thật. Tự skip nếu không có Anvil (`REQUIRE_ANVIL=1` ở CI → đỏ) |
 | `unit_test/test_eip712_vectors.py` | tuần 1: vector EIP-712 chéo ngôn ngữ phía Python (digest, người ký, chữ ký 65 byte low-s, `docHash`, `vectors.json` khớp script sinh) |
@@ -246,7 +257,7 @@ Route guard ✅ `components/RequireRole.jsx` bọc `/admin` (admin), `/seller` (
 
 ---
 
-## 4. Mô-đun Web3 🟡 (tuần 3–6 ✅: ví, báo giá, Indexer đủ vòng đời đơn, Cổng Shipper, Relayer, tác vụ nền, đối soát, tranh chấp 2/3 chữ ký, đồng hồ/polling; còn lại 🔲 là Tuần 7–10: UC-07..UC-09, thoát hiểm, replay/script đối soát)
+## 4. Mô-đun Web3 🟡 (tuần 3–6 ✅: ví, báo giá, Indexer đủ vòng đời đơn, Cổng Shipper, Relayer, tác vụ nền, đối soát, tranh chấp 2/3 chữ ký, đồng hồ/polling; tuần 7 ✅ (B): thoát hiểm Trọng tài xử đơn phương + `reconcile.py`; còn lại 🔲 là UC-08/UC-09, nút Admin, replay)
 
 Nguồn: SRS mục 4–7, 9–10; SDD mục 3–8, 10. Đặt dưới `backend/slopee_web3/` (✅ = có trong repo, 🔲 = dự kiến). Cấu hình qua `settings.py` (`Web3Settings.from_env()` đọc `backend/.env.web3` do `bootstrap.sh` sinh; thêm `WALLET_LINK_DOMAIN` (mặc định `localhost:5173`), `WALLET_NONCE_MAX_PER_MINUTE`, `TOKEN_DECIMALS`).
 
@@ -287,7 +298,8 @@ Nguồn: SRS mục 4–7, 9–10; SDD mục 3–8, 10. Đặt dưới `backend/s
 | `MerchantService` ✅ (tuần 7) | `list_orders(merchant_user_id) -> {wallet, orders[], pending[]}` | UC-07 phía Merchant, CHỈ ĐỌC: đơn của shop từ `LOCKED` (`LISTED_STATES`, tối đa `MAX_ORDERS`=200, mới nhất trước), số tiền là chuỗi, `net_amount_raw`/`fee_amount_raw` theo `fee_split` của contract, mốc `delivery_deadline` (LOCKED)/`release_at` (DELIVERED)/`force_resolve_at` (DISPUTED) tính từ giờ block; `pending` = `pending_balances` > 0 của các ví đang liên kết VÀ từng dùng trên đơn của shop, gộp theo (token, ví), ETH trước. Không rò ví/id của Buyer, `doc_hash`, chữ ký. Token lạ: `decimals=null` |
 | `DisputeService` ✅ (tuần 6) | `propose(admin_id, order_code, payout_to, reason_note=None)`, `add_signature(user_id, order_code, resolution_id, signature)`, `get(user_id, role, order_code)` | UC-06: đọc số liệu từ CHUỖI, Trọng tài ký, nhận chữ ký Buyer/Merchant (khớp ví trên đơn), không bao giờ trả chữ ký thô; phần nộp `resolveDispute` là `DisputeSubmitService` (A). Lỗi: `INVALID_PAYOUT`, `DISPUTE_WINDOW_CLOSED`, `BAD_SIGNATURE`, `ALREADY_SIGNED`, `SIGNATURE_EXPIRED`, `DISPUTE_NOT_FOUND`, `ORDER_NOT_FOUND`, `INVALID_STATE` |
 | `SettingsService` 🔲 | `set_fee(...)`, `set_category_policy(code, ...)`, `set_category_policy_map(category_id, policy_code)` | UC-09: tham số vận hành, ghi `updated_by` |
-| `ReconcileService` ✅ | `run(deep=False)` | MOD-08, chỉ đọc |
+| `ReconcileService` ✅ | `run(deep=False, events=False)` | MOD-08, chỉ đọc; tuần 7: `events=True` thêm nguồn thứ ba dựng từ `chain_events` (`event_drift`, `event_order_drift`) |
+| `DisputeForceResolveService` ✅ (tuần 7) | `force_resolve(admin_id, order_code, payout_to, reason_note=None)` | UC-07 Dispute Timeout: Trọng tài xử đơn phương sau `disputedAt + disputeTimeout`; tin chuỗi, kiểm mốc trước khi gửi, idempotent, ghi `dispute_force_resolutions`; gửi qua `RelayerService.force_resolve` (khóa Trọng tài) |
 | `NotificationService` ✅ | `list_for_user(user_id)` | ghi bởi Indexer và tác vụ nền |
 
 
@@ -301,7 +313,10 @@ Nguồn: SRS mục 4–7, 9–10; SDD mục 3–8, 10. Đặt dưới `backend/s
 | `scripts/smoke_week1.sh` ✅ | smoke test trên Anvil thật: báo giá Python ký → nạp → giao → nhận → kiểm số dư |
 | `scripts/install_contract_deps.sh` ✅ | cài forge-std v1.9.4 + OpenZeppelin v5.0.2 đúng tag |
 | `scripts/gen_eip712_vectors.py` ✅ | sinh `shared/eip712/vectors.json` (`orderQuote`, `disputeResolution`, `docHash`, `walletLink`; `--check` để CI so khớp) |
-| `scripts/replay.sh`, `scripts/reconcile.py` 🔲 | replay từ block 0 (`--reset`), script đối soát độc lập (đối soát đã có dạng service: `ReconcileService` + `GET /api/admin/reconcile[?deep=1]`) |
+| `scripts/scan_no_user_keys.py` ✅ (tuần 8, A) | quét Non-custodial E-05/AC-09, chỉ đọc: mã nguồn + lược đồ + log (+ `--db`); khóa thử Anvil suy ra từ mnemonic công khai; `--json`, `--report`, `--self-check`; mã thoát 0 sạch / 1 có HIGH / 2 không chạy được; test `unit_test/test_w8_non_custodial.py`, `integration_test/test_w8_non_custodial_mysql.py` |
+| `scripts/e2e_stack.sh` ✅ (tuần 8, C) | `up`/`seed`/`down`: Anvil sạch + deploy, `init_db` + `migrate`, gieo admin/shipper, chạy backend + Indexer + Scheduler (`AUTO_RELEASE_SECONDS=5`), log/pid ở `.e2e/` |
+| `scripts/reconcile.py` ✅ (tuần 7) | đối soát chỉ đọc cho cron/CI: `--deep`, `--events`, `--wait GIÂY`, `--json`, `--strict`; mã thoát 0 khớp / 1 lệch / 2 không chạy được; không nạp khóa riêng |
+| `scripts/replay.sh` 🔲 | replay từ block 0 (`--reset`) |
 | `application/jobs.py` ✅ + `python -m slopee_web3.adapters.scheduler [--once]` ✅ | `QuoteExpirySweeper` (60 giây, đệm 30 giây, kiểm `NONE` trên chuỗi), `AutoRelease` (60 giây), `DeliveryTimeoutReminder` (1 giờ), `DisputeSigExpiry` (5 phút), `ReconcileSnapshot` (10 phút, chỉ ghi log). Một thể hiện nhờ `GET_LOCK`; lỗi một job không dừng job khác; chu kỳ qua `QUOTE_SWEEP_SECONDS`, `AUTO_RELEASE_SECONDS`, `TIMEOUT_REMINDER_SECONDS`, `DISPUTE_SIG_EXPIRY_SECONDS`, `RECONCILE_SECONDS`, `QUOTE_EXPIRY_GRACE_SECONDS`, `RELAYER_LOCK_SECONDS` |
 
 ### 4.5. API Web3 (snake_case, lỗi `{code,message}`; `adapters/flask_api/routes.py`)
@@ -319,6 +334,7 @@ Quyền: chỉ role `user`/`seller` (admin/shipper → 403 `forbidden`, dạng l
 | `GET /api/orders/:code` 🔲 | U | — | chi tiết đầy đủ đơn hàng (Tuần 5) |
 | `POST /api/orders/:code/dispute-note` ✅ | U (Buyer) | `reason` (3–2000 ký tự), `evidence_url?` (chỉ http/https) | `200 {order_id, reason, evidence_url, created}` · chỉ khi `DISPUTED` · gửi lại ghi đè · khóa sau khi Admin có đề xuất · 404/409/422 |
 | `GET /api/merchant/orders` ✅ (tuần 7, mới ngoài SDD 10.2, đã được nhóm chốt) | S (Merchant) | — (mọi tham số/query bị bỏ qua) | `{wallet, orders[{order_id, onchain_order_id, status, buyer_name, items[], price_vnd, amount_raw, net_amount_raw, fee_amount_raw, fee_bps, token, symbol, decimals, merchant_wallet, inspection_duration, dispute_timeout, chain_created_at, delivered_at, disputed_at, closed_at, delivery_deadline, release_at, force_resolve_at}], pending[{token, address, amount_raw, symbol, decimals}]}` · 401/403 (`user`/`shipper`/`admin` → 403); chỉ GET (405 với phương thức khác) |
+| `POST /api/admin/disputes/:code/force-resolve` ✅ (tuần 7, B, mới ngoài SDD 10.2, chờ nhóm xác nhận) | A (Admin) | `{payout_to: 'BUYER'\|'MERCHANT'\|ví, reason_note?}` | `{order_id, onchain_order_id, outcome: 'SENT'\|'ALREADY_RESOLVED', tx_hash, payout_side, payout_to, amount_raw, force_resolve_at}`; lỗi `409 FORCE_RESOLVE_TOO_EARLY` (`force_resolve_at`, `seconds_remaining`), `INVALID_PAYOUT`, `INVALID_STATE`, `ORDER_NOT_FOUND`, `503 WEB3_NOT_CONFIGURED` (thiếu `ARBITRATOR_KEY`) |
 | `GET /api/shipper/orders`, `POST /api/shipper/orders/:code/deliver` ✅ | Shipper | — | đơn `LOCKED` được gán / kết quả |
 | `POST /api/admin/disputes/:code/proposal` ✅ (tuần 6) | A | `payout_to` ('BUYER'\|'MERCHANT' hoặc ví), `reason_note?` | `201 {resolution_id, status: PROPOSED, payout_side, payout_to, amount_raw, nonce, deadline}` · 422 `INVALID_PAYOUT` · 409 `INVALID_STATE`/`DISPUTE_WINDOW_CLOSED` |
 | `GET /api/disputes/:code` ✅ (tuần 6) | U (Buyer/Merchant), Admin | — | đề xuất + `signatures[{party, signer, signed_at}]` (KHÔNG có chữ ký thô) + ghi chú khiếu nại + `your_party` + `server_time`; hợp đồng ở đầu `frontend/src/api/disputes.js` · 404 `ORDER_NOT_FOUND` |
@@ -327,7 +343,7 @@ Quyền: chỉ role `user`/`seller` (admin/shipper → 403 `forbidden`, dạng l
 | `GET /api/admin/disputes` ✅ (tuần 6, mới) | A | — | `{disputes: [...], server_time}` |
 | `PUT /api/admin/category-policies/:code`, `PUT /api/admin/category-policy-map/:categoryId` 🔲 | A | thời hạn / `policy_code` | bản đã lưu |
 
-### 4.6. Bảng Web3 (✅ đã có từ migration `0006`–`0022`)
+### 4.6. Bảng Web3 (✅ đã có từ migration `0006`–`0023`, 19 bảng)
 `wallet_nonces`, `user_wallets`, `checkout_groups`, `order_web3` (1–1 với `orders`), `order_quotes`, `dispute_resolutions`, `dispute_signatures`, `chain_events`, `indexer_cursor`, `category_policies`, `category_policy_map`, `platform_settings`, `pending_balances`, `tx_outbox`, `onchain_id_seq`, `shipper_assignments`, `schema_migrations`.
 
 ### 4.7. Smart contract `SlopeeEscrowMaster` (+ `MockUSD`) — tuần 1 ✅ và tuần 2 ✅ (`contracts/`)

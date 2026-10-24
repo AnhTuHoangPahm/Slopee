@@ -156,6 +156,7 @@ class FakeEscrowChain(FakeChain):
         self.eth_balance = 0           # số dư ETH của contract (chỉ để test đối soát nhánh ETH; không theo block)
         self.sent_txs = []
         self.dispute_nonces = {}       # {onchain_id: nonce} như `disputeNonces`
+        self.last_msg_sender = None    # địa chỉ khôi phục từ raw tx của lần send_tx gần nhất (= msg.sender trên chuỗi thật)
 
     # ---- đồng hồ / block
     def get_block(self, number):
@@ -285,8 +286,13 @@ class FakeEscrowChain(FakeChain):
         o = self.orders.get(oid)
         if o is None:
             raise ChainTxFailed('execution reverted: no such order')
-        sign({'to': ADDR['quote_signer'], 'value': 0, 'gas': 100000, 'gasPrice': 10 ** 9, 'nonce': len(self.sent_txs),
-              'chainId': CHAIN_ID, 'data': b''})          # đi qua đường ký thật của EnvKeySigner
+        raw = sign({'to': ADDR['quote_signer'], 'value': 0, 'gas': 100000, 'gasPrice': 10 ** 9, 'nonce': len(self.sent_txs),
+                    'chainId': CHAIN_ID, 'data': b''})          # đi qua đường ký thật của EnvKeySigner
+        # `msg.sender` trên chuỗi thật là NGƯỜI KÝ giao dịch (không phải tham số `sender` chỉ dùng để ước lượng gas): khôi phục từ raw tx.
+        try:
+            self.last_msg_sender = Account.recover_transaction(bytes(raw))
+        except Exception:      # noqa: BLE001 - một số test dùng hàm ký giả trả bytes rỗng: không có người ký để khôi phục
+            self.last_msg_sender = None
         if fn == 'confirmDelivery':
             if o['state'] != 'LOCKED':
                 raise ChainTxFailed('execution reverted: Not locked')
@@ -300,6 +306,10 @@ class FakeEscrowChain(FakeChain):
             self._complete(oid, o)
         elif fn == 'resolveDispute':
             self._resolve_dispute(oid, o, args)
+        elif fn == 'arbitratorForceResolve':
+            if (self.last_msg_sender or '').lower() != ADDR['arbitrator'].lower():       # onlyRole(ARBITRATOR_ROLE)
+                raise ChainTxFailed('execution reverted: AccessControl: account is missing role ARBITRATOR_ROLE')
+            self.arbitrator_force_resolve(oid, args[1])
         else:
             raise AssertionError(fn)
         self.sent_txs.append((fn, oid, sender))
@@ -416,6 +426,20 @@ class MemoryDisputeRepo:
 
     def open_disputes(self):
         return []
+
+    # --- Tuần 7 (B): nhật ký UC-07 trong bộ nhớ (cùng hình dạng MySqlDisputeRepo)
+    def add_force_resolution(self, order_id, onchain_order_id, admin_user_id, payout_side, payout_to, amount_raw, reason_note,
+                             outbox_id, tx_hash):
+        if getattr(self, 'fail_force_audit', False):
+            raise RuntimeError('CSDL hỏng (giả lập)')
+        rows = self.__dict__.setdefault('force_rows', [])
+        rows.append({'id': len(rows) + 1, 'order_id': order_id, 'onchain_order_id': int(onchain_order_id), 'admin_user_id': admin_user_id,
+                     'payout_side': payout_side, 'payout_to': str(payout_to).lower(), 'amount_raw': str(amount_raw),
+                     'reason_note': reason_note, 'outbox_id': outbox_id, 'tx_hash': tx_hash})
+        return len(rows)
+
+    def force_resolutions(self, order_id):
+        return [r for r in reversed(self.__dict__.get('force_rows', [])) if r['order_id'] == order_id]
 
 
 class MemoryDisputeUow(MemoryUow):
