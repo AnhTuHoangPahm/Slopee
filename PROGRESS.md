@@ -524,10 +524,19 @@ Xem mục 1.1 của ghi chú C (đã chỉnh lại cho đúng nguyên nhân, kè
 - [ ] 🔒 **ĐÓNG BĂNG MÃ NGUỒN TÍNH NĂNG (FEATURE FREEZE):** Tuyệt đối không thêm tính năng mới, chỉ sửa lỗi.
 - [ ] **[Q] Thành viên C:** Thiết lập Playwright test tự động với mock ví EIP-1193 chạy trong GitHub Actions CI (E-01 đến E-07).
 - [ ] **[Q] Thành viên B:** Chạy toàn bộ test suite backend và API (A-01 đến A-07, I-01 đến I-07).
-- [ ] **[Q] Thành viên A:** Quét mã nguồn và CSDL xác nhận nguyên tắc Non-custodial (E-05, AC-09): Không tồn tại private key người dùng.
-- [ ] **[Q] Thành viên A:** Rà soát lại checklist an ninh: Reentrancy, Signature Malleability, Role Separation, Front-running.
+- [x] **[Q] Thành viên A:** Quét mã nguồn và CSDL xác nhận nguyên tắc Non-custodial (E-05, AC-09): Không tồn tại private key người dùng. *(`scripts/scan_no_user_keys.py`: quét repo 377 tệp + lược đồ + log, 0 HIGH; 57 test Python xanh. Phần quét CSDL MySQL thật chạy trong CI (bước mới ở job `backend`) và `test_w8_non_custodial_mysql.py`: xem "Ghi chú Tuần 8 — phần Thành viên A".)*
+- [x] **[Q] Thành viên A:** Rà soát lại checklist an ninh: Reentrancy, Signature Malleability, Role Separation, Front-running. *(Báo cáo `docs/SECURITY_CHECKLIST_W8.md`: 4/4 mục đạt, không có lỗi High/Critical; thêm 7 test Foundry `SlopeeEscrowSecurityW8.t.sol`, **chưa biên dịch được ở máy soạn** nên chờ `forge test` trong CI.)*
 - [ ] 🎯 **NGHIỆM THU CỘT MỐC M4:**
   - [ ] Toàn bộ bài test trên CI xanh 100%. Không còn bug mức High/Critical.
+
+**Ghi chú Tuần 8 — phần Thành viên A:**
+1. **E-05 / AC-09.** `scripts/scan_no_user_keys.py` (chỉ đọc, chỉ thư viện chuẩn): quét mã nguồn, lược đồ (`schema.sql` + migration), log và (với `--db`) CSDL đang chạy. Mã thoát 0 sạch / 1 có HIGH / 2 không chạy được; `--json`, `--report`, `--self-check`. Danh sách khóa thử công khai được **suy ra** từ mnemonic công khai của Anvil (không ghi cứng), nên khóa lạ trong ngữ cảnh khóa luôn là HIGH và khóa thử #5+ nằm ở mã chạy thật cũng là HIGH.
+2. **Bằng chứng tích cực:** backend chỉ giữ 3 khóa vận hành (`Web3Settings`), `Account.from_key` chỉ ở `env_signer.py`, `user_wallets` chỉ có địa chỉ công khai, `backend/.env.web3` bị `.gitignore`.
+3. **Test:** `test/unit_test/test_w8_non_custodial.py` (57 ca: repo thật sạch; 23 kiểu rò khóa phải bị bắt; 12 mẫu hợp lệ không báo nhầm; quét CSDL bằng con trỏ giả; mã thoát CLI; đường logger → `SensitiveDataFilter` → bộ quét). `test/integration_test/test_w8_non_custodial_mysql.py` (3 ca, MySQL thật, chưa chạy ở máy soạn). CI `backend`: thêm `--self-check`, quét repo, quét `--db`.
+4. **Lỗi của chính script được tìm ra khi viết test** (từng bỏ qua mọi thư mục tên `lib`, gồm `frontend/src/lib`): đã sửa, chỉ bỏ `contracts/lib/`.
+5. **Hai cảnh báo WARN, không phải lỗi:** `test/w3_support.py` có 2 khóa thử (`merchant5`, `merchant6`) không thuộc 20 tài khoản Anvil, và khóa `stranger` ghi nhãn "#12" thực ra là Anvil #4 (= `feeRecipient` của `Deploy.s.sol`). Chỉ là nhãn/khóa thử; để Tuần 9 nếu còn thời gian.
+6. **Checklist an ninh:** `docs/SECURITY_CHECKLIST_W8.md` (Reentrancy, Malleability, Role Separation, Front-running đều đạt; 5 ghi nhận mức Info, không đổi contract do Feature Freeze và ABI đóng băng). `contracts/test/SlopeeEscrowSecurityW8.t.sol` thêm 7 test: RS1–RS3, FR1–FR2, SM1–SM2.
+7. **Chưa làm / cần người chạy:** `forge test` và `slither` (máy soạn không tải được Foundry/solc), nên 7 test Foundry mới và mục "đạt" của checklist là theo đọc mã + test cũ cho tới khi CI xanh; quét `--db` trên MySQL thật; AC-09 chưa ký duyệt (chờ CI).
 
 ---
 
@@ -654,7 +663,7 @@ Xem mục 1.1 của ghi chú C (đã chỉnh lại cho đúng nguyên nhân, kè
 | **E-02** | **Inspection Expiry:** Giao hàng ➔ Tua thời gian Anvil ➔ Tự động giải ngân sau hạn | AC-04 | `[ ] PASS` |
 | **E-03** | **Dispute Resolution:** Khiếu nại ➔ Đề xuất phán quyết ➔ Buyer/Merchant ký EIP-712 ➔ Hoàn tiền | AC-05, AC-06 | `[~] đã chạy trên Anvil + MySQL thật, cả hai hướng: hoàn tiền Buyer 100% và giải ngân Merchant trừ phí; chữ ký của giao diện được hợp đồng chấp nhận; mọi ca từ chối đúng lý do; đơn shop khác độc lập (BR-11). Đầu cuối qua HTTP còn chờ API B + relayer A; chờ CI` |
 | **E-04** | **Timeouts:** Delivery timeout (14 ngày hủy hoàn tiền); Dispute timeout (Trọng tài xử đơn phương) | AC-07 | `[~]` *(backend + chuỗi thật xong: `test_w7_timeouts_anvil.py` 8 test, Dispute timeout 7/30/90 ngày + Delivery timeout 14 ngày; còn bản Playwright qua giao diện, cần nút Thoát hiểm của Admin)* |
-| **E-05** | **Zero-key Scan:** Quét tự động repo, CSDL, file log không tìm thấy private key người dùng | AC-09 (BR-01) | `[ ] PASS` |
+| **E-05** | **Zero-key Scan:** Quét tự động repo, CSDL, file log không tìm thấy private key người dùng | AC-09 (BR-01) | `[~] repo + lược đồ + log: 0 HIGH (script + 57 test Python xanh); quét CSDL MySQL thật chờ CI (bước mới ở job backend + test_w8_non_custodial_mysql.py)` |
 | **E-06** | **Đối soát số dư:** Script kiểm tra số dư contract khớp 100% với đơn mở sau mỗi ca test E2E | AC-10 (G-01) | `[x] PASS (scripts/reconcile.py --deep --events chạy thực tế trả về mã 0 - KHỚP)` |
 | **E-07** | **Multi-shop Escrow:** Giỏ 3 shop, 2 lần xác nhận ví; Mỗi shop kết thúc độc lập | AC-14 (BR-11) | `[ ] PASS` |
 
