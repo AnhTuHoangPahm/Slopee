@@ -523,7 +523,7 @@ Xem mục 1.1 của ghi chú C (đã chỉnh lại cho đúng nguyên nhân, kè
 ### TUẦN 8: Đóng băng tính năng, Kiểm thử tích hợp & Đạt Cột mốc M4
 - [ ] 🔒 **ĐÓNG BĂNG MÃ NGUỒN TÍNH NĂNG (FEATURE FREEZE):** Tuyệt đối không thêm tính năng mới, chỉ sửa lỗi.
 - [~] **[Q] Thành viên C:** Thiết lập Playwright test tự động với mock ví EIP-1193 chạy trong GitHub Actions CI (E-01 đến E-07). *(Đã viết đủ 7 kịch bản + ví thử + job CI `e2e` + `scripts/e2e_stack.sh`; **CHƯA CHẠY LẦN NÀO** (máy soạn không có npm/MySQL/Anvil), nên chưa thể ghi PASS: xem "Ghi chú Tuần 8 — phần Thành viên C".)*
-- [ ] **[Q] Thành viên B:** Chạy toàn bộ test suite backend và API (A-01 đến A-07, I-01 đến I-07).
+- [x] **[Q] Thành viên B:** Chạy toàn bộ test suite backend và API (A-01 đến A-07, I-01 đến I-07). *(Toàn bộ pytest trên MySQL 8.0.46 + Anvil 1.8.6 thật, `REQUIRE_ANVIL=1`: **1198 pass, 1 skip**, 0 lỗi; thêm 24 test lấp khoảng trống A-01/A-02/A-04/A-07/I-03/I-04/I-06/I-07; sửa 1 lỗi của scanner A. Chạy cục bộ, **chờ CI**: xem "Ghi chú Tuần 8 — phần Thành viên B".)*
 - [x] **[Q] Thành viên A:** Quét mã nguồn và CSDL xác nhận nguyên tắc Non-custodial (E-05, AC-09): Không tồn tại private key người dùng. *(`scripts/scan_no_user_keys.py`: quét repo 377 tệp + lược đồ + log, 0 HIGH; 57 test Python xanh. Phần quét CSDL MySQL thật chạy trong CI (bước mới ở job `backend`) và `test_w8_non_custodial_mysql.py`: xem "Ghi chú Tuần 8 — phần Thành viên A".)*
 - [x] **[Q] Thành viên A:** Rà soát lại checklist an ninh: Reentrancy, Signature Malleability, Role Separation, Front-running. *(Báo cáo `docs/SECURITY_CHECKLIST_W8.md`: 4/4 mục đạt, không có lỗi High/Critical; thêm 7 test Foundry `SlopeeEscrowSecurityW8.t.sol`, **chưa biên dịch được ở máy soạn** nên chờ `forge test` trong CI.)*
 - [ ] 🎯 **NGHIỆM THU CỘT MỐC M4:**
@@ -549,10 +549,20 @@ Xem mục 1.1 của ghi chú C (đã chỉnh lại cho đúng nguyên nhân, kè
 8. **Quyết định giữ nguyên (Feature Freeze):** `window.confirm` ở nút \"Đã nhận hàng\" của `Web3OrderPanel` **không đổi** sang hộp thoại React (mục 8.1 Tuần 7: chỉ làm nếu mọi test đã xanh 100% và còn dư thời gian; hiện chưa có lần chạy xanh nào). E2E xử lý bằng `page.on('dialog', accept)` trong `openActor`. Nếu CI xanh thì đổi ở Tuần 9 kèm cập nhật `myOrdersUi`, `web3OrderPanelAdaptive`, `anvilChain`.
 9. **Việc của A còn lại (đã ghi ở khối phần A, nhắc lại để không sót):** `forge test --match-contract SlopeeEscrowSecurityW8Test` và `slither` chưa chạy được ở máy soạn của A; quét `--db` trên MySQL thật chờ CI (bước mới trong job `backend`; E-05 của C quét thêm CSDL E2E); 2 cảnh báo WARN nhãn khóa thử trong `test/w3_support.py`. Phần tài liệu A chưa cập nhật nay đã bổ sung hộ: `AI_CONTEXT.md` (bảng trạng thái, lệnh chạy, bẫy), `ARCHITECTURE.md` (dòng E2E). `README.md`, `SKELETON.md`, `PROGRESS.md` A đã tự cập nhật.
 
+**Ghi chú Tuần 8 — phần Thành viên B:**
+1. **Kết quả chạy (cục bộ, KHÔNG phải CI):** MySQL 8.0.46, Anvil/forge 1.8.6, solc 0.8.20, `bootstrap.sh --no-anvil` rồi `REQUIRE_ANVIL=1 pytest test`: **1198 pass, 1 skip**. Ca skip duy nhất là test thủ công `test_w3_relayer_mysql.py:140` (cần `backend/.env.web3` nạp vào tiến trình + `RELAYER_TEST_ONCHAIN_ID`). `gen_eip712_vectors.py --check`: khớp. `forge test`: **139/139** (gồm 7 test `SlopeeEscrowSecurityW8` của A, trước đó A chưa biên dịch được). Chưa chạy: vitest, `vite build`, Playwright (E-01…E-07 của C: không tải được trình duyệt ở máy này), slither.
+2. **Khoảng trống bảng 5.2 đã lấp (chỉ thêm test, đúng Feature Freeze):** (a) A-01/A-02 trước đó chỉ kiểm danh sách route chọn tay trên app tối giản: nay `unit_test/test_w8_api_sweep.py` (19 ca) quét **mọi** route của `backend/app.py` thật (60 cặp method+route): 7 route công khai, 53 route còn lại phải 401 với không token / token hết hạn / chữ ký lạ / sai scheme / thiếu `uid`+`role`; ma trận 403 theo vai trò lấy từ SRS 3/7 (không suy từ decorator), có role lạ `root`. (b) A-04: thêm `shipper`, biến thể hoa/thường, khoảng trắng, kiểu dữ liệu lạ. (c) A-07: không có route nào khớp migrate/top-up/faucet/grant/credit. (d) **Khóa bề mặt API:** `test_route_inventory_is_frozen` so với danh sách 60 route; thêm/bớt endpoint sau freeze làm test đỏ (muốn đổi phải sửa `EXPECTED_ROUTES` và ghi lý do ở đây). Đã thử phá có chủ đích (bỏ `@require_auth` ở giỏ hàng, hạ quyền route admin): 3 test bắt được.
+3. **I-07:** test Indexer cũ chỉ dùng 2 shop; thêm 3 và 5 shop (`OrderCreated` cùng giao dịch, đúng 1 món không thanh toán còn trong giỏ, nhóm `LOCKED`, tổng `total_amount_raw` = tổng từng đơn, chạy lại không đổi, 0 anomaly).
+4. **I-04:** thêm test đổi chính sách `GENERAL` sau khi đặt (trả lại giá trị cũ trong `finally`).
+5. **I-03/I-06 replay:** `snapshot()` gồm `order_web3` (trạng thái, mốc thời gian, `anomaly_flag`), `orders.status`, `products.inStock`, `pending_balances`, thông báo, sự kiện; kịch bản 4 đơn (nhận sớm, khiếu nại → Trọng tài hoàn, tự giải ngân, hủy quá 14 ngày) + sổ chờ rút ETH; rollback về block 0 + xóa con trỏ + chạy lại: **bảng khớp 100%, đối soát giống hệt, lặp lần hai vẫn ổn định**, và trạng thái giữa chừng khác trước (replay không "pass rỗng"). Dùng chuỗi giả mô hình đúng contract, chưa phải Anvil thật.
+6. **Lỗi tìm thấy và đã sửa:** (i) `scripts/scan_no_user_keys.py` (của A) báo 10-20 HIGH giả trên máy dev sau `bootstrap.sh` vì `.anvil.log` (banner Anvil in sẵn khóa công khai) bị quét như mã nguồn và log: nay bỏ qua file này khi quét mặc định (`--logs .anvil.log` vẫn quét), thêm 1 test; CI không bị ảnh hưởng (job `backend` không chạy bootstrap). (ii) Test của mình lúc đầu để dữ liệu thừa làm đỏ `test_web3_migrations` (id cố định 100011..13, `seq_start`) và test DB của A (chuỗi 64 hex trong `quote_json`): fixture `db` nay dọn đầu/cuối và trả `onchain_id_seq` về 100001 (quy ước của `test_w3_chain_anvil.py`). **Bài học cho mọi test dùng DB chung:** phải dọn cả ở cuối test.
+7. **Điểm lệch/rủi ro ghi nhận (không đổi code vì Feature Freeze):** AC-08 từng tick `[x]` dù chưa có `replay.sh` → đã đổi `[~]`; Indexer đánh dấu bất thường theo báo giá đã lưu, không theo bảng chính sách như SRS 12.2 mô tả (hợp lý hơn vì chính sách đổi hợp lệ sau đó); 5 endpoint chính sách/cài đặt trong SRS mục 7 chưa có (đã nằm ở phương án cắt #3, mục 7).
+8. **Việc cần người chạy:** `pytest test` và `scripts/scan_no_user_keys.py` trên CI; Playwright E-01…E-07 của C; `slither` của A. Máy dev đã chạy `bootstrap.sh` nên có `.anvil.log` ở gốc repo (đã `.gitignore`).
+
 ---
 
 ### TUẦN 9: Kiểm thử tải, Diễn tập Demo & Hoàn thiện Tài liệu
-- [ ] **[B] Thành viên B:** Chạy test Replay Indexer từ block 0 (`replay.sh`): Đảm bảo phục hồi 100% trạng thái dữ liệu (AC-08).
+- [ ] **[B] Thành viên B:** Chạy test Replay Indexer từ block 0 (`replay.sh`): Đảm bảo phục hồi 100% trạng thái dữ liệu (AC-08). *(Việc còn thiếu: cài `--from-block 0 --reset` (SDD 6.3) + `scripts/replay.sh`; nền tảng đã có: `rollback_orders_from_block(cur, 0)` + xóa `indexer_cursor` + chạy lại, được `test_w8_i_gaps_mysql.py` chứng minh khớp 100%.)*
 - [ ] **[C] Thành viên C:** Hoàn thiện Hướng dẫn cài đặt (`INSTALL.md`) và Hướng dẫn vận hành demo (`DEMO_GUIDE.md`).
 - [ ] **[Cả nhóm]:** Chạy diễn tập kịch bản Demo trực tiếp trên 2 máy độc lập:
   - Luồng 1 (Happy path - Giỏ 2 shop, giao hàng, mở khóa sớm): Yêu cầu < 3 phút.
@@ -625,18 +635,18 @@ Xem mục 1.1 của ghi chú C (đã chỉnh lại cho đúng nguyên nhân, kè
 | :---: | :--- | :--- | :---: |
 | **I-01** | Liên kết ví: Nonce dùng lại, nonce hết hạn, chữ ký sai, ví đã thuộc user khác | AC-01 / Trả đúng mã lỗi HTTP | `[x] PASS` |
 | **I-02** | Báo giá: Quy đổi VND ➔ token chuẩn xác, hợp đồng chấp nhận chữ ký Python | AC-01, AC-02 | `[x] PASS` |
-| **I-03** | Indexer: Xử lý trùng tx_hash/log_index không ghi đôi, khởi động lại, phục hồi con trỏ | AC-08 / Tính Idempotent | `[x] PASS (17 test khung + 16 test handler OrderCreated); chờ CI. Handler Delivered/Disputed/Completed/Refunded ở Tuần 5-6` |
-| **I-04** | Nhóm hàng: Đơn nhiều nhóm lấy `max()`, đổi chính sách không ảnh hưởng đơn cũ | AC-12 | `[~] một phần: `max()` riêng từng thời hạn + policy mỗi shop đúng; thời hạn lưu cứng trên `order_web3` nhưng chưa có test "đổi chính sách sau khi đặt"` |
+| **I-03** | Indexer: Xử lý trùng tx_hash/log_index không ghi đôi, khởi động lại, phục hồi con trỏ | AC-08 / Tính Idempotent | `[x] PASS (17 test khung + 16 test handler OrderCreated); chờ CI. Handler Delivered/Disputed/Completed/Refunded ở Tuần 5-6` *(Tuần 8: + test replay tương đương `test_w8_i_gaps_mysql.py`; CLI `--from-block 0 --reset` chưa có, Tuần 9)* |
+| **I-04** | Nhóm hàng: Đơn nhiều nhóm lấy `max()`, đổi chính sách không ảnh hưởng đơn cũ | AC-12 | `[~] đủ test cục bộ, chờ CI: `max()` riêng từng thời hạn + policy mỗi shop đúng; Tuần 8 thêm "đổi chính sách sau khi đặt" (đơn cũ giữ thời hạn, cấp lại báo giá không áp chính sách mới, Indexer không báo lệch, đơn mới nhận chính sách mới). Lưu ý: Indexer so sự kiện với báo giá ĐÃ LƯU, không so với bảng chính sách (xem `AI_CONTEXT.md` mục 6)` |
 | **I-05** | Đồng bộ thời gian: `now_chain()` theo sát block Anvil; tua thời gian cấp quote mới chuẩn | AC-02 | `[x] PASS: now_chain nhảy theo evm_increaseTime, quá hạn chặn Khiếu nại, báo giá mới sau tua giờ được contract nhận (CI web3-chain xanh)` |
-| **I-06** | Đồng bộ ngược: Cập nhật `order_web3` tự động cập nhật `orders.status` cũ; Chặn route ghi đè cũ | AC-08 / Bảng ánh xạ 5.1 | `[x] PASS` |
-| **I-07** | Giỏ 3 shop: Tạo đúng 3 đơn 1 group, tổng token khớp lệnh, Indexer xóa đúng giỏ hàng | AC-14 | `[x] PASS` |
-| **A-01** | Mọi API yêu cầu token: Không token hoặc token hết hạn trả HTTP 401 | Mục 15 (P0-01) | `[x] PASS` |
-| **A-02** | Kiểm tra quyền Role: User/Seller gọi API Admin bị chặn HTTP 403; Shipper chỉ xem đơn gán | Mục 15 (P0-02) | `[x] PASS` |
+| **I-06** | Đồng bộ ngược: Cập nhật `order_web3` tự động cập nhật `orders.status` cũ; Chặn route ghi đè cũ | AC-08 / Bảng ánh xạ 5.1 | `[x] PASS` *(Tuần 8: + replay từ block 0 khớp từng bảng + đối soát trước/sau giống hệt)* |
+| **I-07** | Giỏ 3 shop: Tạo đúng 3 đơn 1 group, tổng token khớp lệnh, Indexer xóa đúng giỏ hàng | AC-14 | `[x] PASS` *(Tuần 8: test Indexer 3 và 5 shop, 3 `OrderCreated` cùng giao dịch, xóa đúng món đã thanh toán)* |
+| **A-01** | Mọi API yêu cầu token: Không token hoặc token hết hạn trả HTTP 401 | Mục 15 (P0-01) | `[x] PASS` *(Tuần 8: quét mọi route của app thật: không token / hết hạn / token lạ / sai scheme đều 401; chỉ 7 route công khai)* |
+| **A-02** | Kiểm tra quyền Role: User/Seller gọi API Admin bị chặn HTTP 403; Shipper chỉ xem đơn gán | Mục 15 (P0-02) | `[x] PASS` *(Tuần 8: ma trận vai trò theo SRS 3/7 trên mọi route, kể cả role lạ)* |
 | **A-03** | Kiểm tra sở hữu dữ liệu: Xem đơn, giỏ, shop của người khác bị 403 hoặc 404 | Mục 15 (P0-03) | `[x] PASS` |
-| **A-04** | Đăng ký tài khoản với role `admin` hoặc `shipper` bị từ chối | Mục 15 (P0-02) | `[x] PASS` |
+| **A-04** | Đăng ký tài khoản với role `admin` hoặc `shipper` bị từ chối | Mục 15 (P0-02) | `[x] PASS` *(Tuần 8: + `shipper`, hoa/thường, khoảng trắng, kiểu dữ liệu lạ)* |
 | **A-05** | Đua tranh đặt hàng (Race condition): Tồn kho không bao giờ bị âm | Mục 15 (P0-05) | `[x] PASS` |
 | **A-06** | Giới hạn brute-force: Nhập sai PIN hoặc Password quá 5 lần bị khóa tạm | Mục 15 (P0-05) | `[x] PASS` |
-| **A-07** | Endpoint `/api/shops/migrate` đã bị xóa bỏ; Không còn API cấp số dư vô hạn | Mục 15 (P0-04) | `[x] PASS` |
+| **A-07** | Endpoint `/api/shops/migrate` đã bị xóa bỏ; Không còn API cấp số dư vô hạn | Mục 15 (P0-04) | `[x] PASS` *(Tuần 8: không có route migrate/top-up/grant/credit)* |
 
 ---
 
@@ -691,7 +701,7 @@ Xem mục 1.1 của ghi chú C (đã chỉnh lại cho đúng nguyên nhân, kè
 | **AC-05** | Khiếu nại trong hạn đóng băng tiền; Quá thời hạn kiểm tra khiếu nại bị từ chối | BR-03 | Test T-10 đạt | `[ ]` |
 | **AC-06** | Phân xử thành công với 2 chữ ký của 2 bên khác nhau; Chặn chữ ký trùng hoặc sai hạn | BR-04, 05 | Test T-11, T-12, T-24 đạt | `[ ]` |
 | **AC-07** | Delivery Timeout và Dispute Timeout hoạt động chuẩn xác theo từng giá trị cấu hình | BR-05 | Test T-14, T-15, E-04 đạt | `[ ]` |
-| **AC-08** | Xóa CSDL chạy lại Indexer từ block 0 khớp 100% dữ liệu on-chain; Xử lý trùng an toàn | BR-09 | Test I-03, I-06, Replay script đạt | `[x]` |
+| **AC-08** | Xóa CSDL chạy lại Indexer từ block 0 khớp 100% dữ liệu on-chain; Xử lý trùng an toàn | BR-09 | Test I-03, I-06, Replay script đạt | `[~]` *(Tuần 8, B: test replay tương đương đạt; `replay.sh`/`--from-block 0 --reset` chưa cài, đóng ở Tuần 9)* |
 | **AC-09** | Quét toàn diện mã nguồn, CSDL, log không có private key hay seed phrase người dùng | BR-01 | Test E-05 đạt | `[ ]` |
 | **AC-10** | Số dư contract luôn bằng tổng tiền các đơn đang mở cộng sổ chờ rút | G-01 | Test T-18, E-06, Reconcile tool đạt | `[ ]` |
 | **AC-11** | Bộ test contract đạt coverage ≥ 90%; Chạy lặp lại kịch bản demo 3 lần liên tiếp không lỗi | G-06 | Báo cáo test & biên bản demo | `[x]` |

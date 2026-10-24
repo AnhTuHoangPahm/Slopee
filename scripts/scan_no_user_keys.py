@@ -107,6 +107,9 @@ OPERATOR_INDEXES = set(ROLE_OF_INDEX)          # khóa VẬN HÀNH của sàn (S
 # --------------------------------------------------------------------------------------------------------------------
 # Phạm vi: nơi nào được phép chứa khóa thử công khai
 # --------------------------------------------------------------------------------------------------------------------
+# Log của CHÍNH node Anvil (bootstrap.sh ghi ở gốc repo): banner của Anvil in sẵn 10 khóa công khai nên luôn báo HIGH giả.
+# Bỏ qua ở bước duyệt mã nguồn và khi tự tìm log mặc định; truyền rõ `--logs .anvil.log` thì vẫn quét.
+NODE_BANNER_LOGS = {'.anvil.log'}
 SKIP_DIRS = {'.git', 'node_modules', 'out', 'cache', 'dist', 'build', '__pycache__', '.venv', 'venv', 'broadcast',
              'coverage', '.pytest_cache', 'playwright-report', 'test-results', '.mypy_cache'}
 SKIP_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.svg', '.mp3', '.wav', '.ogg', '.pdf', '.zip', '.gz', '.woff',
@@ -266,7 +269,7 @@ def iter_files(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         for fn in filenames:
             p = Path(dirpath) / fn
-            if p.suffix.lower() in SKIP_EXT or p.relative_to(root).as_posix().startswith(SKIP_PREFIXES):
+            if fn in NODE_BANNER_LOGS or p.suffix.lower() in SKIP_EXT or p.relative_to(root).as_posix().startswith(SKIP_PREFIXES):
                 continue
             try:
                 if p.stat().st_size > MAX_BYTES:
@@ -430,7 +433,8 @@ def scan_logs(paths=None, root=ROOT, report=None):
     if not paths:                                                      # mặc định: mọi *.log và thư mục logs/ trong repo
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
-            targets += [Path(dirpath) / f for f in filenames if f.endswith('.log') or Path(dirpath).name == 'logs']
+            targets += [Path(dirpath) / f for f in filenames
+                        if (f.endswith('.log') and f not in NODE_BANNER_LOGS) or Path(dirpath).name == 'logs']
     for t in targets:
         try:
             text = t.read_text(encoding='utf-8', errors='replace')

@@ -253,3 +253,16 @@ def test_log_pipeline_output_passes_the_scanner():
     r = scan.Report()
     scan.scan_text_secrets(stream.getvalue(), lambda n: f'l:{n}', 'app.log', r, kind='log')
     assert r.high == [], stream.getvalue()
+
+
+def test_anvil_node_banner_log_is_not_scanned_by_default_but_explicit_path_still_is(tmp_path):
+    """Tuần 8 [B]: sau bootstrap.sh, `.anvil.log` (banner Anvil in sẵn khóa công khai) từng làm test repo thật đỏ giả trên máy dev."""
+    banner = tmp_path / '.anvil.log'
+    banner.write_text('Private Keys\n(0) 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80\n')
+    rep = scan.Report()
+    scan.scan_source(tmp_path, rep)
+    scan.scan_logs(None, tmp_path, rep)
+    assert not rep.high and rep.scanned['log files'] == 0                      # không quét ở cả hai đường mặc định
+    assert scan.scan_logs([banner], tmp_path, scan.Report()).scanned['log files'] == 1     # chỉ định rõ: vẫn đọc
+    (tmp_path / 'backend.log').write_text('signer key 0x' + 'ab' * 32 + '\n')
+    assert scan.scan_logs(None, tmp_path, scan.Report()).scanned['log files'] == 1         # log khác vẫn được quét
