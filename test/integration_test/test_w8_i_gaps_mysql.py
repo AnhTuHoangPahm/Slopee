@@ -3,6 +3,9 @@
 Chỉ thêm test (Feature Freeze). Replay ở đây = `rollback_orders_from_block(0)` + xóa con trỏ + chạy lại Indexer từ block 0, đúng phép
 SDD 6.3 mô tả cho `--from-block 0 --reset` (CLI/`replay.sh` là việc Tuần 9). Chạy trên MySQL thật + chuỗi giả mô hình đúng contract.
 """
+import importlib.util
+from pathlib import Path
+
 import pytest
 
 from slopee_web3.adapters.indexer.handlers import rollback_orders_from_block
@@ -11,6 +14,9 @@ from test_w3_week5_flow_mysql import Stack, assign, locked_orders, new_shipper, 
 from w3_support import ADDR, FakeChain, cart_item, connect, shop_with_product, user
 
 pytestmark = pytest.mark.mysql
+_spec = importlib.util.spec_from_file_location('scan_no_user_keys', Path(__file__).resolve().parents[2] / 'scripts' / 'scan_no_user_keys.py')
+scan = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(scan)
 DAY = 86400
 CLEAN = ('notifications', 'tx_outbox', 'shipper_assignments', 'pending_balances', 'chain_events', 'indexer_cursor',
          'order_quotes', 'order_web3', 'checkout_groups', 'orders', 'user_wallets')        # thứ tự an toàn với khóa ngoại
@@ -73,6 +79,29 @@ def test_i07_n_shops_one_group_n_created_events_same_tx_clear_exactly_those_cart
     assert env.quote.get_group(buyer, group['checkout_group_id'])['status'] == 'LOCKED'
     run(conn, chain)                                                               # chạy lại: không đổi, không anomaly
     assert row(db, "SELECT COUNT(*) AS n FROM order_web3 WHERE anomaly_flag=1")['n'] == 0
+
+
+def scan_live_db():
+    c = connect()
+    try:
+        c.autocommit(True)
+        cur = c.cursor()
+        cur.execute("SELECT DATABASE() AS d")
+        r = cur.fetchone()
+        return scan.scan_database(c, r['d'] if isinstance(r, dict) else r[0])
+    finally:
+        c.close()
+
+
+def test_e05_scanner_accepts_real_quotes_with_doc_hash_in_database(env, db, conn):
+    """Hồi quy lỗi CI của E-05: `order_quotes.quote_json` thật (do QuoteService sinh) chứa `docHash` 64 hex, scanner `--db` không được báo HIGH."""
+    _, group, _ = checkout(env, db, 3)
+    db.execute("SELECT quote_json FROM order_quotes")
+    docs = [list(r.values())[0] for r in db.fetchall()]
+    assert len(docs) == 3 and all('docHash' in d for d in docs)            # có dữ liệu thật, không phải quét rỗng
+    rep = scan_live_db()
+    assert [f.line() for f in rep.high] == []
+    assert rep.scanned['db values'] >= 3
 
 
 # ====================================================================== I-04: đổi chính sách sau khi đặt
@@ -169,6 +198,7 @@ def test_i03_i06_replay_from_block_zero_reproduces_every_table_exactly(st, db):
     reset_and_replay(st, db, before)
     after = snapshot(db)
     assert after == before
+    assert [f.line() for f in scan_live_db().high] == []                             # vòng đời đầy đủ vẫn không để lọt khóa vào CSDL (E-05)
     assert row(db, "SELECT COUNT(*) AS n FROM order_web3 WHERE anomaly_flag=1")['n'] == 0
     rec_after = st.reconcile.run()
     assert rec_after == rec_before                                                  # đối soát y hệt trước/sau replay

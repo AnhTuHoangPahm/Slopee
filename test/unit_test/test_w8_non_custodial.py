@@ -266,3 +266,30 @@ def test_anvil_node_banner_log_is_not_scanned_by_default_but_explicit_path_still
     assert scan.scan_logs([banner], tmp_path, scan.Report()).scanned['log files'] == 1     # chỉ định rõ: vẫn đọc
     (tmp_path / 'backend.log').write_text('signer key 0x' + 'ab' * 32 + '\n')
     assert scan.scan_logs(None, tmp_path, scan.Report()).scanned['log files'] == 1         # log khác vẫn được quét
+
+
+QUOTE = ('{"orderId": "100001", "buyer": "0x' + '12' * 20 + '", "amount": "8000000", "docHash": "0x' + 'ee' * 32 + '", "feeBps": 300}')
+
+
+def test_db_scan_accepts_doc_hash_inside_quote_json_column():
+    """Tuần 8 [B] (lỗi thật bắt được ở CI, E-05): `order_quotes.quote_json` chứa `docHash` bytes32 hợp lệ, không phải khóa."""
+    cols = GOOD_COLUMNS + [('order_quotes', 'quote_json', 'json')]
+    r = scan.scan_database(FakeConn(cols, {('order_quotes', 'quote_json'): [QUOTE]}), 'slopee_db')
+    assert r.high == [], [f.line() for f in r.findings]
+
+
+@pytest.mark.parametrize('doc', [
+    '{"note": "0x' + 'ab' * 32 + '"}',                           # 64 hex dưới trường không phải hash
+    '{"docHash": "0x' + 'ee' * 32 + '", "extra": "0x' + 'ab' * 32 + '"}',   # một hash hợp lệ không che được giá trị khác
+    '{"hash_note": "x", "other": ["0x' + 'ab' * 32 + '"]}',
+])
+def test_db_scan_still_flags_64_hex_under_non_hash_json_fields(doc):
+    cols = GOOD_COLUMNS + [('order_quotes', 'quote_json', 'json')]
+    r = scan.scan_database(FakeConn(cols, {('order_quotes', 'quote_json'): [doc]}), 'slopee_db')
+    assert 'HEX64_IN_NON_HASH_COLUMN' in rules(r)
+
+
+def test_db_scan_known_dev_key_is_flagged_even_under_a_hash_field():
+    cols = GOOD_COLUMNS + [('order_quotes', 'quote_json', 'json')]
+    doc = '{"docHash": "' + scan.ANVIL_KEYS[5] + '"}'
+    assert 'DEV_KEY_IN_DB' in rules(scan.scan_database(FakeConn(cols, {('order_quotes', 'quote_json'): [doc]}), 'slopee_db'))

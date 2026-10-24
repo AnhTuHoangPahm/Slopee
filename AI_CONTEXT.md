@@ -257,8 +257,9 @@ Migration: DB mới → `python init_db.py` (đã gồm mọi migration). **DB c
 ---
 
 - **E2E Web3 dùng chung một chuỗi và một CSDL (Tuần 8):** E-02/E-04/E-07 tua giờ Anvil tiến vĩnh viễn nên báo giá đang dở của test khác hết hạn; vì vậy project `web3-e2e` chạy `workers: 1`, `retries: 0`. Ví thử suy từ mnemonic công khai theo dải chỉ số mới mỗi lần chạy (một ví chỉ liên kết một tài khoản). Test luôn chờ Indexer/API báo trạng thái, không tin biên nhận ví (DD-04). `window.confirm` của "Đã nhận hàng" được `openActor` tự chấp nhận (chưa đổi sang hộp thoại React vì Feature Freeze). Khóa thử trong `frontend/tests/` được bộ quét E-05 cho phép; đừng thêm khóa hex ghi cứng, hãy dùng `testWallet()`.
-- **Test dùng DB chung phải dọn ở CUỐI test (Tuần 8):** `mysql_db` là một DB cho cả phiên và không tự dọn; file chạy sau (`test_web3_migrations` chèn id cố định 100011..13 và so `onchain_id_seq`; `test_w8_non_custodial_mysql` quét chuỗi 64 hex) đỏ nếu test trước để lại `order_web3`/`order_quotes` hoặc để bộ đếm tiến lên. Dọn các bảng Web3 và `ALTER TABLE onchain_id_seq AUTO_INCREMENT = 100001` khi kết thúc (mẫu: fixture `db` của `test_w8_i_gaps_mysql.py`).
+- **Test dùng DB chung phải dọn ở CUỐI test (Tuần 8):** `mysql_db` là một DB cho cả phiên và không tự dọn; file chạy sau (`test_web3_migrations` chèn id cố định 100011..13 và so `onchain_id_seq`) đỏ nếu test trước để lại `order_web3` hoặc để bộ đếm tiến lên. Dọn các bảng Web3 và `ALTER TABLE onchain_id_seq AUTO_INCREMENT = 100001` khi kết thúc (mẫu: fixture `db` của `test_w8_i_gaps_mysql.py`).
 - **`.anvil.log` sau `bootstrap.sh`:** banner Anvil in sẵn khóa công khai; `scan_no_user_keys.py` bỏ qua file này khi quét mặc định (Tuần 8). Đừng bỏ qua thêm tệp khác nếu chưa hiểu vì sao nó có khóa.
+- **Scanner `--db` xét tên trường JSON, không chỉ tên cột (Tuần 8):** `order_quotes.quote_json` chứa `docHash` 64 hex hợp lệ; 64 hex dưới trường kiểu hash được chấp nhận, dưới trường khác vẫn HIGH. Khi thêm cột JSON mới chứa bytes32, đặt tên trường có `hash`/`tx`/`sig`/`doc`... và thử bằng dữ liệu THẬT, không chỉ dữ liệu giả lập.
 
 ## 8. Quy trình làm việc mong đợi
 

@@ -452,6 +452,31 @@ def scan_logs(paths=None, root=ROOT, report=None):
 TEXT_TYPES = {'char', 'varchar', 'tinytext', 'text', 'mediumtext', 'longtext', 'json', 'blob', 'mediumblob', 'longblob', 'varbinary', 'binary'}
 
 
+def _hex64_under_hashish_json_keys(val):
+    """Giá trị 64 hex nằm dưới một TRƯỜNG JSON có tên kiểu hash (docHash, txHash...): vd `order_quotes.quote_json` chứa `docHash` (bytes32 hợp lệ).
+    Chỉ xét khi `val` là JSON hợp lệ; tên trường kiểu khóa (`private_key`...) vẫn bị `KEY_FIELD_IN_JSON` bắt riêng."""
+    if not val.lstrip().startswith(('{', '[')):
+        return set()
+    try:
+        doc = json.loads(val)
+    except ValueError:
+        return set()
+    ok = set()
+
+    def walk(node, key=''):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                walk(v, str(k))
+        elif isinstance(node, list):
+            for v in node:
+                walk(v, key)
+        elif isinstance(node, str) and HASHISH_COLUMN.search(key) and not column_is_bad(key):
+            for m in HEX64.finditer(node):
+                ok.add(norm_key(m.group(1)))
+    walk(doc)
+    return ok
+
+
 def scan_database(conn, schema, report=None, *, row_limit=100_000):
     """`conn`: kết nối DB-API (PyMySQL hoặc giả lập có cursor()). Quét tên cột + giá trị của mọi cột chữ trong `schema`."""
     report = report or Report()
@@ -473,11 +498,12 @@ def scan_database(conn, schema, report=None, *, row_limit=100_000):
             val = str(val)
             report.scanned['db values'] += 1
             where = f'{table}.{col}'
+            hash_fields = _hex64_under_hashish_json_keys(val)
             for m in HEX64.finditer(val):
                 key = norm_key(m.group(1))
                 if key in KEY_INDEX:
                     report.add('HIGH', 'DEV_KEY_IN_DB', where, 'khóa thử công khai nằm trong CSDL', mask(key))
-                elif not HASHISH_COLUMN.search(col):
+                elif not HASHISH_COLUMN.search(col) and key not in hash_fields:
                     report.add('HIGH', 'HEX64_IN_NON_HASH_COLUMN', where, 'chuỗi 64 hex ở cột không phải hash/chữ ký', mask(key))
             if PEM.search(val):
                 report.add('HIGH', 'PEM_PRIVATE_KEY', where, 'khối PEM khóa riêng trong CSDL')
