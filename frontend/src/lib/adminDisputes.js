@@ -1,5 +1,5 @@
 // Hàm thuần cho màn hình Admin quản lý tranh chấp (UC-06, BR-04). Không I/O; đồng hồ lấy từ server_time của lần poll gần nhất.
-import { secondsRemaining } from './web3Checkout';
+import { describeDuration, secondsRemaining } from './web3Checkout';
 
 export const REASON_NOTE_MAX = 2000;
 export const PAYOUT_SIDES = Object.freeze({
@@ -71,4 +71,38 @@ export function notReadyMessage(err) {
     const names = { ARBITRATOR: 'Trọng tài (sàn)', BUYER: 'Buyer', MERCHANT: 'Merchant' };
     const who = Array.isArray(signed) && signed.length ? signed.map((p) => names[p] ?? p).join(', ') : 'chưa ai';
     return `Chưa đủ chữ ký để thi hành. Đã có chữ ký của: ${who}. Cần thêm chữ ký của Buyer hoặc Merchant.`;
+}
+
+// ---- UC-07 Thoát hiểm timeout: Trọng tài xử đơn phương -------------------------------------------------------------------------------------------
+
+/** Còn bao nhiêu giây tới `force_resolve_at` theo đồng hồ máy chủ (<= 0: đã tới mốc). null nếu thiếu mốc hoặc chưa có đồng hồ. */
+export function forceResolveRemaining(dispute, clock, nowMs = Date.now()) {
+    if (dispute?.force_resolve_at == null || !clock || clock.serverTime == null) return null;
+    return secondsRemaining({ deadline: dispute.force_resolve_at, serverTime: clock.serverTime, receivedAtMs: clock.receivedAtMs, nowMs });
+}
+
+/** Chỉ bật nút khi ĐÃ quá hạn. Thiếu đồng hồ thì tắt (không đoán). Backend vẫn là nơi quyết định cuối cùng (409 FORCE_RESOLVE_TOO_EARLY). */
+export const canForceResolve = (remaining) => remaining !== null && remaining <= 0;
+
+/** Lý do là BẮT BUỘC ở giao diện (hành động duy nhất dựa hoàn toàn vào niềm tin ở sàn, cần truy vết); backend cho phép bỏ trống. */
+export function validateForceResolveForm({ payoutSide, reasonNote }) {
+    const errors = {};
+    if (!PAYOUT_SIDES[payoutSide]) errors.payoutSide = 'Hãy chọn hoàn tiền cho Buyer hoặc giải ngân cho Merchant.';
+    const note = (reasonNote ?? '').trim();
+    if (!note) errors.reasonNote = 'Hãy nhập lý do xử đơn phương (được lưu để truy vết).';
+    else if (note.length > REASON_NOTE_MAX) errors.reasonNote = `Lý do tối đa ${REASON_NOTE_MAX} ký tự.`;
+    return { ok: Object.keys(errors).length === 0, errors, value: { payoutSide, reasonNote: note } };
+}
+
+export function forceResolveMessage(result) {
+    if (result?.outcome === 'ALREADY_RESOLVED') return 'Đơn này đã được xử lý trên blockchain trước đó, không gửi thêm giao dịch.';
+    return 'Đã gửi phán quyết đơn phương lên blockchain. Hệ thống đang ghi nhận, đơn sẽ rời danh sách khi hoàn tất.';
+}
+
+/** Máy chủ từ chối vì chưa tới mốc (đồng hồ trình duyệt lệch): nói rõ còn bao lâu. */
+export function tooEarlyMessage(err) {
+    const left = Number(err?.extra?.seconds_remaining);
+    return Number.isFinite(left) && left > 0
+        ? `Chưa tới thời điểm xử đơn phương: còn ${describeDuration(left)} (theo đồng hồ máy chủ). Chưa có giao dịch nào được gửi.`
+        : 'Chưa tới thời điểm xử đơn phương. Chưa có giao dịch nào được gửi.';
 }
