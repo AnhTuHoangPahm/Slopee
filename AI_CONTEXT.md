@@ -105,6 +105,12 @@ python scripts/gen_eip712_vectors.py --check   # vectors.json còn khớp script
 
 # Frontend
 cd frontend && npm run dev | npx vitest run | npm run build | npm run lint | npm run test:e2e
+
+# E2E Web3 (Tuần 8): stack thật + Playwright với ví thử EIP-1193
+./scripts/e2e_stack.sh up                   # Anvil sạch + deploy, DB + migrate, gieo admin/shipper, backend + Indexer + Scheduler (log ở .e2e/)
+(cd frontend && npx playwright test --project=web3-e2e)   # E-01…E-07, một worker, tuần tự; E2E_REQUIRE_STACK=1 để thiếu stack là đỏ
+./scripts/e2e_stack.sh down
+python scripts/scan_no_user_keys.py [--db]  # E-05: quét khóa người dùng (mã thoát 0 = sạch)
 ```
 
 Biến môi trường: `SECRET_KEY` (bắt buộc trừ khi `SLOPEE_ENV` là `development`/`test`), `AUTH_TOKEN_TTL_SECONDS` (mặc định 3600), `DB_HOST/DB_USER/DB_PASSWORD/DB_NAME`, `AUTH_MAX_ATTEMPTS` (mặc định 5), `AUTH_LOCK_SECONDS` (mặc định 900). `debug` chỉ bật khi `SLOPEE_ENV=development`.
@@ -171,7 +177,9 @@ Migration: DB mới → `python init_db.py` (đã gồm mọi migration). **DB c
 | **Tuần 7 (phần C)**: nút "Hủy đơn & nhận lại tiền" khi đơn `LOCKED` quá 14 ngày chưa giao (`cancelIfUnfulfilled`) trong `Web3OrderPanel`; thêm `chain_created_at` vào `GET /api/orders/:code/status` và `web3` của `GET /api/payments/orders` | **Đã hoàn thành test cục bộ** (MySQL 8.0 thật, KHÔNG có Anvil: vitest pass, pytest pass, build xanh; 8 test Anvil skip chờ chuỗi thật). Chi tiết: `PROGRESS.md` ghi chú Tuần 7 phần C | C (+ B xem phần backend) |
 | **Tuần 7 (phần A)**: màn Merchant trong `SellerDashboard` (`components/MerchantWeb3Panel.jsx`): danh sách đơn Web3 của shop (`GET /api/merchant/orders`, mới), tổng quan tiền ký quỹ/đã nhận, liên kết sang `/disputes/:code` cho đơn `DISPUTED`, và rút khoản chờ rút `claimPending` | **Đã hoàn thành** (chạy cục bộ trên MySQL 8.0, KHÔNG có Anvil: 960 pytest pass + 24 skip, 561 vitest pass + 20 skip, `vite build` xanh; chi tiết ở `PROGRESS.md` ghi chú Tuần 7 phần A) | A |
 | **Tuần 7 (phần B)**: Trọng tài xử đơn phương sau `disputeTimeout` (`POST /api/admin/disputes/:code/force-resolve`, khóa Trọng tài ký, nhật ký `dispute_force_resolutions` migration `0023`), `scripts/reconcile.py` (chỉ đọc, mã thoát 0/1/2, `--deep/--events/--wait/--json/--strict`), E-04 phần chuỗi thật (`test_w7_timeouts_anvil.py`), sửa test flaky đồng hồ của C | Đã làm, test xanh trên MySQL + Anvil thật cục bộ; chưa có nút Admin trên giao diện (xem `PROGRESS.md` ghi chú B mục 9) | Tuần 7 |
-| Nút "Xử đơn phương" của Admin trên `AdminDisputes` (chưa ai nhận), UC-08/UC-09, E-04/E-06 Playwright | Chưa bắt đầu | Tuần 7–10 |
+| **Tuần 8 (phần A)**: `scripts/scan_no_user_keys.py` (E-05/AC-09, chỉ đọc, mã thoát 0/1/2; quét mã nguồn + lược đồ + log + `--db`), `docs/SECURITY_CHECKLIST_W8.md` (Reentrancy, Malleability, Role Separation, Front-running: 4/4 đạt, 5 ghi nhận mức Info), 7 test Foundry `SlopeeEscrowSecurityW8.t.sol`, 3 bước CI mới ở job `backend` | Script + 57 test Python xanh ở máy soạn; **`forge test`/`slither` chưa chạy được**, quét `--db` chờ CI; AC-09 chưa ký duyệt | A |
+| **Tuần 8 (phần C)**: Playwright E-01…E-07 với ví thử EIP-1193 (`frontend/tests/helpers/*`, `frontend/tests/e0N-*.spec.js`), `scripts/e2e_stack.sh`, job CI `e2e`, project `web3-e2e` | **Đã viết, CHƯA CHẠY lần nào** (máy soạn không có npm/MySQL/Anvil; chỉ kiểm cú pháp + quét khóa 0 HIGH). Chi tiết và giả định cần kiểm: `PROGRESS.md` ghi chú Tuần 8 phần C | C |
+| UC-08/UC-09, `INSTALL.md`/`DEMO_GUIDE.md`, `replay.sh`, M4/M5 | Chưa bắt đầu / chờ CI xanh | Tuần 8–10 |
 
 **Đã xử lý ở P0-03…06 (đã review 14/10/2026, PR #2; test MySQL thật vẫn chờ CI GitHub xác nhận):** chủ sở hữu cart item/đơn/sản phẩm/ảnh/biến thể (không phải chủ → 404); đơn Web3 bị từ chối bằng `409 WEB3_ORDER_MANAGED`; chuyển trạng thái đơn theo bảng hợp lệ; checkout khóa `FOR UPDATE` + `UPDATE` có điều kiện; khóa tạm 5 lần sai mật khẩu/PIN (`429`); route migrate đã bỏ; `debug` theo môi trường; lỗi chung, không còn `str(e)`; validate body.
 
@@ -244,6 +252,8 @@ Migration: DB mới → `python init_db.py` (đã gồm mọi migration). **DB c
     ```
 
 ---
+
+- **E2E Web3 dùng chung một chuỗi và một CSDL (Tuần 8):** E-02/E-04/E-07 tua giờ Anvil tiến vĩnh viễn nên báo giá đang dở của test khác hết hạn; vì vậy project `web3-e2e` chạy `workers: 1`, `retries: 0`. Ví thử suy từ mnemonic công khai theo dải chỉ số mới mỗi lần chạy (một ví chỉ liên kết một tài khoản). Test luôn chờ Indexer/API báo trạng thái, không tin biên nhận ví (DD-04). `window.confirm` của "Đã nhận hàng" được `openActor` tự chấp nhận (chưa đổi sang hộp thoại React vì Feature Freeze). Khóa thử trong `frontend/tests/` được bộ quét E-05 cho phép; đừng thêm khóa hex ghi cứng, hãy dùng `testWallet()`.
 
 ## 8. Quy trình làm việc mong đợi
 

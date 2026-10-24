@@ -133,6 +133,17 @@ npm run test:e2e:ui
 _See the magic yourself_  
 > That's it for now
 
+### Web3 end-to-end tests (week 8, E-01..E-07)
+
+```bash
+./scripts/e2e_stack.sh up                              # clean Anvil + contracts, DB + migrations, admin/shipper seed, backend + Indexer + Scheduler (logs in .e2e/)
+(cd frontend && npx playwright install firefox && npx playwright test --project=web3-e2e)
+./scripts/e2e_stack.sh down
+```
+
+* Playwright injects a test-only EIP-1193 wallet (`frontend/tests/helpers/walletMock.js`) that signs for real with Anvil test keys; MetaMask is still what the manual demo uses. Tests run sequentially in one worker because several scenarios advance Anvil's clock permanently.
+* Without the stack the specs skip with a message; `E2E_REQUIRE_STACK=1` (CI) turns that into a failure. Scenarios: E-01 happy path, E-02 inspection expiry, E-03 dispute (refund + merchant payout), E-04 delivery/dispute timeouts, E-05 zero-key scan, E-06 reconciliation, E-07 three-shop cart.
+
 ### Running the Web3 escrow stack (weeks 4-6)
 
 Each long-running process is its own command, run from `backend/` after `./scripts/bootstrap.sh` has produced `backend/.env.web3`:

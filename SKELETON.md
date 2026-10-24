@@ -207,7 +207,11 @@ Route guard ✅ `components/RequireRole.jsx` bọc `/admin` (admin), `/seller` (
 | `__tests__/Home.test.jsx`, `Navbar.test.jsx` | test trang Home và Navbar |
 | `__tests__/formatVND.test.js` | test định dạng tiền |
 | `__tests__/tetrisLogic.test.js` | test logic Tetris |
-| `frontend/tests/*.spec.js` | Playwright: luồng đăng ký/đăng nhập và Tetris |
+| `frontend/tests/auth-flow.spec.js`, `tetris-flow.spec.js` | Playwright (project `firefox`): đăng ký/đăng nhập và Tetris |
+| `frontend/tests/e01-happy-path.spec.js` … `e07-multi-shop.spec.js` ✅ viết, chưa chạy (tuần 8, C) | Playwright (project `web3-e2e`, một worker): E-01 happy path, E-02 hết hạn kiểm tra, E-03 tranh chấp (hoàn tiền + giải ngân), E-04 timeouts, E-05 zero-key, E-06 đối soát, E-07 giỏ 3 shop |
+| `frontend/tests/helpers/walletMock.js` | ví thử EIP-1193 tiêm bằng `addInitScript`: ký thật (`personal_sign`, `eth_signTypedData_v4`, `eth_sendTransaction`), chuyển tiếp RPC tới Anvil; `rejectNext`, `setChain`, `switchAccount`, `count` |
+| `frontend/tests/helpers/anvil.js` | RPC Anvil, `testWallet()` (suy từ mnemonic công khai), `fundWallet`, `timeTravel`, đọc `orders(id)` và số dư |
+| `frontend/tests/helpers/api.js`, `flows.js`, `ui.js`, `stack.js`, `scripts.js` | fixture REST (người dùng/shop/ví/giao hàng/đề xuất), kịch bản con (ký quỹ, khiếu nại, ký phán quyết), bước giao diện, kiểm đủ stack (skip hoặc đỏ theo `E2E_REQUIRE_STACK`), chạy `reconcile.py`/`scan_no_user_keys.py` |
 
 ---
 
@@ -308,6 +312,7 @@ Nguồn: SRS mục 4–7, 9–10; SDD mục 3–8, 10. Đặt dưới `backend/s
 | `scripts/install_contract_deps.sh` ✅ | cài forge-std v1.9.4 + OpenZeppelin v5.0.2 đúng tag |
 | `scripts/gen_eip712_vectors.py` ✅ | sinh `shared/eip712/vectors.json` (`orderQuote`, `disputeResolution`, `docHash`, `walletLink`; `--check` để CI so khớp) |
 | `scripts/scan_no_user_keys.py` ✅ (tuần 8, A) | quét Non-custodial E-05/AC-09, chỉ đọc: mã nguồn + lược đồ + log (+ `--db`); khóa thử Anvil suy ra từ mnemonic công khai; `--json`, `--report`, `--self-check`; mã thoát 0 sạch / 1 có HIGH / 2 không chạy được; test `unit_test/test_w8_non_custodial.py`, `integration_test/test_w8_non_custodial_mysql.py` |
+| `scripts/e2e_stack.sh` ✅ (tuần 8, C) | `up`/`seed`/`down`: Anvil sạch + deploy, `init_db` + `migrate`, gieo admin/shipper, chạy backend + Indexer + Scheduler (`AUTO_RELEASE_SECONDS=5`), log/pid ở `.e2e/` |
 | `scripts/reconcile.py` ✅ (tuần 7) | đối soát chỉ đọc cho cron/CI: `--deep`, `--events`, `--wait GIÂY`, `--json`, `--strict`; mã thoát 0 khớp / 1 lệch / 2 không chạy được; không nạp khóa riêng |
 | `scripts/replay.sh` 🔲 | replay từ block 0 (`--reset`) |
 | `application/jobs.py` ✅ + `python -m slopee_web3.adapters.scheduler [--once]` ✅ | `QuoteExpirySweeper` (60 giây, đệm 30 giây, kiểm `NONE` trên chuỗi), `AutoRelease` (60 giây), `DeliveryTimeoutReminder` (1 giờ), `DisputeSigExpiry` (5 phút), `ReconcileSnapshot` (10 phút, chỉ ghi log). Một thể hiện nhờ `GET_LOCK`; lỗi một job không dừng job khác; chu kỳ qua `QUOTE_SWEEP_SECONDS`, `AUTO_RELEASE_SECONDS`, `TIMEOUT_REMINDER_SECONDS`, `DISPUTE_SIG_EXPIRY_SECONDS`, `RECONCILE_SECONDS`, `QUOTE_EXPIRY_GRACE_SECONDS`, `RELAYER_LOCK_SECONDS` |

@@ -239,7 +239,7 @@ Khóa vận hành chỉ đọc một lần lúc khởi động vào `EnvKeySigne
 | Route (mock con trỏ DB) | pytest + `client` + `fake_db` (`FakeCursor`) | `FakeCursor` trả dữ liệu theo nội dung SQL, kiểm được SQL/tham số đã chạy; `AttemptsStore` giả lập `authAttempts`; fixture `auth_headers`, `seller_headers`; chỉ cho logic/luồng, **không** chứng minh khóa dòng |
 | Route/tiền/tồn kho/phân quyền | pytest + **MySQL thật** | fixture `mysql_db` (DB `slopee_test_<pid>` từ `schema.sql`), `db_conn`; tự skip nếu không kết nối được |
 | Frontend | Vitest + Testing Library | mock `fetch` trong `src/__tests__/setup.js` |
-| E2E | Playwright (Firefox) | 🔲 ví EIP-1193 giả bằng khóa Anvil, nạp qua `addInitScript` |
+| E2E | Playwright (Firefox) | ✅ viết, chưa chạy (tuần 8): ví EIP-1193 giả ký bằng khóa Anvil suy từ mnemonic công khai, nạp qua `addInitScript`; project `web3-e2e` + job CI `e2e` |
 | Contract ✅ (tuần 1–2) | Foundry | `forge test` (139 test: unit, ma trận âm T-19, reentrancy, nạp gom, fuzz, invariant INV-01…07 với handler gọi cả nạp đơn lẻ và nạp gom); `forge coverage --ir-minimum` 100% dòng `src/`; Slither không còn High/Medium |
 | Chéo ngôn ngữ ✅ | `shared/eip712/vectors.json` | Python (`test_eip712_vectors.py`), JS (`eip712Vectors.test.js`), Solidity (`Eip712Vectors.t.sol`) cùng ra một digest; `smoke_week1.sh` chạy thật trên Anvil |
 

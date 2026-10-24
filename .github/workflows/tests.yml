@@ -65,6 +65,53 @@ jobs:
       - run: ./scripts/bootstrap.sh --fresh --force-env   # chạy Anvil nền, deploy contract, sinh backend/.env.web3
       - run: python -m pytest test/integration_test/test_w3_chain_anvil.py -v
 
+  # Tuần 8 (C): E2E E-01…E-07 bằng Playwright + ví thử EIP-1193 trên stack thật (Anvil, MySQL, backend, Indexer, Scheduler).
+  # E2E_REQUIRE_STACK=1: thiếu stack là ĐỎ, không skip. Chạy tuần tự (một worker) vì các kịch bản tua giờ Anvil tiến vĩnh viễn.
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root_pw
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot_pw"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      SLOPEE_ENV: test
+      SECRET_KEY: ci-secret-key
+      DB_HOST: 127.0.0.1
+      DB_USER: root
+      DB_PASSWORD: root_pw
+      DB_NAME: slopee_e2e
+      E2E_REQUIRE_STACK: '1'
+      E2E_BACKEND_LOG: ${{ github.workspace }}/.e2e/backend.log
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: { version: stable }
+      - run: pip install -r backend/requirements.txt
+      - run: ./scripts/install_contract_deps.sh
+      - run: ./scripts/e2e_stack.sh up
+      - working-directory: frontend
+        run: npm ci && npx playwright install --with-deps firefox
+      - working-directory: frontend
+        run: npx playwright test --project=web3-e2e
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+            .e2e/*.log
+          if-no-files-found: ignore
+
   frontend:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: frontend } }
