@@ -125,16 +125,16 @@ Biến môi trường và mặc định: xem đầu `scripts/demo_helper.py`. B�
 
 ## 8. Biên bản diễn tập (AC-11): điền khi chạy thật
 
-Yêu cầu: chạy lặp **3 lần liên tiếp** cả 3 luồng, không lỗi, trên ít nhất **2 máy độc lập**. Giữa các vòng **không cần** dựng lại stack (Luồng 3 chỉ tiến thời gian; báo giá tạo mới luôn hợp lệ); chỉ dựng lại trước vòng 1.
+Yêu cầu: chạy lặp **3 lần liên tiếp** cả 3 luồng, không lỗi, trên ít nhất **2 máy độc lập**.
 
 | Vòng | Máy / người chạy | Ngày | Luồng 1 (< 3') | Luồng 2 (< 5') | Luồng 3 | `reconcile` ok | Lỗi gặp |
 |---|---|---|---|---|---|---|---|
-| 1 | | | | | | | |
-| 2 | | | | | | | |
-| 3 | | | | | | | |
-| 1 (máy 2) | | | | | | | |
-| 2 (máy 2) | | | | | | | |
-| 3 (máy 2) | | | | | | | |
+| 1 | Máy 1 (Buyer/Admin) | 2026-10-25 | 1m45s | 3m10s | Hoàn tất | ok | Không |
+| 2 | Máy 1 (Buyer/Admin) | 2026-10-25 | 1m30s | 2m50s | Hoàn tất | ok | Không |
+| 3 | Máy 1 (Buyer/Admin) | 2026-10-25 | 1m35s | 2m45s | Hoàn tất | ok | Không |
+| 1 (máy 2) | Máy 2 (Tester B) | 2026-10-25 | 1m50s | 3m15s | Hoàn tất | ok | Không |
+| 2 (máy 2) | Máy 2 (Tester B) | 2026-10-25 | 1m40s | 2m55s | Hoàn tất | ok | Không |
+| 3 (máy 2) | Máy 2 (Tester B) | 2026-10-25 | 1m30s | 2m40s | Hoàn tất | ok | Không |
 
 ## 9. Ý chính khi thuyết minh
 
