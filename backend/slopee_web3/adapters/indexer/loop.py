@@ -72,8 +72,17 @@ class Indexer:
             return int(row['last_block']), row['last_block_hash']
         return self._start, ''
 
-    def run_once(self, conn):
-        """Xử lý hết các block mới tới `latest - confirmations`. Trả thống kê {'windows', 'events', 'new_events', 'last_block'}."""
+    def cursor_position(self, conn):
+        """(last_block, hash) của con trỏ, hoặc None nếu Indexer chưa chạy lần nào / vừa bị reset."""
+        with conn.cursor() as cur:
+            cur.execute("SELECT last_block, last_block_hash FROM indexer_cursor WHERE name=%s", (CURSOR_NAME,))
+            row = cur.fetchone()
+        conn.commit()
+        return (int(row['last_block']), row['last_block_hash']) if row else None
+
+    def run_once(self, conn, upto=None):
+        """Xử lý hết các block mới tới `latest - confirmations` (và không quá `upto` nếu có: replay dùng để dừng đúng tại block đã
+        chụp ảnh trước khi reset). Trả thống kê {'windows', 'events', 'new_events', 'last_block'}."""
         stats = {'windows': 0, 'events': 0, 'new_events': 0, 'last_block': None}
         with conn.cursor() as cur:
             last_block, last_hash = self._load_cursor(cur)
@@ -89,6 +98,8 @@ class Indexer:
                 last_block = self._rewind(conn, last_block)
 
         to_block = latest['number'] - self._confirmations
+        if upto is not None:
+            to_block = min(to_block, int(upto))
         start = last_block + 1
         stats['last_block'] = last_block
         while start <= to_block:

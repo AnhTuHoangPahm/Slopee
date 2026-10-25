@@ -70,6 +70,7 @@ contracts/              Foundry (solc 0.8.20, OpenZeppelin 5.0.2): src/{MockUSD,
                         lib/ cài bằng scripts/install_contract_deps.sh (bị .gitignore)
 shared/eip712/          types.json (kiểu EIP-712 DUY NHẤT, đã khóa) + vectors.json (sinh bằng scripts/gen_eip712_vectors.py)
 scripts/                bootstrap.sh (dựng Anvil + deploy một lệnh), smoke_week1.sh, install_contract_deps.sh, gen_eip712_vectors.py, export_abi.sh (xuất/kiểm ABI)
+INSTALL.md, DEMO_GUIDE.md   (tuần 9) cài đặt từ con số 0 và kịch bản 3 luồng demo; `scripts/demo_helper.py` là trợ thủ của chúng
 deployments/local.json  do bootstrap.sh sinh (bị .gitignore); frontend đọc bản chép ở frontend/public/deployments/
 test/                   pytest (conftest.py: FakeCursor/fake_db/AttemptsStore, unit_test/, integration_test/)
 .github/workflows/tests.yml   CI: pytest + MySQL service, vitest, build
@@ -110,6 +111,11 @@ cd frontend && npm run dev | npx vitest run | npm run build | npm run lint | npm
 ./scripts/e2e_stack.sh up                   # Anvil sạch + deploy, DB + migrate, gieo admin/shipper, backend + Indexer + Scheduler (log ở .e2e/)
 (cd frontend && npx playwright test --project=web3-e2e)   # E-01…E-07, một worker, tuần tự; E2E_REQUIRE_STACK=1 để thiếu stack là đỏ
 ./scripts/e2e_stack.sh down
+./scripts/replay.sh [--yes] [--dry-run] [--from-block N] [--report FILE]   # (Tuần 9, B) replay Indexer từ block N + so ảnh trước/sau + đối soát; tắt Indexer/Scheduler trước
+RESET_DB=1 ./scripts/e2e_stack.sh up        # (Tuần 9) như `up` nhưng xóa CSDL slopee* trước: bắt buộc khi dựng lại chuỗi mà CSDL còn đơn cũ
+
+# Demo (Tuần 9, C): hướng dẫn ở INSTALL.md + DEMO_GUIDE.md
+python3 scripts/demo_helper.py check|prepare|fund|ship|warp|status|reconcile   # trợ thủ demo (gán Shipper, cấp mUSD, tua giờ…)
 python scripts/scan_no_user_keys.py [--db]  # E-05: quét khóa người dùng (mã thoát 0 = sạch)
 ```
 
@@ -179,8 +185,10 @@ Migration: DB mới → `python init_db.py` (đã gồm mọi migration). **DB c
 | **Tuần 7 (phần B)**: Trọng tài xử đơn phương sau `disputeTimeout` (`POST /api/admin/disputes/:code/force-resolve`, khóa Trọng tài ký, nhật ký `dispute_force_resolutions` migration `0023`), `scripts/reconcile.py` (chỉ đọc, mã thoát 0/1/2, `--deep/--events/--wait/--json/--strict`), E-04 phần chuỗi thật (`test_w7_timeouts_anvil.py`), sửa test flaky đồng hồ của C | Đã làm, test xanh trên MySQL + Anvil thật cục bộ; chưa có nút Admin trên giao diện (xem `PROGRESS.md` ghi chú B mục 9) | Tuần 7 |
 | **Tuần 8 (phần A)**: `scripts/scan_no_user_keys.py` (E-05/AC-09, chỉ đọc, mã thoát 0/1/2; quét mã nguồn + lược đồ + log + `--db`), `docs/SECURITY_CHECKLIST_W8.md` (Reentrancy, Malleability, Role Separation, Front-running: 4/4 đạt, 5 ghi nhận mức Info), 7 test Foundry `SlopeeEscrowSecurityW8.t.sol`, 3 bước CI mới ở job `backend` | Script + 57 test Python xanh ở máy soạn; **`forge test`/`slither` chưa chạy được**, quét `--db` chờ CI; AC-09 chưa ký duyệt | A |
 | **Tuần 8 (phần C)**: Playwright E-01…E-07 với ví thử EIP-1193 (`frontend/tests/helpers/*`, `frontend/tests/e0N-*.spec.js`), `scripts/e2e_stack.sh`, job CI `e2e`, project `web3-e2e` | **Đã viết, CHƯA CHẠY lần nào** (máy soạn không có npm/MySQL/Anvil; chỉ kiểm cú pháp + quét khóa 0 HIGH). Chi tiết và giả định cần kiểm: `PROGRESS.md` ghi chú Tuần 8 phần C | C |
+| **Tuần 9 (phần C)**: `INSTALL.md`, `DEMO_GUIDE.md`, `scripts/demo_helper.py` (+40 test), `RESET_DB=1` cho `e2e_stack.sh`; sửa lỗi `DB_USER` mặc định `slopee` ở `routes/auth.py` (+3 test). Stack và helper đã chạy thật; **Playwright, MetaMask và diễn tập demo chưa chạy** (AC-11 chưa đạt) | `PROGRESS.md` "Ghi chú Tuần 9 — phần Thành viên C" |
+| **Tuần 9 (phần B)**: replay Indexer từ block N (AC-08): `adapters/indexer/replay.py`, CLI `python -m slopee_web3.adapters.indexer --from-block N --reset [--yes] [--dry-run] [--no-verify] [--report] [--json]`, `scripts/replay.sh`, `Indexer.run_once(conn, upto=)`/`cursor_position`, tách `handlers.reset_order_to_pending`; 55 test mới (16 MySQL, 1 Anvil, 38 đơn vị) | **`pytest test` 1270 pass, 33 skip** cục bộ; file Anvil pass trên Anvil thật; `replay.sh` đã chạy thật trên Anvil + CSDL mới. **Chưa**: stack có đơn từ giao diện, CI, `forge test`. Chi tiết: `PROGRESS.md` "Ghi chú Tuần 9 — phần Thành viên B" | B |
 | **Tuần 8 (phần B)**: chạy toàn bộ pytest trên MySQL + Anvil thật; thêm `unit_test/test_w8_api_sweep.py` (quét 401/403 mọi route của app thật + khóa danh sách route sau freeze) và `integration_test/test_w8_i_gaps_mysql.py` (I-07 3/5 shop, I-04 đổi chính sách, replay từ block 0 khớp 100%); sửa scanner của A bỏ qua `.anvil.log` | **1198 pass, 1 skip** cục bộ; forge 139/139; chờ CI; Playwright (C) và vitest chưa chạy được. Chi tiết: `PROGRESS.md` ghi chú Tuần 8 phần B | B |
-| UC-08/UC-09, `INSTALL.md`/`DEMO_GUIDE.md`, `replay.sh`, M4/M5 | Chưa bắt đầu / chờ CI xanh | Tuần 8–10 |
+| UC-08/UC-09, M4/M5; diễn tập demo 3 lần (AC-11); `INSTALL.md`/`DEMO_GUIDE.md` đã viết (Tuần 9) nhưng giao diện/MetaMask chưa diễn tập | Chưa bắt đầu / chờ CI xanh | Tuần 9–10 |
 
 **Đã xử lý ở P0-03…06 (đã review 14/10/2026, PR #2; test MySQL thật vẫn chờ CI GitHub xác nhận):** chủ sở hữu cart item/đơn/sản phẩm/ảnh/biến thể (không phải chủ → 404); đơn Web3 bị từ chối bằng `409 WEB3_ORDER_MANAGED`; chuyển trạng thái đơn theo bảng hợp lệ; checkout khóa `FOR UPDATE` + `UPDATE` có điều kiện; khóa tạm 5 lần sai mật khẩu/PIN (`429`); route migrate đã bỏ; `debug` theo môi trường; lỗi chung, không còn `str(e)`; validate body.
 
@@ -213,7 +221,7 @@ Migration: DB mới → `python init_db.py` (đã gồm mọi migration). **DB c
 | `POST /api/admin/disputes/:code/force-resolve` | SDD 10.2 không có API cho `arbitratorForceResolve` | endpoint Admin: chọn bên nhận tiền (`BUYER`/`MERCHANT`/ví), relayer ký bằng `ARBITRATOR_KEY`, chỉ sau `disputedAt + disputeTimeout` | **Đề xuất của B (Tuần 7), chờ nhóm xác nhận.** Idempotent, kiểm mốc thời gian trước khi gửi, trạng thái do Indexer ghi (BR-09) |
 | Bảng `dispute_force_resolutions` | SDD không có | nhật ký truy vết Admin xử đơn phương (không FK như `tx_outbox`) | **Đề xuất của B (Tuần 7), chờ nhóm xác nhận** (migration `0023`; bỏ được mà API vẫn chạy) |
 | Indexer đánh dấu bất thường (`anomaly_flag`) | SRS 12.2 (I-04): "cảnh báo khi giá trị on-chain lệch bảng chính sách" | so sự kiện với báo giá ĐÃ LƯU trong `order_web3` | **Ghi nhận Tuần 8 (B), chờ nhóm xác nhận.** Hợp lý hơn: chính sách đổi hợp lệ sau khi đặt đơn nên so với bảng chính sách sẽ báo giả; có test `test_i04_policy_change...` |
-| `--from-block 0 --reset` của Indexer, `scripts/replay.sh` | SDD 6.3, AC-08 | **chưa cài** (CLI chỉ có `--once`) | Kế hoạch Tuần 9 (B). Nền tảng đã chứng minh bằng test replay tương đương (`rollback_orders_from_block(cur, 0)` + xóa `indexer_cursor`) |
+| `--from-block 0 --reset` của Indexer, `scripts/replay.sh` | SDD 6.3, AC-08 | **đã cài (Tuần 9, B)** | `adapters/indexer/replay.py`: reset dữ liệu dẫn xuất từ block N, dựng lại bằng handler, so ảnh trước/sau (dừng đúng block đã chụp). Mã thoát 0/1/2. Giữ `GET_LOCK` nên phải tắt Indexer; tắt cả Scheduler; đừng chạy giữa lúc có người mua (giỏ hàng, xem `PROGRESS.md` Tuần 9 B mục 5). Chuỗi bị thay (Anvil dựng lại): `bootstrap.sh --fresh` trước, rồi `replay.sh` (tự bỏ bước so sánh) |
 
 ---
 

@@ -228,3 +228,4 @@ backend/.env.web3
 .e2e/
 frontend/playwright-report/
 frontend/test-results/
+.replay/

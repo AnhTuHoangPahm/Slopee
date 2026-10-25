@@ -2,6 +2,7 @@
 # Dựng / dọn stack cho E2E Web3 của Playwright (Tuần 8, C). Cần: Foundry, Python 3.12 (đã pip install backend/requirements.txt), MySQL đang chạy.
 #   ./scripts/e2e_stack.sh up      Anvil sạch + deploy, DB + migration, gieo admin/shipper, chạy backend + Indexer + Scheduler
 #   ./scripts/e2e_stack.sh seed    chỉ gieo tài khoản admin/shipper (idempotent)
+#   RESET_DB=1 ./scripts/e2e_stack.sh up   như `up` nhưng XÓA CSDL $DB_NAME trước (chỉ nhận tên bắt đầu bằng "slopee"): cần khi chuỗi bị dựng lại mà CSDL còn đơn/con trỏ Indexer cũ
 #   ./scripts/e2e_stack.sh down    tắt backend/Indexer/Scheduler (Anvil: ./scripts/bootstrap.sh --fresh hoặc kill theo .anvil.pid)
 # Rồi:  cd frontend && npx playwright test --project=web3-e2e      (Playwright tự bật Vite dev server)
 # Biến: DB_HOST/DB_USER/DB_PASSWORD/DB_NAME, E2E_ADMIN_USER/E2E_ADMIN_PASSWORD, E2E_SHIPPER_USER/E2E_SHIPPER_PASSWORD, AUTO_RELEASE_SECONDS (mặc định 5).
@@ -31,9 +32,22 @@ wait_http() { # wait_http <url> <giây>
   echo "Hết giờ chờ $1 (xem $RUN/*.log)" >&2; return 1
 }
 
+reset_db() { # xóa CSDL cũ để khớp với chuỗi Anvil vừa dựng lại (Indexer/đơn cũ trỏ vào block không còn tồn tại)
+  case "$DB_NAME" in slopee*) ;; *) echo "RESET_DB chỉ xóa CSDL có tên bắt đầu bằng 'slopee' (đang là '$DB_NAME')" >&2; exit 2 ;; esac
+  log "Xóa CSDL $DB_NAME"
+  ( cd "$ROOT/backend" && python3 - <<'PY'
+import os, pymysql
+c = pymysql.connect(host=os.environ.get('DB_HOST', 'localhost'), user=os.environ.get('DB_USER', 'root'), password=os.environ.get('DB_PASSWORD', ''))
+c.cursor().execute('DROP DATABASE IF EXISTS `%s`' % os.environ['DB_NAME'])
+c.close()
+PY
+  )
+}
+
 case "${1:-}" in
   up)
     log "Anvil sạch + deploy contract"; "$ROOT/scripts/bootstrap.sh" --fresh --force-env
+    if [ "${RESET_DB:-0}" = 1 ]; then reset_db; fi
     log "CSDL + migration"; ( cd "$ROOT/backend" && python3 init_db.py && python3 migrate.py up )
     seed
     log "backend :5000, Indexer, Scheduler"
