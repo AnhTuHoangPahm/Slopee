@@ -3,7 +3,14 @@
 // ABI sẽ được thêm vào đây sau khi đóng băng giao diện hàm (M1, cuối tuần 2).
 export const ANVIL_CHAIN_ID = 31337; // chỉ chạy trên Anvil (BRD): không mainnet, không tiền thật
 export const DEPLOYMENT_URL = `${import.meta.env?.BASE_URL ?? '/'}deployments/local.json`;
-export const DEFAULT_RPC_URL = import.meta.env?.VITE_RPC_URL || 'http://127.0.0.1:8545';
+// RPC cho `wallet_addEthereumChain`: VITE_RPC_URL > tự suy ra từ địa chỉ trang.
+//  - http(s)://localhost|127.0.0.1: Anvil trực tiếp (MetaMask cho phép http với loopback).
+//  - IP LAN/VPN: `${origin}/rpc` — proxy lọc của Vite tới Anvil (Anvil vẫn chỉ nghe 127.0.0.1). MetaMask yêu cầu RPC
+//    là HTTPS ngoài loopback, nên máy khác phải mở trang bằng https:// (xem scripts/dev_cert.sh).
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+export const guessRpcUrl = (loc = globalThis.location) =>
+    !loc || !loc.hostname || LOOPBACK_HOSTS.has(loc.hostname) ? 'http://127.0.0.1:8545' : `${loc.origin}/rpc`;
+export const DEFAULT_RPC_URL = import.meta.env?.VITE_RPC_URL || guessRpcUrl();
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 

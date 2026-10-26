@@ -115,7 +115,7 @@ SKIP_DIRS = {'.git', 'node_modules', 'out', 'cache', 'dist', 'build', '__pycache
 SKIP_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.svg', '.mp3', '.wav', '.ogg', '.pdf', '.zip', '.gz', '.woff',
             '.woff2', '.ttf', '.pyc', '.lock', '.map'}
 MAX_BYTES = 2_000_000
-SKIP_PREFIXES = ('contracts/lib/',)              # thư viện bên thứ ba do install_contract_deps.sh cài (KHÔNG bỏ frontend/src/lib: đó là mã của nhóm)
+SKIP_PREFIXES = ('contracts/lib/', 'frontend/certs/')             # thư viện bên thứ ba do install_contract_deps.sh cài (KHÔNG bỏ frontend/src/lib: đó là mã của nhóm)
 
 # Khóa thử (#5+) chỉ được nằm ở các đường dẫn thử/dev. Khóa vận hành (#0..#4) được thêm chỗ sinh môi trường dev.
 TEST_PATHS = ('test/', 'frontend/src/__tests__/', 'frontend/tests/', 'contracts/test/', 'scripts/')

@@ -49,8 +49,11 @@ app.register_blueprint(reviews_bp, url_prefix='/api/reviews')
 from slopee_web3.adapters.flask_api import register_web3
 register_web3(app, eager=not os.environ.get('SLOPEE_SKIP_WEB3_BOOT'))
 
-# Enable CORS for the React frontend port (Vite running on localhost:5173)
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173"}})
+# CORS cho frontend Vite. Truy cập từ LAN/VPN đi qua proxy /api của Vite (cùng origin) nên KHÔNG cần mở rộng CORS.
+# Chỉ khi gọi API trực tiếp từ origin khác mới đặt CORS_ORIGINS="https://host:5173,http://100.x.x.x:5173" (phân tách bằng dấu phẩy).
+_DEFAULT_CORS = ['http://localhost:5173', 'http://127.0.0.1:5173', 'https://localhost:5173', 'https://127.0.0.1:5173']
+_cors_origins = [o.strip() for o in os.environ.get('CORS_ORIGINS', '').split(',') if o.strip()] or _DEFAULT_CORS
+CORS(app, resources={r"/api/*": {"origins": _cors_origins}})
 
 @app.cli.command('seed-admin')
 @click.option('--username', prompt=True, help='Tên đăng nhập admin (> 3 ký tự).')
@@ -103,4 +106,11 @@ def health_check():
 
 if __name__ == '__main__':
     # P0-06: debug chỉ bật khi SLOPEE_ENV=development (xem config.is_development); mặc định tắt
-    app.run(debug=app.config['DEBUG'], port=5000)
+    # FLASK_HOST=0.0.0.0 để thiết bị khác trong LAN/VPN truy cập được. Mặc định chỉ loopback.
+    host = os.environ.get('FLASK_HOST', '127.0.0.1')
+    debug = app.config['DEBUG']
+    if debug and host not in ('127.0.0.1', 'localhost'):
+        # Trình debug Werkzeug cho phép chạy code từ xa -> không để lộ ra mạng ngoài loopback.
+        logging.getLogger(__name__).warning('FLASK_HOST=%s: tắt debug để tránh lộ Werkzeug debugger ra mạng.', host)
+        debug = False
+    app.run(debug=debug, host=host, port=5000)

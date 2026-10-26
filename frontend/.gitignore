@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Chứng chỉ HTTPS dev (scripts/dev_cert.sh) — chứa khóa riêng, không commit
+certs/

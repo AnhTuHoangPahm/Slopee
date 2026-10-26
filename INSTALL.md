@@ -152,3 +152,31 @@ kill $(cat .anvil.pid)                         # tắt Anvil
 | `WEB3_NOT_CONFIGURED` (503) | Thiếu `backend/.env.web3` | Chạy `./scripts/bootstrap.sh --force-env` |
 | Đơn mãi `PENDING_PAYMENT` | Indexer không chạy | `.e2e/indexer.log`; chỉ chạy **một** Indexer |
 | `replay.sh`: "Đang có Indexer/Scheduler chạy" | Replay giữ khóa Indexer và không được có giao dịch mới giữa chừng | `./scripts/e2e_stack.sh down` rồi chạy lại (`--allow-scheduler` nếu chắc chắn) |
+
+## Truy cập từ máy khác trong LAN/VPN (Tailscale, Hamachi, Radmin...) + MetaMask
+
+Chỉ chạy đúng 2 lệnh như thường lệ (máy chủ vẫn mở `localhost:5173`):
+
+```bash
+RESET_DB=1 ./scripts/e2e_stack.sh up
+(cd frontend && npm run dev -- --port 5173 --strictPort)     # terminal khác
+```
+
+**Mô hình mạng:** chỉ cổng **5173** (Vite) nghe mọi interface. Backend `:5000`, Anvil `:8545`, MySQL `:3306` chỉ nghe `127.0.0.1`.
+Máy khác đi qua proxy cùng origin của Vite: `/api` → Flask, `/rpc` → Anvil (chỉ cho phương thức đọc + `eth_sendRawTransaction`;
+chặn `eth_sendTransaction`, `eth_accounts`, `anvil_*`, `evm_*`... vì Anvil mở khóa sẵn tài khoản công khai). Không cần CORS.
+
+**Vào web (không ví):** mở firewall inbound TCP 5173 (tick cả profile Public cho adapter VPN), rồi `http://<IP-VPN>:5173`.
+
+**Dùng MetaMask từ máy khác (cần HTTPS):** trình duyệt chỉ bật `window.ethereum` ở secure context và MetaMask chỉ nhận RPC
+https ngoài loopback. Chạy **một lần** `./scripts/dev_cert.sh [IP-VPN ...]`, sau đó cùng lệnh `npm run dev` tự chạy HTTPS khi thấy `frontend/certs/`
+(xóa bằng `./scripts/dev_cert.sh --remove`).
+- Tailscale (khuyến nghị): chứng chỉ thật, vào `https://<máy>.<tailnet>.ts.net:5173`, mọi thiết bị tin cậy sẵn.
+- mkcert: thiết bị khác phải cài `rootCA.pem`. openssl tự ký: trình duyệt cảnh báo, MetaMask extension thường từ chối RPC tự ký.
+- Nút "đổi sang mạng Anvil" tự dùng RPC `https://<host>:5173/rpc` khi không mở bằng localhost (ghi đè bằng `VITE_RPC_URL`).
+
+**Đóng cổng DB:** `e2e_stack.sh up` kiểm tra `bind_address`/`mysqlx_bind_address` của MySQL và cảnh báo nếu nghe ngoài loopback
+(mặc định MySQL 8 nghe `*`). Sửa `my.ini`/`my.cnf` mục `[mysqld]`: `bind-address=127.0.0.1` + `mysqlx-bind-address=127.0.0.1`, khởi động lại MySQL;
+đặt `REQUIRE_DB_LOOPBACK=1` để script dừng thay vì chỉ cảnh báo. Không mở firewall cho 3306/33060/5000/8545.
+
+Playwright vẫn chạy http://localhost:5173 (ép `VITE_HTTPS=0`); muốn test qua HTTPS: `E2E_BASE_URL=https://localhost:5173 E2E_NO_WEBSERVER=1`.

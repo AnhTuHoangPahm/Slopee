@@ -16,13 +16,16 @@ export default defineConfig({
   workers: 1,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'html',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: process.env.E2E_BASE_URL || 'http://localhost:5173',
+    ignoreHTTPSErrors: true, // dev server có thể chạy HTTPS tự ký (frontend/certs) khi dùng E2E_BASE_URL=https://localhost:5173
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
   webServer: process.env.E2E_NO_WEBSERVER ? undefined : {
     command: 'npm run dev -- --port 5173 --strictPort',
-    url: 'http://localhost:5173',
+    url: process.env.E2E_BASE_URL || 'http://localhost:5173',
+    env: { ...process.env, VITE_HTTPS: process.env.E2E_BASE_URL?.startsWith('https') ? '1' : '0' }, // test mặc định chạy http thuần dù có frontend/certs
+    ignoreHTTPSErrors: true,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

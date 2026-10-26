@@ -229,3 +229,7 @@ backend/.env.web3
 frontend/playwright-report/
 frontend/test-results/
 .replay/
+
+# Tailscale
+*.crt
+*.key
