@@ -76,10 +76,11 @@ PY
         (hoặc skip-networking nếu chỉ dùng socket/named pipe). Kiểm tra: mysql -e "SELECT @@bind_address".
       Thêm: tường lửa chặn inbound TCP 3306/33060, và không có tài khoản host '%' (SELECT user,host FROM mysql.user).
 MSG
-    [ "${REQUIRE_DB_LOOPBACK:-0}" = 1 ] && { echo "REQUIRE_DB_LOOPBACK=1 → dừng." >&2; exit 4; }
+    if [ "${REQUIRE_DB_LOOPBACK:-0}" = 1 ]; then echo "REQUIRE_DB_LOOPBACK=1 → dừng." >&2; exit 4; fi
   elif [ "$rc" != 0 ]; then
     return "$rc"
   fi
+  return 0   # cảnh báo không phải lỗi: không để set -e của script gọi thoát
 }
 
 reset_db() { # xóa CSDL cũ để khớp với chuỗi Anvil vừa dựng lại (Indexer/đơn cũ trỏ vào block không còn tồn tại)
