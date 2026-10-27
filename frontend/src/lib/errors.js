@@ -36,6 +36,7 @@ export const ERROR_MESSAGES = Object.freeze({
     DISPUTE_WINDOW_CLOSED: 'Đã hết thời hạn dùng chữ ký 2/3 cho đơn này; chỉ còn cách để Trọng tài xử đơn phương.',
     ORDER_NOT_FOUND: 'Không tìm thấy đơn hàng, hoặc bạn không có quyền xem.',
     INVALID_DISPUTE_NOTE: 'Lý do hoặc đường dẫn bằng chứng chưa hợp lệ, hãy kiểm tra lại.',
+    FORCE_RESOLVE_TOO_EARLY: 'Chưa tới thời điểm Trọng tài được xử đơn phương: đơn còn trong thời hạn chữ ký 2/3.',
     SIGNATURE_EXPIRED: 'Đề xuất đã hết hạn ký. Hãy chờ quản trị viên tạo đề xuất mới.',
     ALREADY_SIGNED: 'Bạn đã ký đề xuất này rồi.',
     NOT_A_PARTY: 'Chỉ Buyer hoặc Merchant của đơn mới ký được.',

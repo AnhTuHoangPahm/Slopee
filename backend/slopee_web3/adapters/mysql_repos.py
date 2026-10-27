@@ -10,7 +10,7 @@ import pymysql
 
 from ..domain.order_state import is_valid_transition, to_legacy_status
 from ..domain.policy import Policy
-from ..domain.reconcile import OPEN_STATES, token_key
+from ..domain.reconcile import EVENT_NAMES, OPEN_STATES, token_key
 from ..domain.release import DELIVERY_TIMEOUT_SECONDS
 from ..ports.repositories import DuplicateWallet
 from .legacy_sync import sync_legacy_status
@@ -532,6 +532,22 @@ class MySqlReconcileRepo:
         return [{'order_id': r['order_id'], 'onchain_order_id': int(r['onchain_order_id']), 'status': r['status']}
                 for r in self.cur.fetchall()]
 
+    def open_order_ids(self):
+        """Mọi `onchain_order_id` mà CSDL coi là đang mở (không giới hạn; chỉ là số nguyên) để so với tập mở dựng từ sự kiện."""
+        self.cur.execute(f"SELECT onchain_order_id FROM order_web3 WHERE status IN ({_marks(len(OPEN_STATES))})", OPEN_STATES)
+        return [int(r['onchain_order_id']) for r in self.cur.fetchall()]
+
+    def reconcile_events(self, up_to_block):
+        """Sự kiện ảnh hưởng tiền trong contract, tới block `up_to_block`, theo thứ tự chuỗi: nguồn độc lập với order_web3.status."""
+        names = EVENT_NAMES
+        self.cur.execute(f"SELECT event_name, payload_json FROM chain_events WHERE event_name IN ({_marks(len(names))}) "
+                         "AND block_number <= %s ORDER BY block_number, id", (*names, int(up_to_block)))
+        out = []
+        for r in self.cur.fetchall():
+            args = r['payload_json']
+            out.append({'event': r['event_name'], 'args': json.loads(args) if isinstance(args, (str, bytes)) else args})
+        return out
+
     def open_orders(self, limit):
         self.cur.execute(f"SELECT order_id, onchain_order_id, status FROM order_web3 WHERE status IN ({_marks(len(OPEN_STATES))}) "
                          "ORDER BY onchain_order_id LIMIT %s", (*OPEN_STATES, int(limit)))
@@ -663,6 +679,25 @@ class MySqlDisputeRepo:
             "UPDATE dispute_resolutions SET status=%s, submitted_tx_hash=COALESCE(%s, submitted_tx_hash) "
             f"WHERE id=%s AND status IN ({_marks(len(from_states))})", (to_status, tx_hash, resolution_id, *from_states))
         return self.cur.rowcount == 1
+
+    def add_force_resolution(self, order_id, onchain_order_id, admin_user_id, payout_side, payout_to, amount_raw, reason_note,
+                             outbox_id, tx_hash):
+        """Nhật ký UC-07 (bảng dispute_force_resolutions, không FK như tx_outbox). Chỉ ghi dấu vết ý định của sàn; trạng thái đơn do Indexer ghi."""
+        self.cur.execute(
+            "INSERT INTO dispute_force_resolutions (order_id, onchain_order_id, admin_user_id, payout_side, payout_to, amount_raw, "
+            "reason_note, outbox_id, tx_hash) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (order_id, int(onchain_order_id), admin_user_id, payout_side, str(payout_to).lower(), str(amount_raw), reason_note,
+             outbox_id, tx_hash))
+        return int(self.cur.lastrowid)
+
+    def force_resolutions(self, order_id):
+        self.cur.execute(
+            "SELECT id, order_id, onchain_order_id, admin_user_id, payout_side, payout_to, amount_raw, reason_note, outbox_id, tx_hash, "
+            "UNIX_TIMESTAMP(created_at) AS created_at FROM dispute_force_resolutions WHERE order_id=%s ORDER BY id DESC", (order_id,))
+        rows = list(self.cur.fetchall())
+        for r in rows:
+            r['onchain_order_id'], r['created_at'] = int(r['onchain_order_id']), int(r['created_at'])
+        return rows
 
     def open_disputes(self):
         self.cur.execute(

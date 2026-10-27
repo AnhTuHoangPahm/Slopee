@@ -7,6 +7,7 @@ import logging
 import threading
 
 from ...application.dispute_admin_service import DisputeAdminService
+from ...application.dispute_force_service import DisputeForceResolveService
 from ...application.dispute_note_service import DisputeNoteService
 from ...application.dispute_service import DisputeService
 from ...application.dispute_submit_service import DisputeSubmitService
@@ -55,6 +56,9 @@ class Web3Container:
 
     def dispute_admin_service(self):
         return DisputeAdminService(self.uow_factory, self.clock)
+
+    def dispute_force_service(self):
+        return DisputeForceResolveService(self.uow_factory, self.chain, self.clock, self.relayer_service())
 
     def shipper_service(self):
         return ShipperService(self.uow_factory, self.relayer_service())

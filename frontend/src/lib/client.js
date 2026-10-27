@@ -3,8 +3,17 @@
 const TOKEN_KEY = 'token';
 const USER_KEY = 'user';
 
-// Địa chỉ backend: đặt VITE_API_BASE trong frontend/.env (không có dấu / ở cuối). Mặc định chạy local.
-export const API_ORIGIN = (import.meta.env?.VITE_API_BASE || 'http://localhost:5000').replace(/\/+$/, '');
+// Địa chỉ backend. Thứ tự: VITE_API_BASE trong frontend/.env (không có dấu / ở cuối) > tự suy ra từ địa chỉ trang:
+//  - http://localhost|127.0.0.1 (máy chủ, test, Playwright): gọi thẳng http://localhost:5000
+//  - IP LAN/VPN hoặc HTTPS: gọi CÙNG ORIGIN ('' -> /api/...); Vite proxy sang Flask ở 127.0.0.1:5000
+//    (không CORS, không mixed content, backend không cần mở ra mạng).
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+const guessApiOrigin = () => {
+    const loc = globalThis.location;
+    if (!loc) return 'http://localhost:5000';
+    return loc.protocol === 'http:' && LOOPBACK.has(loc.hostname) ? 'http://localhost:5000' : '';
+};
+export const API_ORIGIN = (import.meta.env?.VITE_API_BASE || guessApiOrigin()).replace(/\/+$/, '');
 
 export const getToken = () => sessionStorage.getItem(TOKEN_KEY);
 

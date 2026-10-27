@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { STAGE, canPropose, canResubmit, canSubmit, disputeStage, hasEnoughSignatures, notReadyMessage, safeEvidenceUrl, signatureRemaining,
-    submitMessage, validateProposalForm } from '../lib/adminDisputes';
+import { STAGE, canForceResolve, canPropose, canResubmit, canSubmit, disputeStage, forceResolveMessage, forceResolveRemaining, hasEnoughSignatures, notReadyMessage, safeEvidenceUrl, signatureRemaining,
+    submitMessage, tooEarlyMessage, validateForceResolveForm, validateProposalForm } from '../lib/adminDisputes';
 
 const clock = { serverTime: 1000, receivedAtMs: 0 };   // mọi lời gọi truyền nowMs=0: không phụ thuộc đồng hồ thật của máy chạy test
 const dispute = (res) => ({ order_id: 'o1', resolution: res });
@@ -71,5 +71,34 @@ describe('thông báo', () => {
     it('notReadyMessage nêu bên đã ký', () => {
         expect(notReadyMessage({ extra: { signed_by: ['ARBITRATOR'] } })).toMatch(/Trọng tài/);
         expect(notReadyMessage({})).toMatch(/chưa ai/);
+    });
+});
+
+describe('UC-07 xử đơn phương: hàm thuần', () => {
+    const d = { force_resolve_at: 5000 };
+    it('forceResolveRemaining theo đồng hồ máy chủ; thiếu mốc hoặc đồng hồ -> null', () => {
+        expect(forceResolveRemaining(d, clock, 0)).toBe(4000);
+        expect(forceResolveRemaining(d, clock, 4000 * 1000)).toBe(0);
+        expect(forceResolveRemaining({}, clock, 0)).toBeNull();
+        expect(forceResolveRemaining(d, null, 0)).toBeNull();
+    });
+    it('canForceResolve: chỉ khi đã tới mốc (biên 0 là mở, đúng điều kiện now >= mốc của contract)', () => {
+        expect(canForceResolve(1)).toBe(false);
+        expect(canForceResolve(0)).toBe(true);
+        expect(canForceResolve(-5)).toBe(true);
+        expect(canForceResolve(null)).toBe(false);
+    });
+    it('validateForceResolveForm: bắt buộc bên nhận tiền và lý do', () => {
+        expect(validateForceResolveForm({ payoutSide: '', reasonNote: 'x' }).errors.payoutSide).toBeTruthy();
+        expect(validateForceResolveForm({ payoutSide: 'BUYER', reasonNote: '   ' }).errors.reasonNote).toBeTruthy();
+        expect(validateForceResolveForm({ payoutSide: 'ARBITRATOR', reasonNote: 'x' }).ok).toBe(false);
+        expect(validateForceResolveForm({ payoutSide: 'BUYER', reasonNote: 'x'.repeat(2001) }).ok).toBe(false);
+        expect(validateForceResolveForm({ payoutSide: 'MERCHANT', reasonNote: ' ok ' })).toMatchObject({ ok: true, value: { payoutSide: 'MERCHANT', reasonNote: 'ok' } });
+    });
+    it('thông báo', () => {
+        expect(forceResolveMessage({ outcome: 'ALREADY_RESOLVED' })).toMatch(/đã được xử lý/);
+        expect(forceResolveMessage({ outcome: 'SENT' })).toMatch(/Đã gửi/);
+        expect(tooEarlyMessage({ extra: { seconds_remaining: 7200 } })).toMatch(/còn 2 giờ/);
+        expect(tooEarlyMessage({})).toMatch(/Chưa có giao dịch/);
     });
 });

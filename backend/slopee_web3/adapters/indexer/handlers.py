@@ -229,6 +229,21 @@ def _undo_pending_events(cur, from_block):
         _adjust_pending(cur, p['token'], p['to'], sign * int(p['amount']))
 
 
+def reset_order_to_pending(cur, row):
+    """Đưa MỘT đơn có trạng thái do chuỗi sinh ra về PENDING_PAYMENT và xóa các cột dẫn xuất (dùng chung cho reorg và replay, SDD 6.3).
+
+    `row` cần `order_id` và `status`. Cột sinh từ báo giá (giá, `doc_hash`, nhóm hàng, `fee_bps`...) không bị đụng.
+    REFUNDED đã hoàn kho nên phải giữ lại tồn kho (đối xứng `release_order_stock`).
+    """
+    if row['status'] == 'REFUNDED' and not reserve_order_stock(cur, row['order_id']):
+        log.error('Đơn %s về PENDING_PAYMENT từ REFUNDED nhưng hàng đã hết: tồn kho không giữ lại được', row['order_id'])
+    cur.execute("DELETE FROM notifications WHERE order_id=%s AND kind IN ('ORDER_DELIVERED', 'DISPUTE_RESOLVED')", (row['order_id'],))
+    cur.execute(
+        "UPDATE order_web3 SET status='PENDING_PAYMENT', deposit_tx_hash=NULL, chain_created_at=NULL, "
+        "delivered_at=NULL, disputed_at=NULL, closed_at=NULL, anomaly_flag=0 WHERE order_id=%s", (row['order_id'],))
+    sync_legacy_status(cur, row['order_id'], 'PENDING_PAYMENT')
+
+
 def rollback_orders_from_block(cur, from_block, handlers=None):
     """Reorg: đưa dữ liệu dẫn xuất về đúng trạng thái "chưa từng thấy các block >= from_block".
 
@@ -251,14 +266,7 @@ def rollback_orders_from_block(cur, from_block, handlers=None):
         if row is None:
             continue
         if row['status'] in CHAIN_DERIVED_STATES:
-            if row['status'] == 'REFUNDED' and not reserve_order_stock(cur, row['order_id']):
-                log.error('Reorg đưa đơn %s từ REFUNDED về PENDING_PAYMENT nhưng hàng đã hết: tồn kho không giữ lại được',
-                          row['order_id'])
-            cur.execute("DELETE FROM notifications WHERE order_id=%s AND kind IN ('ORDER_DELIVERED', 'DISPUTE_RESOLVED')", (row['order_id'],))
-            cur.execute(
-                "UPDATE order_web3 SET status='PENDING_PAYMENT', deposit_tx_hash=NULL, chain_created_at=NULL, "
-                "delivered_at=NULL, disputed_at=NULL, closed_at=NULL, anomaly_flag=0 WHERE order_id=%s", (row['order_id'],))
-            sync_legacy_status(cur, row['order_id'], 'PENDING_PAYMENT')
+            reset_order_to_pending(cur, row)
         cur.execute("SELECT event_name, tx_hash, log_index, block_number, block_hash, block_timestamp, payload_json "
                     "FROM chain_events WHERE order_id=%s ORDER BY block_number, log_index", (onchain_id,))
         for e in cur.fetchall():

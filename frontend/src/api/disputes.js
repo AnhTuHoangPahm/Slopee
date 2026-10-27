@@ -5,6 +5,9 @@
 //   GET  /api/admin/disputes                        (A, mới ngoài SDD 10.2) -> { disputes: [ ... ], server_time }
 //   POST /api/admin/disputes/:code/proposal         (B) body { payout_to: 'BUYER'|'MERCHANT' (đúng tên trường trong SKELETON), reason_note? }
 //        -> đề xuất vừa tạo; backend tự ký phiếu Trọng tài. Địa chỉ ví KHÔNG đi qua giao diện: Backend suy ra từ payout_to.
+//   POST /api/admin/disputes/:code/force-resolve    (B, UC-07) body { payout_to: 'BUYER'|'MERCHANT', reason_note? }
+//        -> { order_id, onchain_order_id, outcome: 'SENT'|'ALREADY_RESOLVED', tx_hash, payout_side, payout_to, amount_raw, force_resolve_at }
+//        Chưa tới `force_resolve_at` -> 409 FORCE_RESOLVE_TOO_EARLY (extra: { force_resolve_at, seconds_remaining }), không gửi giao dịch.
 //
 // BUYER / MERCHANT (C, màn hình pages/Dispute.jsx)
 //   GET  /api/disputes/:code  (Buyer, Merchant của đơn; người khác/đơn không có -> 404 ORDER_NOT_FOUND)
@@ -37,6 +40,13 @@ export async function fetchAdminDisputesAPI() {
 
 export const createDisputeProposalAPI = (orderCode, { payoutSide, reasonNote }) =>
     request(`/api/admin/disputes/${encodeURIComponent(orderCode)}/proposal`, {
+        method: 'POST',
+        body: { payout_to: payoutSide, ...(reasonNote ? { reason_note: reasonNote } : {}) },
+    });
+
+/** UC-07 thoát hiểm timeout: Trọng tài (sàn) xử đơn phương sau `disputeTimeout`. Không thể hoàn tác trên chuỗi. */
+export const forceResolveDisputeAPI = (orderCode, { payoutSide, reasonNote }) =>
+    request(`/api/admin/disputes/${encodeURIComponent(orderCode)}/force-resolve`, {
         method: 'POST',
         body: { payout_to: payoutSide, ...(reasonNote ? { reason_note: reasonNote } : {}) },
     });

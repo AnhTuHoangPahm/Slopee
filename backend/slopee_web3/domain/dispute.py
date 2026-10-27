@@ -127,3 +127,24 @@ def clean_note(value, limit=2000):
         raise DomainError('INVALID_DISPUTE_NOTE', f'Ghi chú thẩm định tối đa {limit} ký tự.')
     return note or None
 
+
+
+# ------------------------------------------------------------------ Tuần 7 (B): Dispute Timeout / thoát hiểm (UC-07, BR-05)
+def force_resolve_at(disputed_at, dispute_timeout):
+    """Mốc đầu tiên Trọng tài được xử đơn phương: `disputedAt + disputeTimeout` (đúng điều kiện `now >= …` của contract).
+    Đối xứng với `compute_deadline`: chữ ký 2/3 luôn hết hạn TRƯỚC mốc này (deadline <= mốc − 1) nên hai đường không bao giờ cùng hợp lệ (R-02)."""
+    return int(disputed_at) + int(dispute_timeout)
+
+
+def check_force_resolvable(now, disputed_at, dispute_timeout):
+    """Cùng điều kiện thời gian contract kiểm trong `arbitratorForceResolve`. Trả mốc; chưa tới thì FORCE_RESOLVE_TOO_EARLY kèm thời gian còn lại
+    (giao diện hiển thị đếm ngược, và KHÔNG gửi giao dịch sẽ revert vì mất công lẫn nonce)."""
+    at = force_resolve_at(disputed_at, dispute_timeout)
+    if int(now) < at:
+        raise DomainError('FORCE_RESOLVE_TOO_EARLY', 'Chưa tới thời điểm Trọng tài được xử đơn phương: đơn còn trong thời hạn chữ ký 2/3.',
+                          {'force_resolve_at': at, 'seconds_remaining': at - int(now)})
+    return at
+
+
+# Trạng thái cuối trên chuỗi tương ứng với bên nhận tiền (REFUNDED <-> Buyer, COMPLETED <-> Merchant); dùng để nhận ra yêu cầu lặp.
+CHAIN_STATE_BY_SIDE = {PARTY_BUYER: 'REFUNDED', PARTY_MERCHANT: 'COMPLETED'}

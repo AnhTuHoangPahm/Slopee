@@ -223,3 +223,13 @@ frontend/public/deployments/
 backend/.env.web3
 .anvil.pid
 .anvil.log
+
+# E2E Web3 (Tuần 8): log/pid của backend, Indexer, Scheduler
+.e2e/
+frontend/playwright-report/
+frontend/test-results/
+.replay/
+
+# Tailscale
+*.crt
+*.key

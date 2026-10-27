@@ -4,7 +4,8 @@
 con trỏ), và dữ liệu MySQL được đọc trong cùng MỘT snapshot với con trỏ (Indexer ghi con trỏ + dữ liệu nghiệp vụ trong cùng giao dịch).
 Hai nguồn khi đó mô tả cùng một thời điểm và phải khớp tuyệt đối.
 """
-from ..domain.reconcile import reconcile_token, token_key
+from ..domain.reconcile import (compare_open_sets, compare_with_events, open_order_ids_from_events, reconcile_token, token_key,
+                                totals_from_events)
 
 DEEP_LIMIT = 200
 
@@ -16,13 +17,16 @@ class ReconcileService:
         self._known = tuple(token_key(t) for t in known_tokens)       # luôn kiểm các token đã cấu hình, kể cả khi chưa có đơn
         self._confirmations = int(confirmations)
 
-    def run(self, deep=False):
+    def run(self, deep=False, events=False):
         with self._uow() as uow:                       # MỘT giao dịch ⇒ một snapshot nhất quán với con trỏ
             cursor = uow.reconcile.indexer_cursor()
             opens = {t['token']: t for t in uow.reconcile.open_totals()}
             pendings = {t['token']: t for t in uow.reconcile.pending_totals()}
             anomalies = uow.reconcile.anomaly_orders()
             open_orders = uow.reconcile.open_orders(DEEP_LIMIT) if deep else []
+            # Cùng snapshot và CÙNG block với con trỏ: chỉ đếm sự kiện Indexer đã xử lý xong
+            event_rows = uow.reconcile.reconcile_events(cursor['last_block']) if (events and cursor) else None
+            db_open_ids = uow.reconcile.open_order_ids() if event_rows is not None else []
         latest = self._chain.latest_block()
         at_block = cursor['last_block'] if cursor else None
         lag = max(0, latest['number'] - self._confirmations - cursor['last_block']) if cursor else None
@@ -42,8 +46,13 @@ class ReconcileService:
         }
         if deep:
             result['order_mismatches'] = self._deep_check(open_orders, lag)
+        result['event_drift'] = result['event_order_drift'] = None
+        if events and event_rows is not None:
+            # Nguồn thứ ba: dựng lại từ chain_events, không qua handler; lệch với order_web3 nghĩa là handler/Indexer áp sai (UC-08)
+            result['event_drift'] = compare_with_events(tokens, totals_from_events(event_rows))
+            result['event_order_drift'] = compare_open_sets(db_open_ids, open_order_ids_from_events(event_rows))
         bad = [t for t in tokens if not t.ok]
-        result['ok'] = not bad and not result['order_mismatches']
+        result['ok'] = (not bad and not result['order_mismatches'] and not result['event_drift'] and not result['event_order_drift'])
         result['status'] = 'OK' if result['ok'] else 'MISMATCH'
         return result
 

@@ -32,7 +32,7 @@ _DUMMY_PASSWORD_HASH = generate_password_hash('slopee-dummy-password')
 def get_db_connection():
     return pymysql.connect(
         host=os.environ.get('DB_HOST', 'localhost'),
-        user=os.environ.get('DB_USER', 'slopee'),
+        user=os.environ.get('DB_USER', 'root'),
         password=os.environ.get('DB_PASSWORD', ''),
         database=os.environ.get('DB_NAME', 'slopee_db'),
         cursorclass=pymysql.cursors.DictCursor

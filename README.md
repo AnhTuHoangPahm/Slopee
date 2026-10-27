@@ -17,6 +17,8 @@ The name is the combination of **Slop** and **Shopee** (Shout out to the word **
 - Google Antigravity(?)
 
 ## Set up
+> **Web3 demo?** Full installation (Foundry, MySQL, MetaMask, one-command stack) is in [INSTALL.md](INSTALL.md); the three demo scripts (happy / dispute / timeout) are in [DEMO_GUIDE.md](DEMO_GUIDE.md). The text below covers the legacy (non-Web3) app only.
+
 I don't think I should tell (I'm just stup-d), but just in case:  
 **First**, install dependencies:
 ```shell
@@ -133,6 +135,33 @@ npm run test:e2e:ui
 _See the magic yourself_  
 > That's it for now
 
+### Web3 end-to-end tests (week 8, E-01..E-07)
+
+```bash
+./scripts/e2e_stack.sh up                              # clean Anvil + contracts, DB + migrations, admin/shipper seed, backend + Indexer + Scheduler (logs in .e2e/)
+(cd frontend && npx playwright install firefox && npx playwright test --project=web3-e2e)
+./scripts/e2e_stack.sh down
+```
+
+* Playwright injects a test-only EIP-1193 wallet (`frontend/tests/helpers/walletMock.js`) that signs for real with Anvil test keys; MetaMask is still what the manual demo uses. Tests run sequentially in one worker because several scenarios advance Anvil's clock permanently.
+* Without the stack the specs skip with a message; `E2E_REQUIRE_STACK=1` (CI) turns that into a failure. Scenarios: E-01 happy path, E-02 inspection expiry, E-03 dispute (refund + merchant payout), E-04 delivery/dispute timeouts, E-05 zero-key scan, E-06 reconciliation, E-07 three-shop cart.
+
+### Demo helper (week 9)
+
+`RESET_DB=1 ./scripts/e2e_stack.sh up` also drops the `slopee*` database first (needed when the chain is rebuilt but old orders remain). `python3 scripts/demo_helper.py check|prepare|fund|ship|warp|status|reconcile` covers what the UI cannot do (assign a Shipper, mint test mUSD, advance Anvil time). Local Anvil only; no private keys. See [DEMO_GUIDE.md](DEMO_GUIDE.md).
+
+### Replay the Indexer (week 9)
+
+Derived order state can be rebuilt from the chain logs at any time (AC-08, SDD 6.3). Stop the Indexer and Scheduler first, then:
+
+```shell
+./scripts/replay.sh --dry-run     # show what would be reset, change nothing
+./scripts/replay.sh --yes         # reset from block 0, rebuild, compare every derived table before/after, then run scripts/reconcile.py
+./scripts/replay.sh --from-block 120 --yes   # partial replay
+```
+
+Exit code 0 = rebuilt state identical and balances reconcile, 1 = differs, 2 = could not run. A JSON report is written to `.replay/`. If Anvil was rebuilt, run `./scripts/bootstrap.sh --fresh` first (the before/after comparison is skipped because the chain is new). Do not replay while customers are shopping: replaying `OrderCreated` removes matching items a Buyer re-added to the cart after that order was funded, and Indexer notifications lose their read flag.
+
 ### Running the Web3 escrow stack (weeks 4-6)
 
 Each long-running process is its own command, run from `backend/` after `./scripts/bootstrap.sh` has produced `backend/.env.web3`:
@@ -145,6 +174,8 @@ flask --app app seed-shipper                      # create a shipper account (>=
 
 * Assign an order to a shipper with `PUT /api/admin/orders/<code>/shipper` (admin). The shipper then sees it at `GET /api/shipper/orders` and confirms delivery with `POST /api/shipper/orders/<code>/deliver` (a relayer sends `confirmDelivery`; the Indexer is the only writer of order state).
 * Scheduler jobs and their env overrides: `QuoteExpirySweeper` (`QUOTE_SWEEP_SECONDS`, default 60), `AutoRelease` (`AUTO_RELEASE_SECONDS`, 60), `DeliveryTimeoutReminder` (`TIMEOUT_REMINDER_SECONDS`, 3600), `DisputeSigExpiry` (`DISPUTE_SIG_EXPIRY_SECONDS`, 300), `ReconcileSnapshot` (`RECONCILE_SECONDS`, 600). Also `QUOTE_EXPIRY_GRACE_SECONDS` (30) and `RELAYER_LOCK_SECONDS` (30).
-* Reconciliation (contract balance vs open orders, read at the Indexer's block): `GET /api/admin/reconcile[?deep=1]`.
+* Non-custodial scan (E-05 / AC-09): `python scripts/scan_no_user_keys.py [--db] [--logs PATH...] [--json] [--report FILE]` (read-only; exit 0 = clean, 1 = a user key/seed pattern found, 2 = could not run). Report: `docs/SECURITY_CHECKLIST_W8.md`.
+* Reconciliation (contract balance vs open orders, read at the Indexer's block): `GET /api/admin/reconcile[?deep=1]`, or the read-only CLI `python scripts/reconcile.py [--deep] [--events] [--wait SECONDS] [--json] [--strict]` (exit code 0 = reconciled, 1 = mismatch, 2 = could not run; `--events` also rebuilds the totals from `chain_events`; needs no private keys).
+* Dispute timeout escape hatch (UC-07): `POST /api/admin/disputes/:code/force-resolve` (Admin; `payout_to` = `BUYER`/`MERCHANT`) sends `arbitratorForceResolve` signed by `ARBITRATOR_KEY`, only after `disputedAt + disputeTimeout` (earlier: `409 FORCE_RESOLVE_TOO_EARLY`). Every use is recorded in `dispute_force_resolutions`.
 * Dispute resolution (2-of-3 EIP-712 signatures): admin `POST /api/admin/disputes/<code>/proposal` (the arbitrator signs immediately), buyer/merchant `POST /api/disputes/<code>/signatures`, then `POST /api/disputes/<code>/submit` (the relayer calls `resolveDispute`). Raw signatures are never returned by the API.
 * Tests: `pytest test` runs everything; tests marked `anvil` need a running Anvil with the contracts deployed (`./scripts/bootstrap.sh`) and **advance Anvil's clock permanently** (reset with `./scripts/bootstrap.sh --fresh`). Frontend: `cd frontend && npx vitest run`.
